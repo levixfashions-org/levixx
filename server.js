@@ -2200,15 +2200,27 @@ app.use(
 app.use(import_express10.default.urlencoded({ extended: false, limit: "1mb" }));
 app.get("/api/health", async (_req, res) => {
   let database = "ok";
+  let databaseProblem;
   try {
     await prisma.$queryRaw`SELECT 1`;
-  } catch {
+    try {
+      await prisma.storeSetting.count();
+    } catch {
+      database = "unavailable";
+      databaseProblem = "connected, but tables are missing (they are created automatically on start-up; restart the app)";
+    }
+  } catch (err) {
     database = "unavailable";
+    const msg = String(err?.message || "");
+    databaseProblem = !process.env.DATABASE_URL ? "DATABASE_URL is not set" : /P1000|Authentication failed|Access denied/i.test(msg) ? "wrong database username or password in DATABASE_URL" : /P1001|Can't reach|ECONNREFUSED|ETIMEDOUT/i.test(msg) ? "database server not reachable at the host in DATABASE_URL" : /P1003|does not exist/i.test(msg) ? "database name in DATABASE_URL does not exist" : "database error";
   }
   res.set("Cache-Control", "no-store");
   res.status(database === "ok" ? 200 : 503).json({
     status: database === "ok" ? "ok" : "degraded",
     database,
+    ...databaseProblem ? { databaseProblem } : {},
+    payments: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    signIn: Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID),
     service: "levix",
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     uptime: Math.round(process.uptime())
@@ -2275,6 +2287,34 @@ if (frontendDist) {
 app.use(errorHandler);
 
 // src/server.ts
+var import_child_process = require("child_process");
+var import_path2 = __toESM(require("path"), 1);
+var import_fs3 = __toESM(require("fs"), 1);
+function runDbPush() {
+  return new Promise((resolve) => {
+    const roots = [process.cwd(), import_path2.default.resolve(process.cwd(), "..")];
+    const root = roots.find((r) => import_fs3.default.existsSync(import_path2.default.join(r, "node_modules", "prisma", "build", "index.js")));
+    const schema = roots.map((r) => import_path2.default.join(r, "prisma", "schema.prisma")).find((f) => import_fs3.default.existsSync(f));
+    if (!root || !schema) {
+      console.warn("\u26A0\uFE0F Cannot auto-create tables: prisma CLI or schema not found.");
+      return resolve(false);
+    }
+    console.log("\u2026 Creating/updating database tables (prisma db push)\u2026");
+    (0, import_child_process.execFile)(
+      process.execPath,
+      [import_path2.default.join(root, "node_modules", "prisma", "build", "index.js"), "db", "push", "--skip-generate", `--schema=${schema}`],
+      { cwd: root, env: process.env, timeout: 12e4 },
+      (err, stdout, stderr) => {
+        if (err) {
+          console.error("\u26A0\uFE0F prisma db push failed:", (stderr || stdout || err.message).toString().slice(-800));
+          return resolve(false);
+        }
+        console.log("\u2713 Database tables are up to date.");
+        resolve(true);
+      }
+    );
+  });
+}
 var rawPort = process.env.PORT || 3e3;
 function bootstrap() {
   const isSocket = typeof rawPort === "string" && isNaN(Number(rawPort));
@@ -2291,9 +2331,26 @@ function bootstrap() {
       await ensureStoreDefaults();
       console.log("\u2713 Store defaults ready.");
     } catch (err) {
-      console.error("\u26A0\uFE0F Could not prepare store defaults (did you run `npx prisma db push`?):", err?.message);
+      if (["P2021", "P2022"].includes(err?.code) || /does not exist/i.test(err?.message || "")) {
+        if (await runDbPush()) {
+          try {
+            await ensureStoreDefaults();
+            console.log("\u2713 Store defaults ready.");
+          } catch (e) {
+            console.error("\u26A0\uFE0F Store defaults still failing:", e?.message);
+          }
+        }
+      } else {
+        console.error("\u26A0\uFE0F Could not prepare store defaults:", err?.message);
+      }
     }
-  }).catch((err) => console.error("\u26A0\uFE0F Database connection failed:", err?.message || err));
+  }).catch((err) => {
+    const msg = String(err?.message || err);
+    console.error("\u26A0\uFE0F Database connection failed:", msg);
+    if (/P1000|Authentication failed|Access denied/i.test(msg)) {
+      console.error("   \u2192 The DATABASE_URL username or password is wrong. In hPanel \u2192 Databases, copy the exact MySQL username (looks like u123456789_name) and reset its password.");
+    }
+  });
   const shutdown = (signal) => {
     console.log(`${signal} received \u2014 shutting down gracefully.`);
     server.close(async () => {

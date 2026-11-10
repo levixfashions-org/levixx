@@ -68,15 +68,35 @@ app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 app.get('/api/health', async (_req, res) => {
   let database = 'ok';
+  let databaseProblem: string | undefined;
   try {
     await prisma.$queryRaw`SELECT 1`;
-  } catch {
+    try {
+      await prisma.storeSetting.count();
+    } catch {
+      database = 'unavailable';
+      databaseProblem = 'connected, but tables are missing (they are created automatically on start-up; restart the app)';
+    }
+  } catch (err: any) {
     database = 'unavailable';
+    const msg = String(err?.message || '');
+    databaseProblem = !process.env.DATABASE_URL
+      ? 'DATABASE_URL is not set'
+      : /P1000|Authentication failed|Access denied/i.test(msg)
+        ? 'wrong database username or password in DATABASE_URL'
+        : /P1001|Can't reach|ECONNREFUSED|ETIMEDOUT/i.test(msg)
+          ? 'database server not reachable at the host in DATABASE_URL'
+          : /P1003|does not exist/i.test(msg)
+            ? 'database name in DATABASE_URL does not exist'
+            : 'database error';
   }
   res.set('Cache-Control', 'no-store');
   res.status(database === 'ok' ? 200 : 503).json({
     status: database === 'ok' ? 'ok' : 'degraded',
     database,
+    ...(databaseProblem ? { databaseProblem } : {}),
+    payments: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    signIn: Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID),
     service: 'levix',
     timestamp: new Date().toISOString(),
     uptime: Math.round(process.uptime())
