@@ -1,289 +1,662 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
+import { z } from 'zod';
+import { DiscountType, OrderStatus, PaymentStatus, Prisma, Role } from '@prisma/client';
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { z } from 'zod';
-import { OrderStatus } from '@prisma/client';
+import { productFullInclude, serializeProduct, slugify } from '../utils/serialize.js';
+import { getSettings, saveSettings } from '../services/store.js';
+import { formatAddress } from '../services/orders.js';
 
-export async function getDashboardMetrics(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const [totalOrders, paidOrders, totalCustomers, totalProducts, lowStockVariants, recentOrders] = await Promise.all([
-      prisma.order.count(),
-      prisma.order.findMany({
-        where: { paymentStatus: 'PAID' },
-        select: { totalPaise: true }
+/* ----------------------------------------------------------------------------------------------
+ * Dashboard
+ * --------------------------------------------------------------------------------------------*/
+export async function getDashboardMetrics(_req: Request, res: Response) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [paidAgg, todayAgg, paidOrders, toFulfil, totalCustomers, totalProducts, lowStockVariants, recentOrders, subscribers] =
+    await Promise.all([
+      prisma.order.aggregate({ where: { paymentStatus: PaymentStatus.PAID }, _sum: { totalPaise: true } }),
+      prisma.order.aggregate({
+        where: { paymentStatus: PaymentStatus.PAID, paidAt: { gte: startOfToday } },
+        _sum: { totalPaise: true },
+        _count: true
       }),
-      prisma.user.count({ where: { role: 'CUSTOMER' } }),
+      prisma.order.count({ where: { paymentStatus: PaymentStatus.PAID } }),
+      prisma.order.count({ where: { status: { in: [OrderStatus.PAID, OrderStatus.PROCESSING] } } }),
+      prisma.user.count({ where: { role: Role.CUSTOMER } }),
       prisma.product.count({ where: { isActive: true } }),
       prisma.productVariant.findMany({
-        where: { stockQuantity: { lte: 5 } },
+        where: { stockQuantity: { lte: 5 }, product: { isActive: true } },
+        orderBy: { stockQuantity: 'asc' },
         include: { product: { select: { name: true, slug: true } } },
-        take: 10
+        take: 20
       }),
       prisma.order.findMany({
+        where: { paymentStatus: PaymentStatus.PAID },
         orderBy: { createdAt: 'desc' },
-        take: 5,
+        take: 8,
         include: { items: true }
-      })
+      }),
+      prisma.subscriber.count()
     ]);
 
-    const totalRevenuePaise = paidOrders.reduce((sum, ord) => sum + ord.totalPaise, 0);
-
-    res.json({
-      metrics: {
-        totalOrders,
-        totalRevenuePaise,
-        totalRevenueINR: Math.round(totalRevenuePaise / 100),
-        totalCustomers,
-        totalProducts,
-        lowStockAlertsCount: lowStockVariants.length
-      },
-      lowStockVariants,
-      recentOrders
-    });
-  } catch (err) {
-    next(err);
-  }
+  const totalRevenuePaise = paidAgg._sum.totalPaise || 0;
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    metrics: {
+      totalOrders: paidOrders,
+      ordersToFulfil: toFulfil,
+      totalRevenuePaise,
+      totalRevenueINR: Math.round(totalRevenuePaise / 100),
+      todayRevenueINR: Math.round((todayAgg._sum.totalPaise || 0) / 100),
+      todayOrders: todayAgg._count,
+      totalCustomers,
+      totalProducts,
+      lowStockAlertsCount: lowStockVariants.length,
+      subscribers
+    },
+    lowStockVariants,
+    recentOrders
+  });
 }
 
-export async function getAllOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { status, page = '1', limit = '20' } = req.query;
-    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const take = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20));
-    const skip = (pageNum - 1) * take;
+/* ----------------------------------------------------------------------------------------------
+ * Orders
+ * --------------------------------------------------------------------------------------------*/
+export async function getAllOrders(req: Request, res: Response) {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const includeUnpaid = req.query.includeUnpaid === 'true';
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+  const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '100'), 10) || 100));
 
-    const where: any = {};
-    if (status) {
-      where.status = status as OrderStatus;
+  const where: Prisma.OrderWhereInput = {};
+  if (status && status !== 'ALL' && (Object.values(OrderStatus) as string[]).includes(status)) {
+    where.status = status as OrderStatus;
+  } else if (!includeUnpaid) {
+    // Hide abandoned checkouts (payment never completed) unless asked for.
+    where.NOT = { status: OrderStatus.PENDING, paymentStatus: { not: PaymentStatus.PAID } };
+  }
+  if (search) {
+    where.OR = [
+      { orderNumber: { contains: search } },
+      { customerName: { contains: search } },
+      { customerEmail: { contains: search } },
+      { customerPhone: { contains: search } }
+    ];
+  }
+
+  const [total, orders] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * take,
+      take,
+      include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } }
+    })
+  ]);
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    orders: orders.map(({ accessKey, ...o }) => ({ ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) })),
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
+  });
+}
+
+const updateOrderSchema = z.object({
+  status: z.nativeEnum(OrderStatus).optional(),
+  courier: z.string().trim().max(100).optional(),
+  trackingNumber: z.string().trim().max(100).optional(),
+  adminNotes: z.string().max(5000).optional()
+});
+
+export async function updateOrder(req: Request, res: Response) {
+  const data = updateOrderSchema.parse(req.body);
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!order) throw new AppError('Order not found', 404);
+
+  if (data.status && data.status !== OrderStatus.CANCELLED && data.status !== OrderStatus.PENDING) {
+    if (order.paymentStatus !== PaymentStatus.PAID) {
+      throw new AppError('This order has not been paid yet, so it cannot be moved to fulfilment', 400);
     }
+  }
 
-    const [total, orders] = await Promise.all([
-      prisma.order.count({ where }),
-      prisma.order.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-        include: { items: true, payment: true }
-      })
-    ]);
-
-    res.json({
-      orders,
-      pagination: {
-        page: pageNum,
-        limit: take,
-        total,
-        totalPages: Math.ceil(total / take)
+  const updated = await prisma.$transaction(async (tx) => {
+    // Return stock to inventory if a paid order is cancelled.
+    if (data.status === OrderStatus.CANCELLED && order.status !== OrderStatus.CANCELLED && order.stockDeducted) {
+      for (const item of order.items) {
+        if (item.variantId) {
+          await tx.productVariant.updateMany({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } }
+          });
+        }
       }
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function updateOrderStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { id } = req.params;
-    const { status } = z.object({
-      status: z.nativeEnum(OrderStatus)
-    }).parse(req.body);
-
-    const updated = await prisma.order.update({
-      where: { id },
-      data: { status }
-    });
-
-    res.json({ order: updated });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function createProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const productSchema = z.object({
-      name: z.string().min(2),
-      slug: z.string().min(2),
-      description: z.string().min(5),
-      details: z.string().optional(),
-      fabricCare: z.string().optional(),
-      fitGuide: z.string().optional(),
-      basePrice: z.number().int().positive(), // in paise
-      comparePrice: z.number().int().positive().optional(),
-      categoryId: z.string().optional(),
-      isFeatured: z.boolean().default(false),
-      images: z.array(z.object({
-        url: z.string(),
-        altText: z.string().optional(),
-        isCover: z.boolean().default(false),
-        sortOrder: z.number().int().default(0)
-      })).min(1),
-      variants: z.array(z.object({
-        size: z.string(),
-        sku: z.string(),
-        stockQuantity: z.number().int().min(0),
-        priceDelta: z.number().int().default(0)
-      })).min(1)
-    });
-
-    const data = productSchema.parse(req.body);
-
-    const product = await prisma.product.create({
+    }
+    return tx.order.update({
+      where: { id: order.id },
       data: {
-        name: data.name,
-        slug: data.slug,
-        description: data.description,
-        details: data.details,
-        fabricCare: data.fabricCare,
-        fitGuide: data.fitGuide,
-        basePrice: data.basePrice,
-        comparePrice: data.comparePrice,
-        categoryId: data.categoryId,
-        isFeatured: data.isFeatured,
-        images: { create: data.images },
-        variants: { create: data.variants }
+        ...(data.status ? { status: data.status } : {}),
+        ...(data.status === OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {}),
+        ...(data.courier !== undefined ? { courier: data.courier || null } : {}),
+        ...(data.trackingNumber !== undefined ? { trackingNumber: data.trackingNumber || null } : {}),
+        ...(data.adminNotes !== undefined ? { adminNotes: data.adminNotes || null } : {})
       },
-      include: {
-        images: true,
-        variants: true
-      }
+      include: { items: true }
     });
+  });
 
-    res.status(201).json({ product });
-  } catch (err) {
-    next(err);
-  }
+  const { accessKey, ...o } = updated;
+  res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }
 
-export async function updateProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { id } = req.params;
-    const productSchema = z.object({
-      name: z.string().min(2).optional(),
-      slug: z.string().min(2).optional(),
-      description: z.string().optional(),
-      details: z.string().optional(),
-      fabricCare: z.string().optional(),
-      fitGuide: z.string().optional(),
-      basePrice: z.number().int().positive().optional(),
-      comparePrice: z.number().int().positive().nullable().optional(),
-      categoryId: z.string().optional(),
-      isFeatured: z.boolean().optional(),
-      isActive: z.boolean().optional(),
-      images: z.array(z.object({
-        url: z.string(),
-        altText: z.string().optional(),
-        isCover: z.boolean().default(false),
-        sortOrder: z.number().int().default(0)
-      })).optional(),
-      variants: z.array(z.object({
-        size: z.string(),
-        sku: z.string(),
-        stockQuantity: z.number().int().min(0),
-        priceDelta: z.number().int().default(0)
-      })).optional()
+export async function deleteOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+  if (!order) throw new AppError('Order not found', 404);
+  if (order.paymentStatus === PaymentStatus.PAID) {
+    throw new AppError('Paid orders are kept for your records. Mark it as CANCELLED instead.', 400);
+  }
+  await prisma.order.delete({ where: { id: order.id } });
+  res.json({ success: true });
+}
+
+/* ----------------------------------------------------------------------------------------------
+ * Products
+ * --------------------------------------------------------------------------------------------*/
+const imageSchema = z.object({
+  url: z.string().trim().url('Each image must be a full URL starting with https://').max(2000),
+  altText: z.string().max(200).optional().nullable(),
+  isCover: z.boolean().optional(),
+  sortOrder: z.number().int().optional()
+});
+
+const variantSchema = z.object({
+  size: z.string().trim().min(1).max(10),
+  stockQuantity: z.number().int().min(0).max(100000),
+  priceDelta: z.number().int().default(0)
+});
+
+const productSchema = z.object({
+  name: z.string().trim().min(2).max(190),
+  slug: z.string().trim().max(120).optional(),
+  description: z.string().trim().min(5, 'Description must be at least 5 characters').max(20000),
+  details: z.string().max(20000).optional().nullable(),
+  fabricCare: z.string().max(20000).optional().nullable(),
+  fitGuide: z.string().max(20000).optional().nullable(),
+  basePrice: z.number().int().positive('Price must be more than 0'),
+  comparePrice: z.number().int().positive().optional().nullable(),
+  categoryId: z.string().max(120).optional().nullable(),
+  categoryName: z.string().max(120).optional().nullable(),
+  isFeatured: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+  colorGroup: z.string().trim().max(30).optional().nullable().transform((v) => (v ? v.toUpperCase() : null)),
+  collectionIds: z.array(z.string().max(64)).max(50).optional(),
+  images: z.array(imageSchema).min(1, 'Add at least one product image').max(12),
+  variants: z.array(variantSchema).min(1, 'Add at least one size').max(20)
+});
+
+async function resolveCategoryId(categoryId?: string | null, categoryName?: string | null): Promise<string | null> {
+  if (categoryId) {
+    const found = await prisma.category.findFirst({ where: { OR: [{ id: categoryId }, { slug: categoryId }] } });
+    if (found) return found.id;
+  }
+  if (categoryName && categoryName.trim()) {
+    const slug = slugify(categoryName);
+    const cat = await prisma.category.upsert({
+      where: { slug },
+      update: {},
+      create: { name: categoryName.trim(), slug }
     });
+    return cat.id;
+  }
+  return null;
+}
 
-    const data = productSchema.parse(req.body);
+function normaliseImages(images: z.infer<typeof imageSchema>[]) {
+  return images.map((img, idx) => ({
+    url: img.url,
+    altText: img.altText || null,
+    sortOrder: idx,
+    isCover: idx === 0
+  }));
+}
 
-    await prisma.product.update({
-      where: { id },
-      data: {
-        ...(data.name && { name: data.name }),
-        ...(data.slug && { slug: data.slug }),
-        ...(data.description && { description: data.description }),
-        ...(data.details !== undefined && { details: data.details }),
-        ...(data.fabricCare !== undefined && { fabricCare: data.fabricCare }),
-        ...(data.fitGuide !== undefined && { fitGuide: data.fitGuide }),
-        ...(data.basePrice && { basePrice: data.basePrice }),
-        ...(data.comparePrice !== undefined && { comparePrice: data.comparePrice }),
-        ...(data.categoryId !== undefined && { categoryId: data.categoryId }),
-        ...(data.isFeatured !== undefined && { isFeatured: data.isFeatured }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-      }
-    });
+function buildSku(slug: string, size: string) {
+  return `${slug.toUpperCase()}-${size.toUpperCase()}`.slice(0, 180);
+}
 
-    if (data.variants && data.variants.length > 0) {
-      await prisma.productVariant.deleteMany({ where: { productId: id } });
-      await prisma.productVariant.createMany({
-        data: data.variants.map(v => ({ ...v, productId: id }))
-      });
+function dedupeVariants(variants: z.infer<typeof variantSchema>[]) {
+  const map = new Map<string, z.infer<typeof variantSchema>>();
+  for (const v of variants) map.set(v.size.toUpperCase(), { ...v, size: v.size.toUpperCase() });
+  return [...map.values()];
+}
+
+async function loadAdminProduct(id: string) {
+  const p = await prisma.product.findUnique({
+    where: { id },
+    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
+  });
+  return p ? { ...p, collectionIds: p.collections.map((c) => c.collectionId) } : p;
+}
+
+/** Puts a product into exactly these collections (keeps its position in collections it was already in). */
+async function setProductCollections(productId: string, collectionIds: string[]) {
+  const unique = [...new Set(collectionIds)];
+  const valid = await prisma.collection.findMany({ where: { id: { in: unique } }, select: { id: true } });
+  const validIds = valid.map((v) => v.id);
+  await prisma.collectionProduct.deleteMany({ where: { productId, collectionId: { notIn: validIds } } });
+  for (const collectionId of validIds) {
+    const exists = await prisma.collectionProduct.findUnique({ where: { collectionId_productId: { collectionId, productId } } });
+    if (!exists) {
+      const max = await prisma.collectionProduct.aggregate({ where: { collectionId }, _max: { sortOrder: true } });
+      await prisma.collectionProduct.create({ data: { collectionId, productId, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
     }
-
-    if (data.images && data.images.length > 0) {
-      await prisma.productImage.deleteMany({ where: { productId: id } });
-      await prisma.productImage.createMany({
-        data: data.images.map(img => ({ ...img, productId: id }))
-      });
-    }
-
-    const fullProduct = await prisma.product.findUnique({
-      where: { id },
-      include: { images: true, variants: true, category: true }
-    });
-
-    res.json({ product: fullProduct });
-  } catch (err) {
-    next(err);
   }
 }
 
-export async function deleteProduct(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { id } = req.params;
-    await prisma.product.delete({ where: { id } });
-    res.json({ success: true, message: 'Product deleted successfully' });
-  } catch (err) {
-    next(err);
-  }
+export async function getAdminProducts(req: Request, res: Response) {
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+  const products = await prisma.product.findMany({
+    where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
+  });
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    products: products.map((p) => ({ ...serializeProduct(p), collectionIds: p.collections.map((c) => c.collectionId) }))
+  });
 }
 
-let serverStoreSettings = {
-  announcementText: 'FREE DOMESTIC SHIPPING ON ALL PREPAID ORDERS • LEVIX WINTER DROPS LIVE • COMPLIMENTARY EXCHANGES • ',
-  heroHeadline: 'STREETWEAR ARCHITECTURE',
-  heroSubtitle: 'Heavyweight Custom-Milled Silhouettes & Limited Private Drops.',
-  supportEmail: 'levixfashions@gmail.com',
-  supportPhone: '',
-  instagramHandle: 'thelevix.shop',
-  freeShippingThreshold: 1999
-};
+export async function createProduct(req: Request, res: Response) {
+  const data = productSchema.parse(req.body);
+  const slug = slugify(data.slug || data.name);
+  if (!slug) throw new AppError('Please enter a valid product name', 400);
+  if (data.comparePrice && data.comparePrice <= data.basePrice) data.comparePrice = null;
 
-let serverDiscounts = [
-  { id: 'disc_1', code: 'LEVIX10', type: 'PERCENTAGE', value: 10, minOrderPaise: 199900, isActive: true, expiresAt: '2026-12-31' },
-  { id: 'disc_2', code: 'WELCOME500', type: 'FIXED', value: 500, minOrderPaise: 299900, isActive: true, expiresAt: '2026-12-31' },
-  { id: 'disc_3', code: 'VIP20', type: 'PERCENTAGE', value: 20, minOrderPaise: 499900, isActive: true, expiresAt: '2026-12-31' }
-];
+  const categoryId = await resolveCategoryId(data.categoryId, data.categoryName);
+  const variants = dedupeVariants(data.variants);
 
-export async function getAdminStoreSettings(req: Request, res: Response): Promise<void> {
-  res.json({ settings: serverStoreSettings });
+  const product = await prisma.product.create({
+    data: {
+      name: data.name,
+      slug,
+      description: data.description,
+      details: data.details || null,
+      fabricCare: data.fabricCare || null,
+      fitGuide: data.fitGuide || null,
+      basePrice: data.basePrice,
+      comparePrice: data.comparePrice || null,
+      isFeatured: data.isFeatured,
+      isActive: data.isActive,
+      colorGroup: data.colorGroup || null,
+      categoryId,
+      images: { create: normaliseImages(data.images) },
+      variants: {
+        create: variants.map((v) => ({
+          size: v.size,
+          sku: buildSku(slug, v.size),
+          stockQuantity: v.stockQuantity,
+          priceDelta: v.priceDelta
+        }))
+      }
+    },
+    include: productFullInclude
+  });
+  if (data.collectionIds?.length) await setProductCollections(product.id, data.collectionIds);
+  res.status(201).json({ product: serializeProduct(await loadAdminProduct(product.id)) });
 }
 
-export async function updateAdminStoreSettings(req: Request, res: Response): Promise<void> {
-  serverStoreSettings = { ...serverStoreSettings, ...req.body };
-  res.json({ success: true, settings: serverStoreSettings });
-}
-
-export async function getAdminDiscounts(req: Request, res: Response): Promise<void> {
-  res.json({ discounts: serverDiscounts });
-}
-
-export async function createAdminDiscount(req: Request, res: Response): Promise<void> {
-  const newDisc = {
-    id: 'disc_' + Date.now(),
-    code: (req.body.code || 'CODE' + Date.now()).toUpperCase().trim(),
-    type: req.body.type === 'FIXED' ? 'FIXED' : 'PERCENTAGE',
-    value: Number(req.body.value) || 10,
-    minOrderPaise: (Number(req.body.minOrderINR) || 1999) * 100,
-    isActive: req.body.isActive !== undefined ? Boolean(req.body.isActive) : true,
-    expiresAt: req.body.expiresAt || '2026-12-31'
-  };
-  serverDiscounts.unshift(newDisc);
-  res.status(201).json({ success: true, discount: newDisc });
-}
-
-export async function deleteAdminDiscount(req: Request, res: Response): Promise<void> {
+export async function updateProduct(req: Request, res: Response) {
   const { id } = req.params;
-  serverDiscounts = serverDiscounts.filter(d => d.id !== id && d.code !== id);
-  res.json({ success: true, message: 'Discount deleted successfully' });
+  const data = productSchema.partial().parse(req.body);
+  const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
+  if (!existing) throw new AppError('Product not found', 404);
+
+  const slug = data.slug !== undefined || data.name !== undefined ? slugify(data.slug || data.name || existing.slug) : existing.slug;
+  const basePrice = data.basePrice ?? existing.basePrice;
+  let comparePrice = data.comparePrice !== undefined ? data.comparePrice : existing.comparePrice;
+  if (comparePrice && comparePrice <= basePrice) comparePrice = null;
+
+  const categoryId =
+    data.categoryId !== undefined || data.categoryName !== undefined
+      ? await resolveCategoryId(data.categoryId, data.categoryName)
+      : existing.categoryId;
+
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          slug,
+          ...(data.description !== undefined ? { description: data.description } : {}),
+          ...(data.details !== undefined ? { details: data.details || null } : {}),
+          ...(data.fabricCare !== undefined ? { fabricCare: data.fabricCare || null } : {}),
+          ...(data.fitGuide !== undefined ? { fitGuide: data.fitGuide || null } : {}),
+          basePrice,
+          comparePrice: comparePrice || null,
+          categoryId,
+          ...(data.isFeatured !== undefined ? { isFeatured: data.isFeatured } : {}),
+          ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+          ...(data.colorGroup !== undefined ? { colorGroup: data.colorGroup || null } : {})
+        }
+      });
+
+      if (data.images) {
+        await tx.productImage.deleteMany({ where: { productId: id } });
+        await tx.productImage.createMany({ data: normaliseImages(data.images).map((img) => ({ ...img, productId: id })) });
+      }
+
+      if (data.variants) {
+        const incoming = dedupeVariants(data.variants);
+        const incomingSizes = new Set(incoming.map((v) => v.size));
+        // Remove sizes that were deleted (cart lines for them are removed by cascade; past orders keep a snapshot).
+        const removed = existing.variants.filter((v) => !incomingSizes.has(v.size.toUpperCase()));
+        if (removed.length) {
+          await tx.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } });
+        }
+        for (const v of incoming) {
+          const match = existing.variants.find((ev) => ev.size.toUpperCase() === v.size);
+          if (match) {
+            await tx.productVariant.update({
+              where: { id: match.id },
+              data: { size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
+            });
+          } else {
+            await tx.productVariant.create({
+              data: { productId: id, size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
+            });
+          }
+        }
+      } else if (slug !== existing.slug) {
+        for (const v of existing.variants) {
+          await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size) } });
+        }
+      }
+    },
+    { timeout: 20000 }
+  );
+
+  if (data.collectionIds) await setProductCollections(id, data.collectionIds);
+  res.json({ product: serializeProduct(await loadAdminProduct(id)) });
+}
+
+export async function deleteProduct(req: Request, res: Response) {
+  const { id } = req.params;
+  const product = await prisma.product.findUnique({ where: { id }, include: { _count: { select: { orderItems: true } } } });
+  if (!product) throw new AppError('Product not found', 404);
+
+  if (product._count.orderItems > 0) {
+    // Keep it for order history, just hide it from the store.
+    await prisma.product.update({ where: { id }, data: { isActive: false } });
+    res.json({ success: true, archived: true, message: 'Product has past orders, so it was hidden from the store instead of deleted.' });
+    return;
+  }
+  await prisma.product.delete({ where: { id } });
+  res.json({ success: true, archived: false });
+}
+
+/* ----------------------------------------------------------------------------------------------
+ * Categories
+ * --------------------------------------------------------------------------------------------*/
+const categorySchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  group: z.enum(['TOP', 'BOTTOM', 'ACCESSORIES']).optional().nullable(),
+  description: z.string().max(2000).optional().nullable(),
+  imageUrl: z.string().trim().url().max(2000).optional().nullable().or(z.literal('')),
+  sortOrder: z.number().int().optional()
+});
+
+export async function createCategory(req: Request, res: Response) {
+  const data = categorySchema.parse(req.body);
+  const category = await prisma.category.create({
+    data: {
+      name: data.name,
+      slug: slugify(data.name),
+      description: data.description || null,
+      imageUrl: data.imageUrl || null,
+      sortOrder: data.sortOrder ?? 0,
+      group: data.group || 'TOP'
+    }
+  });
+  res.status(201).json({ category });
+}
+
+export async function updateCategory(req: Request, res: Response) {
+  const data = categorySchema.partial().parse(req.body);
+  const category = await prisma.category.update({
+    where: { id: req.params.id },
+    data: {
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      ...(data.description !== undefined ? { description: data.description || null } : {}),
+      ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
+      ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+      ...(data.group !== undefined ? { group: data.group || 'TOP' } : {})
+    }
+  });
+  res.json({ category });
+}
+
+export async function deleteCategory(req: Request, res: Response) {
+  // Products in this category stay, they just become uncategorised.
+  await prisma.category.delete({ where: { id: req.params.id } });
+  res.json({ success: true });
+}
+
+/* ----------------------------------------------------------------------------------------------
+ * Store settings
+ * --------------------------------------------------------------------------------------------*/
+const settingsSchema = z.object({
+  announcementText: z.string().max(1000),
+  heroHeadline: z.string().max(190),
+  heroSubtitle: z.string().max(1000),
+  supportEmail: z.string().trim().email().or(z.literal('')),
+  supportPhone: z.string().trim().max(30),
+  instagramHandle: z.string().trim().max(100).transform((v) => v.replace(/^@/, '')),
+  freeShippingThreshold: z.coerce.number().int().min(0).max(1000000),
+  shippingFee: z.coerce.number().int().min(0).max(100000),
+  announcementEnabled: z.boolean(),
+  heroDesktopImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),
+  heroMobileImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),
+  heroLink: z.string().trim().max(500),
+  heroCtaText: z.string().trim().max(60),
+  latestDropTitle: z.string().trim().max(100),
+  seoTitle: z.string().max(300),
+  seoText: z.string().max(20000),
+  shippingInfo: z.string().max(5000),
+  careInfo: z.string().max(5000)
+}).partial();
+
+export async function getAdminStoreSettings(_req: Request, res: Response) {
+  res.json({ settings: await getSettings() });
+}
+
+export async function updateAdminStoreSettings(req: Request, res: Response) {
+  const data = settingsSchema.parse(req.body);
+  const settings = await saveSettings(data);
+  res.json({ success: true, settings });
+}
+
+/* ----------------------------------------------------------------------------------------------
+ * Discount codes (stored in the Coupon table and applied at checkout)
+ * --------------------------------------------------------------------------------------------*/
+function toDiscountDto(c: any) {
+  return {
+    id: c.id,
+    code: c.code,
+    type: c.discountType,
+    // percentage → percent; fixed → rupees
+    value: c.discountType === DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
+    minOrderPaise: c.minOrderPaise,
+    isActive: c.isActive,
+    expiresAt: c.validUntil ? c.validUntil.toISOString().slice(0, 10) : '',
+    maxUses: c.maxUses,
+    usedCount: c.usedCount
+  };
+}
+
+const discountSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(3)
+    .max(30)
+    .transform((v) => v.toUpperCase())
+    .refine((v) => /^[A-Z0-9_-]+$/.test(v), 'Use only letters, numbers, - and _'),
+  type: z.enum(['PERCENTAGE', 'FIXED']),
+  value: z.coerce.number().positive(),
+  minOrderINR: z.coerce.number().min(0).default(0),
+  expiresAt: z.string().optional().or(z.literal('')),
+  isActive: z.boolean().default(true),
+  maxUses: z.coerce.number().int().positive().optional().nullable()
+});
+
+export async function getAdminDiscounts(_req: Request, res: Response) {
+  const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: 'desc' } });
+  res.json({ discounts: coupons.map(toDiscountDto) });
+}
+
+export async function createAdminDiscount(req: Request, res: Response) {
+  const data = discountSchema.parse(req.body);
+  if (data.type === 'PERCENTAGE' && data.value > 90) throw new AppError('Percentage discount cannot be more than 90%', 400);
+  let validUntil: Date | null = null;
+  if (data.expiresAt) {
+    validUntil = new Date(`${data.expiresAt}T23:59:59+05:30`);
+    if (isNaN(validUntil.getTime())) throw new AppError('Invalid expiry date', 400);
+  }
+  const coupon = await prisma.coupon.create({
+    data: {
+      code: data.code,
+      discountType: data.type === 'FIXED' ? DiscountType.FIXED : DiscountType.PERCENTAGE,
+      discountValue: data.type === 'FIXED' ? Math.round(data.value * 100) : Math.round(data.value),
+      minOrderPaise: Math.round(data.minOrderINR * 100),
+      isActive: data.isActive,
+      validUntil,
+      maxUses: data.maxUses ?? null
+    }
+  });
+  res.status(201).json({ success: true, discount: toDiscountDto(coupon) });
+}
+
+export async function toggleAdminDiscount(req: Request, res: Response) {
+  const coupon = await prisma.coupon.findFirst({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
+  if (!coupon) throw new AppError('Discount code not found', 404);
+  const updated = await prisma.coupon.update({ where: { id: coupon.id }, data: { isActive: !coupon.isActive } });
+  res.json({ success: true, discount: toDiscountDto(updated) });
+}
+
+export async function deleteAdminDiscount(req: Request, res: Response) {
+  await prisma.coupon.deleteMany({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
+  res.json({ success: true });
+}
+
+/* ----------------------------------------------------------------------------------------------
+ * Newsletter subscribers
+ * --------------------------------------------------------------------------------------------*/
+export async function exportSubscribers(req: Request, res: Response) {
+  const subs = await prisma.subscriber.findMany({ orderBy: { createdAt: 'desc' } });
+  if (req.query.format === 'json') {
+    res.json({ total: subs.length, subscribers: subs });
+    return;
+  }
+  const csv = ['email,subscribed_at', ...subs.map((s) => `${s.email},${s.createdAt.toISOString()}`)].join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="levix-subscribers.csv"');
+  res.send(csv);
+}
+
+/* ----------------------------------------------------------------------------------------------
+ * Curated collections (homepage sections, banner slideshow, menu)
+ * --------------------------------------------------------------------------------------------*/
+const collectionSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  slug: z.string().trim().max(120).optional(),
+  description: z.string().max(5000).optional().nullable(),
+  bannerImageUrl: z.string().trim().max(2000).optional().nullable(),
+  mobileBannerUrl: z.string().trim().max(2000).optional().nullable(),
+  isActive: z.boolean().default(true),
+  sortOrder: z.coerce.number().int().default(0),
+  homeLayout: z.enum(['NONE', 'CAROUSEL', 'GRID']).default('NONE'),
+  showInGallery: z.boolean().default(false),
+  showInMenu: z.boolean().default(true),
+  productIds: z.array(z.string().max(64)).max(500).optional()
+});
+
+export async function getAdminCollections(_req: Request, res: Response) {
+  const collections = await prisma.collection.findMany({
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+    include: { products: { orderBy: { sortOrder: 'asc' }, select: { productId: true } } }
+  });
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    collections: collections.map(({ products, ...c }) => ({ ...c, productIds: products.map((p) => p.productId) }))
+  });
+}
+
+async function setCollectionProducts(collectionId: string, productIds: string[]) {
+  const unique = [...new Set(productIds)];
+  const valid = new Set((await prisma.product.findMany({ where: { id: { in: unique } }, select: { id: true } })).map((p) => p.id));
+  const ordered = unique.filter((id) => valid.has(id));
+  await prisma.$transaction([
+    prisma.collectionProduct.deleteMany({ where: { collectionId } }),
+    prisma.collectionProduct.createMany({ data: ordered.map((productId, idx) => ({ collectionId, productId, sortOrder: idx })) })
+  ]);
+}
+
+export async function createCollection(req: Request, res: Response) {
+  const data = collectionSchema.parse(req.body);
+  const slug = slugify(data.slug || data.name);
+  const clash = await prisma.category.findUnique({ where: { slug } });
+  if (clash) throw new AppError(`"${slug}" is already used by a category. Choose a different name or handle.`, 409);
+  const collection = await prisma.collection.create({
+    data: {
+      name: data.name,
+      slug,
+      description: data.description || null,
+      bannerImageUrl: data.bannerImageUrl || null,
+      mobileBannerUrl: data.mobileBannerUrl || null,
+      isActive: data.isActive,
+      sortOrder: data.sortOrder,
+      homeLayout: data.homeLayout,
+      showInGallery: data.showInGallery,
+      showInMenu: data.showInMenu
+    }
+  });
+  if (data.productIds) await setCollectionProducts(collection.id, data.productIds);
+  res.status(201).json({ collection });
+}
+
+export async function updateCollection(req: Request, res: Response) {
+  const data = collectionSchema.partial().parse(req.body);
+  const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
+  if (!existing) throw new AppError('Collection not found', 404);
+  const slug = data.slug !== undefined ? slugify(data.slug || data.name || existing.name) : existing.slug;
+  if (slug !== existing.slug && (await prisma.category.findUnique({ where: { slug } }))) {
+    throw new AppError(`"${slug}" is already used by a category.`, 409);
+  }
+  const collection = await prisma.collection.update({
+    where: { id: existing.id },
+    data: {
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      slug,
+      ...(data.description !== undefined ? { description: data.description || null } : {}),
+      ...(data.bannerImageUrl !== undefined ? { bannerImageUrl: data.bannerImageUrl || null } : {}),
+      ...(data.mobileBannerUrl !== undefined ? { mobileBannerUrl: data.mobileBannerUrl || null } : {}),
+      ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+      ...(data.homeLayout !== undefined ? { homeLayout: data.homeLayout } : {}),
+      ...(data.showInGallery !== undefined ? { showInGallery: data.showInGallery } : {}),
+      ...(data.showInMenu !== undefined ? { showInMenu: data.showInMenu } : {})
+    }
+  });
+  if (data.productIds) await setCollectionProducts(collection.id, data.productIds);
+  res.json({ collection });
+}
+
+export async function deleteCollection(req: Request, res: Response) {
+  await prisma.collection.delete({ where: { id: req.params.id } });
+  res.json({ success: true });
 }

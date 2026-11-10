@@ -1,329 +1,131 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronDown, ChevronUp, Sparkles, Shield, Layers } from 'lucide-react';
-import { ProductCard } from '../components/ProductCard';
-import { apiClient } from '../services/api';
-import { Product } from '../types';
+import { useHomeStore } from '../store/homeStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { useAuth } from '../context/AuthContext';
+import { ProductRail } from '../components/ProductRail';
+import { ProductGrid, ProductGridSkeleton } from '../components/ProductGrid';
+import { GallerySlider, Slide } from '../components/GallerySlider';
+import { StoriesBar } from '../components/StoriesBar';
+import { HomeSection } from '../types';
+
+const Hero: React.FC = () => {
+  const s = useSettingsStore((st) => st.settings);
+  const desktop = s.heroDesktopImage || '/hero_desktop.jpg';
+  const mobile = s.heroMobileImage || (s.heroDesktopImage ? s.heroDesktopImage : '/hero_mobile.jpg');
+  return (
+    <section className="relative w-full h-[100svh] min-h-[560px] max-h-[1000px] overflow-hidden bg-neutral-300">
+      <Link to={s.heroLink || '/collections/all-products'} aria-label={s.heroCtaText || 'Shop now'} className="absolute inset-0">
+        <picture>
+          <source media="(max-width: 767px)" srcSet={mobile} />
+          <img src={desktop} alt="LEVIX campaign" className="w-full h-full object-cover object-center" loading="eager" fetchPriority="high" />
+        </picture>
+      </Link>
+      <div className="absolute bottom-[7%] inset-x-0 flex justify-center pointer-events-none">
+        <Link
+          to={s.heroLink || '/collections/all-products'}
+          className="pointer-events-auto text-[12px] font-medium text-black md:text-white border-b border-current pb-0.5 hover:opacity-70 transition-opacity"
+        >
+          {s.heroCtaText || 'Shop now'}
+        </Link>
+      </div>
+    </section>
+  );
+};
+
+const GridSection: React.FC<{ section: HomeSection }> = ({ section }) => (
+  <section className="px-2 md:px-[10px]">
+    <div className="flex items-center justify-between px-2 md:px-3 mb-3">
+      <h2 className="lx-title">{section.name}</h2>
+      <Link to={`/collections/${section.slug}`} className="px-4 py-[5px] rounded-full bg-white text-[10px] font-medium hover:bg-neutral-100">
+        View all
+      </Link>
+    </div>
+    <ProductGrid products={section.products.slice(0, 8)} />
+  </section>
+);
+
+const renderSection = (section: HomeSection) =>
+  section.layout === 'GRID' ? (
+    <GridSection key={section.id} section={section} />
+  ) : (
+    <ProductRail key={section.id} title={section.name} products={section.products} href={`/collections/${section.slug}`} />
+  );
 
 export const HomePage: React.FC = () => {
+  const { data, loading, error, fetchHome } = useHomeStore();
+  const settings = useSettingsStore((s) => s.settings);
   const { isAdmin } = useAuth();
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeCollectionTab, setActiveCollectionTab] = useState(0);
-  const [openAccordion, setOpenAccordion] = useState<number | null>(0);
 
   useEffect(() => {
-    async function loadFeatured() {
-      try {
-        const res = await apiClient.get('/products', { limit: 12, sort: 'featured' });
-        setFeaturedProducts(res.data.products || []);
-      } catch (err) {
-        console.warn('Could not load featured products:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadFeatured();
+    fetchHome(true);
+  }, [fetchHome]);
 
-    const handleUpdate = () => loadFeatured();
-    window.addEventListener('levix_products_updated', handleUpdate);
-    return () => window.removeEventListener('levix_products_updated', handleUpdate);
+  useEffect(() => {
+    document.title = 'LEVIX | Premium Streetwear';
   }, []);
 
-  const editorialCollections = [
-    {
-      name: 'OVERLENGTH TEES',
-      title: 'Levix Signature Overlength Heavyweight T-Shirts',
-      img: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1200&q=80',
-      handle: 'overlength-t-shirts'
-    },
-    {
-      name: 'WAFFLE FULL SLEEVES',
-      title: 'Levix Heavyweight Thermal Waffle Boxy Full Sleeves',
-      img: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1200&q=80',
-      handle: 'waffle-boxy-fit-full-sleeves'
-    },
-    {
-      name: 'ACID WASH TEES',
-      title: 'Levix Vintage Hand-Treated Mineral Acid Wash Tees',
-      img: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1200&q=80',
-      handle: 'acid-wash-t-shirts'
-    }
-  ];
+  // Banner slideshow: collections marked "show in gallery", otherwise category banners.
+  const slides: Slide[] = data
+    ? data.gallery.length
+      ? data.gallery.map((g) => ({ id: g.id, name: g.name, href: `/collections/${g.slug}`, image: g.bannerImageUrl!, mobileImage: g.mobileBannerUrl }))
+      : data.menu.categories
+          .filter((c) => c.imageUrl)
+          .map((c) => ({ id: c.id, name: c.name, href: `/collections/${c.slug}`, image: c.imageUrl! }))
+    : [];
 
-  const faqs = [
-    {
-      title: 'Feel the Luxury of Premium Streetwear with LEVIX - Architectural Streetwear',
-      content: 'Levix is an independent luxury streetwear atelier founded on architectural tailoring, heavy custom-milled textiles, and provocative cultural narratives. Every silhouette is patterned with dropped shoulders, structured proportions, and custom-milled 280-340 GSM cottons designed to preserve volume and drape over years of wear.'
-    },
-    {
-      title: 'What is Gender Neutral Streetwear Fashion?',
-      content: 'Gender-neutral streetwear prioritizes structure, volume, fabric weight, and silhouette over traditional gender classifications. By adopting generous cuts, dropped armholes, and relaxed overlength drape, Levix garments are universally tailored for all genders.'
-    },
-    {
-      title: 'What Makes LEVIX Unique Among Streetwear Brands in India?',
-      content: 'Levix manufactures exclusively with custom-milled 280 GSM combed cotton single jerseys and dense 340 GSM thermal honeycomb waffle weaves. Every drop is produced in strictly limited quantities, ensuring unmatched individuality, high collectors value, and luxury finish.'
-    },
-    {
-      title: 'Explore Our Signature Streetwear Categories',
-      content: 'Explore our dedicated core categories: Signature Overlength T-Shirts, Heavyweight Waffle Boxy Fit Full Sleeves, and Hand-Treated Mineral Acid Wash Distressed Tees engineered for everyday luxury wear.'
-    },
-    {
-      title: 'FAQS: Shipping, Returns & Authenticity',
-      content: 'All prepaid orders receive complimentary domestic air express shipping. Deliveries arrive in metro areas within 48-72 hours. We offer a hassle-free 7-day exchange portal for size replacements and alterations.'
-    }
-  ];
+  const stories = data
+    ? [
+        ...data.menu.collections.map((c) => ({ id: c.id, name: c.name, href: `/collections/${c.slug}`, image: c.bannerImageUrl })),
+        ...data.menu.categories.map((c) => ({ id: c.id, name: c.name, href: `/collections/${c.slug}`, image: c.imageUrl }))
+      ].slice(0, 10)
+    : [];
 
-  const popularSearches = [
-    'Overlength T-Shirts', 'Waffle Boxy Fit Full Sleeves', 'Acid Wash T-Shirts'
-  ];
+  const sections = data?.sections || [];
+  const [first, ...rest] = sections;
+  const empty = data && data.latestDrop.length === 0;
 
   return (
-    <div className="space-y-12 sm:space-y-20 pb-16">
-      
-      {/* 1. Hero Campaign Section */}
-      <section className="relative w-full overflow-hidden bg-neutral-900">
-        <div className="relative w-full h-[100svh] max-h-[950px] min-h-[640px]">
-          <picture className="block w-full h-full">
-            <source media="(max-width: 950px)" srcSet="/hero_mobile.jpg" />
-            <img
-              src="/hero_desktop.jpg"
-              alt="Levix Luxury Streetwear Campaign"
-              className="w-full h-full object-cover object-center"
-              loading="eager"
-            />
-          </picture>
-          
-          <div className="absolute bottom-[20%] sm:bottom-[9%] left-1/2 -translate-x-1/2 text-center z-10">
-            <Link
-              to="/collections/all-products"
-              className="relative inline-block text-black sm:text-white text-xs sm:text-sm font-semibold tracking-wider uppercase transition-all duration-300 after:content-[''] after:absolute after:bottom-[-3px] after:left-1/2 after:-translate-x-1/2 after:w-[65%] after:border-b after:border-black sm:after:border-white hover:after:w-full"
-            >
-              Shop now
-            </Link>
-          </div>
-        </div>
-      </section>
+    <div className="pb-6">
+      <Hero />
+      <StoriesBar stories={stories} />
 
-      {/* 2. Latest drop Section (Dynamic from real products) */}
-      <section className="max-w-[1440px] mx-auto px-3.5 sm:px-6 md:px-8 xl:px-12">
-        <div className="flex items-center justify-between border-b border-black/10 pb-3 mb-5 sm:mb-8">
-          <div>
-            <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest block">
-              CATALOG ARCHIVE
-            </span>
-            <h2 className="text-xs md:text-sm font-semibold uppercase tracking-wider text-black">
-              Latest Streetwear Drops
-            </h2>
+      <div className="space-y-4 md:space-y-5 mt-2 md:mt-3">
+        {loading && !data ? (
+          <div className="px-2 md:px-[10px] pt-4">
+            <ProductGridSkeleton count={4} />
           </div>
-          <Link
-            to="/collections/all-products"
-            className="px-3.5 py-1 bg-black text-white text-[11px] font-medium rounded-full hover:bg-neutral-800 transition-colors flex items-center gap-1 group"
-          >
-            <span>Discover more</span>
-            <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 animate-pulse">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="aspect-[3/4] bg-neutral-200" />
-            ))}
+        ) : error && !data ? (
+          <div className="mx-2 md:mx-[10px] lx-panel p-8 text-center text-[12px] text-neutral-600">
+            {error} <button onClick={() => fetchHome(true)} className="underline ml-1">Try again</button>
           </div>
-        ) : featuredProducts.length > 0 ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-            {featuredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <div className="py-20 px-6 text-center border border-black/10 bg-white/70 backdrop-blur-sm space-y-4 shadow-sm">
-            <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest">
-              COLLECTION 01 • IN PRODUCTION
-            </span>
-            <h3 className="font-display font-black text-2xl sm:text-4xl uppercase tracking-tight text-black">
-              New Drops Coming Soon
-            </h3>
-            <p className="text-xs text-neutral-600 max-w-lg mx-auto leading-relaxed">
-              Our inaugural custom-milled drop capsule is currently in production. Follow <span className="font-bold text-black font-mono">@thelevix.shop</span> on Instagram to unlock private release invitations and early drop access.
+        ) : empty ? (
+          <div className="mx-2 md:mx-[10px] lx-panel py-16 px-6 text-center space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">Coming soon</p>
+            <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">New drops are on the way</h2>
+            <p className="text-[12px] text-neutral-600 max-w-md mx-auto">
+              Follow <span className="font-semibold text-black">@{settings.instagramHandle || 'thelevix.shop'}</span> for early access.
             </p>
             {isAdmin && (
-              <div className="pt-3">
-                <Link
-                  to="/admin/products"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#FF5400] hover:bg-[#e04a00] text-white text-xs font-bold uppercase tracking-widest shadow-md transition-all"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>+ Add Your First Drop (Admin)</span>
-                </Link>
-              </div>
+              <Link to="/admin/products" className="inline-block mt-2 px-5 py-2.5 rounded-full bg-black text-white text-[11px] font-semibold">
+                + Add your first product
+              </Link>
             )}
           </div>
-        )}
-      </section>
-
-      {/* 3. Editorial "Discover Collection" Lookbook */}
-      <section className="max-w-[1440px] mx-auto px-3.5 sm:px-6 md:px-8 xl:px-12">
-        <div className="border border-black/10 overflow-hidden bg-black text-white grid grid-cols-1 lg:grid-cols-12 shadow-2xl">
-          
-          {/* Left: Dynamic Campaign Image */}
-          <div className="lg:col-span-8 relative aspect-[4/3] sm:aspect-[16/10] lg:aspect-auto overflow-hidden bg-neutral-950">
-            <img
-              src={editorialCollections[activeCollectionTab].img}
-              alt={editorialCollections[activeCollectionTab].title}
-              className="w-full h-full object-cover transition-all duration-700"
+        ) : (
+          <>
+            <ProductRail
+              title={settings.latestDropTitle || 'Latest drop'}
+              products={data?.latestDrop || []}
+              href="/collections/new-in"
+              variant="plain"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-4 sm:p-6 lg:p-10">
-              <div>
-                <p className="text-[9px] sm:text-[11px] font-mono text-[#FF5400] font-bold uppercase tracking-widest mb-1">
-                  ATELIER CAPSULE
-                </p>
-                <h3 className="font-display font-black text-xl sm:text-2xl lg:text-4xl uppercase tracking-tight">
-                  {editorialCollections[activeCollectionTab].title}
-                </h3>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Typographic Collection Navigation */}
-          <div className="lg:col-span-4 p-4 sm:p-8 lg:p-10 flex flex-col justify-between bg-black text-white space-y-4 sm:space-y-6">
-            <div>
-              <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest block mb-2 sm:mb-4">
-                DISCOVER COLLECTION
-              </span>
-              <div className="flex overflow-x-auto gap-2 pb-2 sm:block sm:space-y-3 sm:pb-0 scrollbar-none">
-                {editorialCollections.map((col, idx) => (
-                  <button
-                    key={col.name}
-                    onClick={() => setActiveCollectionTab(idx)}
-                    className={`whitespace-nowrap px-3 py-1.5 sm:px-0 sm:py-1 rounded-none border sm:border-0 text-left text-xs sm:text-base font-bold uppercase tracking-wider transition-all ${
-                      activeCollectionTab === idx
-                        ? 'text-[#FF5400] border-[#FF5400] sm:translate-x-2'
-                        : 'text-neutral-400 border-white/10 hover:text-white'
-                    }`}
-                  >
-                    {col.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-3 sm:pt-4 border-t border-white/10">
-              <Link
-                to={`/collections/${editorialCollections[activeCollectionTab].handle}`}
-                className="w-full py-3 sm:py-3.5 bg-white text-black hover:bg-neutral-200 text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-              >
-                <span>Shop {editorialCollections[activeCollectionTab].name}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* 4. Atelier Values Banner */}
-      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">
-            <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest">
-              01 • PROPRIETARY FABRIC
-            </span>
-            <h4 className="font-display font-black text-lg uppercase text-black">
-              260–450 GSM Heavyweights
-            </h4>
-            <p className="text-xs text-neutral-600 leading-relaxed">
-              Custom-milled combed cottons and diagonal loopback French terry engineered to maintain architectural boxy drape.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">
-            <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest">
-              02 • DISPATCH COURIER
-            </span>
-            <h4 className="font-display font-black text-lg uppercase text-black">
-              Express Pan-India Air
-            </h4>
-            <p className="text-xs text-neutral-600 leading-relaxed">
-              All prepaid orders dispatch via Blue Dart & Delhivery Express in sealed tamper-evident luxury dustbags.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">
-            <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest">
-              03 • CLIENT CONCIERGE
-            </span>
-            <h4 className="font-display font-black text-lg uppercase text-black">
-              7-Day Doorstep Exchanges
-            </h4>
-            <p className="text-xs text-neutral-600 leading-relaxed">
-              Complimentary size alterations and seamless doorstep pickups for complete peace of mind.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. Brand Story & Accordions */}
-      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 border-t border-black/10 pt-12 pb-8">
-        <div className="max-w-4xl mx-auto space-y-4">
-          <span className="text-[11px] font-mono text-[#FF5400] font-bold uppercase tracking-widest block text-center mb-6">
-            ATELIER ARCHIVES & FAQS
-          </span>
-
-          <div className="space-y-3">
-            {faqs.map((faq, index) => {
-              const isOpen = openAccordion === index;
-              return (
-                <div
-                  key={index}
-                  className="border border-black/10 bg-white/70 backdrop-blur-sm overflow-hidden"
-                >
-                  <button
-                    onClick={() => setOpenAccordion(isOpen ? null : index)}
-                    className="w-full p-4 sm:p-5 text-left flex items-center justify-between hover:bg-black/5 transition-colors"
-                  >
-                    <span className="font-bold text-xs sm:text-sm uppercase tracking-wide text-black pr-4">
-                      {faq.title}
-                    </span>
-                    {isOpen ? (
-                      <ChevronUp className="w-4 h-4 text-black flex-shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-neutral-500 flex-shrink-0" />
-                    )}
-                  </button>
-                  {isOpen && (
-                    <div className="px-4 sm:px-5 pb-5 pt-1 text-xs text-neutral-600 leading-relaxed border-t border-black/5">
-                      <p>{faq.content}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Popular searches tag cloud */}
-          <div className="pt-8 border-t border-black/10 mt-10">
-            <h4 className="text-[11px] font-mono uppercase tracking-widest font-bold text-neutral-500 mb-3 text-center">
-              Popular Searches
-            </h4>
-            <div className="flex flex-wrap justify-center gap-2">
-              {popularSearches.map((term) => (
-                <Link
-                  key={term}
-                  to={`/search?q=${encodeURIComponent(term)}`}
-                  className="px-3 py-1 bg-white border border-black/10 text-[11px] text-neutral-700 hover:bg-black hover:text-white transition-colors"
-                >
-                  {term}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-        </div>
-      </section>
-
+            {first && renderSection(first)}
+            <GallerySlider slides={slides} />
+            {rest.map(renderSection)}
+          </>
+        )}
+      </div>
     </div>
   );
 };

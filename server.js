@@ -26,7 +26,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// backend/src/server.ts
+// src/server.ts
 var server_exports = {};
 __export(server_exports, {
   app: () => app,
@@ -35,94 +35,95 @@ __export(server_exports, {
 });
 module.exports = __toCommonJS(server_exports);
 
-// backend/src/app.ts
-var import_express8 = __toESM(require("express"), 1);
+// src/app.ts
+var import_express10 = __toESM(require("express"), 1);
 var import_cors = __toESM(require("cors"), 1);
 var import_helmet = __toESM(require("helmet"), 1);
+var import_compression = __toESM(require("compression"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs2 = __toESM(require("fs"), 1);
 
-// backend/src/config/env.ts
+// src/config/env.ts
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_zod = require("zod");
 import_dotenv.default.config();
 var envSchema = import_zod.z.object({
   NODE_ENV: import_zod.z.string().default("production"),
-  PORT: import_zod.z.union([import_zod.z.string(), import_zod.z.number()]).default(4e3).transform((val) => Number(val) || 4e3),
+  PORT: import_zod.z.union([import_zod.z.string(), import_zod.z.number()]).optional(),
   DATABASE_URL: import_zod.z.string().optional().default(""),
   FRONTEND_URL: import_zod.z.string().optional().default("https://thelevix.shop"),
-  // Firebase Admin Credentials
+  // Comma separated list of owner/admin emails (must be Firebase-verified emails)
+  ADMIN_EMAILS: import_zod.z.string().optional().default("levixfashions@gmail.com"),
+  // Firebase Admin (only the project id is required to verify ID tokens)
   FIREBASE_PROJECT_ID: import_zod.z.string().optional(),
+  VITE_FIREBASE_PROJECT_ID: import_zod.z.string().optional(),
   FIREBASE_CLIENT_EMAIL: import_zod.z.string().optional(),
   FIREBASE_PRIVATE_KEY: import_zod.z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_PATH: import_zod.z.string().optional(),
   // Razorpay
-  RAZORPAY_KEY_ID: import_zod.z.string().optional().default("rzp_test_placeholder"),
-  RAZORPAY_KEY_SECRET: import_zod.z.string().optional().default("rzp_secret_placeholder"),
-  RAZORPAY_WEBHOOK_SECRET: import_zod.z.string().optional(),
-  // Cloudinary / Object Storage
-  CLOUDINARY_CLOUD_NAME: import_zod.z.string().optional(),
-  CLOUDINARY_API_KEY: import_zod.z.string().optional(),
-  CLOUDINARY_API_SECRET: import_zod.z.string().optional()
+  RAZORPAY_KEY_ID: import_zod.z.string().optional().default(""),
+  RAZORPAY_KEY_SECRET: import_zod.z.string().optional().default(""),
+  RAZORPAY_WEBHOOK_SECRET: import_zod.z.string().optional().default("")
 }).passthrough();
 var parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
-  console.warn("\u26A0\uFE0F Warning: Environment configuration details:", parsed.error.format());
+  console.warn("\u26A0\uFE0F Environment configuration warning:", parsed.error.format());
 }
-var env = parsed.success ? parsed.data : {
-  NODE_ENV: process.env.NODE_ENV || "production",
-  PORT: Number(process.env.PORT) || 4e3,
-  DATABASE_URL: process.env.DATABASE_URL || "",
-  FRONTEND_URL: process.env.FRONTEND_URL || "https://thelevix.shop",
-  FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
-  FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
-  FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY,
-  FIREBASE_SERVICE_ACCOUNT_PATH: process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
-  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
-  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "rzp_secret_placeholder",
-  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
-  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
-  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY,
-  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET
+var data = parsed.success ? parsed.data : process.env;
+var env = {
+  NODE_ENV: String(data.NODE_ENV || "production"),
+  DATABASE_URL: String(data.DATABASE_URL || ""),
+  FRONTEND_URL: String(data.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, ""),
+  ADMIN_EMAILS: String(data.ADMIN_EMAILS || "levixfashions@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  FIREBASE_PROJECT_ID: data.FIREBASE_PROJECT_ID || data.VITE_FIREBASE_PROJECT_ID || "",
+  FIREBASE_CLIENT_EMAIL: data.FIREBASE_CLIENT_EMAIL,
+  FIREBASE_PRIVATE_KEY: data.FIREBASE_PRIVATE_KEY,
+  FIREBASE_SERVICE_ACCOUNT_PATH: data.FIREBASE_SERVICE_ACCOUNT_PATH,
+  RAZORPAY_KEY_ID: String(data.RAZORPAY_KEY_ID || ""),
+  RAZORPAY_KEY_SECRET: String(data.RAZORPAY_KEY_SECRET || ""),
+  RAZORPAY_WEBHOOK_SECRET: String(data.RAZORPAY_WEBHOOK_SECRET || "")
 };
+var isProduction = env.NODE_ENV === "production";
+function isAdminEmail(email) {
+  if (!email) return false;
+  return env.ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
 
-// backend/src/middleware/rateLimiter.ts
+// src/config/db.ts
+var import_client = require("@prisma/client");
+var globalForPrisma = globalThis;
+var prisma = globalForPrisma.__levixPrisma ?? new import_client.PrismaClient({
+  log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"]
+});
+globalForPrisma.__levixPrisma = prisma;
+
+// src/middleware/rateLimiter.ts
 var import_express_rate_limit = __toESM(require("express-rate-limit"), 1);
 var apiRateLimiter = (0, import_express_rate_limit.default)({
   windowMs: 15 * 60 * 1e3,
-  // 15 minutes
-  max: 300,
-  // Limit each IP to 300 requests per 15 minutes
+  max: 900,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    error: "Too many requests from this IP, please try again after 15 minutes"
-  }
+  message: { error: "Too many requests. Please wait a few minutes and try again." }
 });
 var authRateLimiter = (0, import_express_rate_limit.default)({
   windowMs: 15 * 60 * 1e3,
-  max: 30,
-  // 30 requests per 15 minutes for auth endpoints
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    error: "Too many authentication attempts, please try again later"
-  }
+  message: { error: "Too many account requests. Please try again later." }
 });
 var checkoutRateLimiter = (0, import_express_rate_limit.default)({
   windowMs: 10 * 60 * 1e3,
-  max: 20,
-  // 20 checkout attempts per 10 minutes
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    error: "Too many checkout attempts, please slow down"
-  }
+  message: { error: "Too many checkout attempts. Please wait a few minutes." }
 });
 
-// backend/src/middleware/errorHandler.ts
+// src/middleware/errorHandler.ts
 var import_zod2 = require("zod");
-var import_client = require("@prisma/client");
+var import_client2 = require("@prisma/client");
 var AppError = class _AppError extends Error {
   statusCode;
   constructor(message, statusCode = 400) {
@@ -131,10 +132,14 @@ var AppError = class _AppError extends Error {
     Object.setPrototypeOf(this, _AppError.prototype);
   }
 };
-function errorHandler(err, req, res, next) {
+function notFoundApi(req, res) {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+}
+function errorHandler(err, req, res, _next) {
   if (err instanceof import_zod2.ZodError) {
+    const first = err.errors[0];
     res.status(400).json({
-      error: "Validation Error",
+      error: first ? `${first.path.join(".") || "input"}: ${first.message}` : "Validation error",
       details: err.errors.map((e) => ({ field: e.path.join("."), message: e.message }))
     });
     return;
@@ -143,1515 +148,2167 @@ function errorHandler(err, req, res, next) {
     res.status(err.statusCode).json({ error: err.message });
     return;
   }
-  if (err instanceof import_client.Prisma.PrismaClientKnownRequestError) {
+  if (err?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Invalid JSON body" });
+    return;
+  }
+  if (err?.type === "entity.too.large") {
+    res.status(413).json({ error: "Request body too large" });
+    return;
+  }
+  if (err instanceof import_client2.Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {
-      res.status(409).json({ error: "A record with this unique value already exists" });
+      const target = err.meta?.target;
+      res.status(409).json({ error: `A record with this ${Array.isArray(target) ? target.join(", ") : target || "value"} already exists` });
       return;
     }
     if (err.code === "P2025") {
-      res.status(404).json({ error: "The requested resource was not found" });
+      res.status(404).json({ error: "The requested record was not found" });
+      return;
+    }
+    if (err.code === "P2003") {
+      res.status(400).json({ error: "This record is linked to other data and cannot be changed that way" });
       return;
     }
   }
-  console.error("Unhandled Server Error:", err);
+  if (err instanceof import_client2.Prisma.PrismaClientInitializationError) {
+    console.error("Database unavailable:", err.message);
+    res.status(503).json({ error: "Store database is temporarily unavailable. Please try again shortly." });
+    return;
+  }
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
   res.status(500).json({
-    error: "Internal Server Error",
-    ...process.env.NODE_ENV === "development" ? { message: err.message, stack: err.stack } : {}
+    error: "Something went wrong on our side. Please try again.",
+    ...process.env.NODE_ENV === "development" ? { message: err?.message } : {}
   });
 }
+var asyncHandler = (fn) => (req, res, next) => {
+  fn(req, res, next).catch(next);
+};
 
-// backend/src/routes/authRoutes.ts
+// src/routes/authRoutes.ts
 var import_express = require("express");
 
-// backend/src/config/db.ts
-var import_client2 = require("@prisma/client");
-var prismaInstance;
-try {
-  prismaInstance = new import_client2.PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"]
-  });
-} catch (err) {
-  console.warn("\u26A0\uFE0F Warning: PrismaClient synchronous init note:", err.message);
-  const createFallback = () => new Proxy(() => {
-  }, {
-    get: () => createFallback(),
-    apply: () => Promise.resolve([])
-  });
-  prismaInstance = new Proxy({}, {
-    get: (_target, prop) => {
-      if (prop === "$connect") return () => Promise.reject(new Error("Prisma database client not ready"));
-      if (prop === "$disconnect") return () => Promise.resolve();
-      return createFallback();
-    }
-  });
-}
-var prisma = prismaInstance;
+// src/middleware/verifyFirebaseToken.ts
+var import_client3 = require("@prisma/client");
 
-// backend/src/controllers/authController.ts
-var import_zod3 = require("zod");
-var addressSchema = import_zod3.z.object({
-  fullName: import_zod3.z.string().min(2),
-  line1: import_zod3.z.string().min(3),
-  line2: import_zod3.z.string().optional(),
-  city: import_zod3.z.string().min(2),
-  state: import_zod3.z.string().min(2),
-  postalCode: import_zod3.z.string().min(4),
-  country: import_zod3.z.string().default("India"),
-  phone: import_zod3.z.string().min(10),
-  isDefault: import_zod3.z.boolean().default(false)
-});
-async function getProfile(req, res, next) {
-  try {
-    if (!req.user) {
-      throw new AppError("Unauthorized", 401);
-    }
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      include: {
-        addresses: { orderBy: { isDefault: "desc" } },
-        _count: { select: { orders: true, reviews: true } }
-      }
-    });
-    if (!user) {
-      throw new AppError("User profile not found", 404);
-    }
-    res.json({ user });
-  } catch (err) {
-    next(err);
-  }
-}
-async function updateProfile(req, res, next) {
-  try {
-    if (!req.user) {
-      throw new AppError("Unauthorized", 401);
-    }
-    const { name, phone } = import_zod3.z.object({
-      name: import_zod3.z.string().min(2).optional(),
-      phone: import_zod3.z.string().min(10).optional()
-    }).parse(req.body);
-    const updatedUser = await prisma.user.update({
-      where: { id: req.user.id },
-      data: {
-        ...name ? { name } : {},
-        ...phone ? { phone } : {}
-      }
-    });
-    res.json({ user: updatedUser });
-  } catch (err) {
-    next(err);
-  }
-}
-async function addAddress(req, res, next) {
-  try {
-    if (!req.user) {
-      throw new AppError("Unauthorized", 401);
-    }
-    const data = addressSchema.parse(req.body);
-    if (data.isDefault) {
-      await prisma.address.updateMany({
-        where: { userId: req.user.id },
-        data: { isDefault: false }
-      });
-    }
-    const address = await prisma.address.create({
-      data: {
-        ...data,
-        userId: req.user.id
-      }
-    });
-    res.status(201).json({ address });
-  } catch (err) {
-    next(err);
-  }
-}
-async function deleteAddress(req, res, next) {
-  try {
-    if (!req.user) {
-      throw new AppError("Unauthorized", 401);
-    }
-    const { id } = req.params;
-    await prisma.address.deleteMany({
-      where: { id, userId: req.user.id }
-    });
-    res.json({ message: "Address deleted successfully" });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// backend/src/config/firebase-admin.ts
+// src/config/firebase-admin.ts
 var import_firebase_admin = __toESM(require("firebase-admin"), 1);
 var import_fs = __toESM(require("fs"), 1);
 var firebaseApp = null;
 function getFirebaseAdmin() {
   if (firebaseApp) return firebaseApp;
-  if (import_firebase_admin.default.apps.length > 0) {
+  if (import_firebase_admin.default.apps.length > 0 && import_firebase_admin.default.apps[0]) {
     firebaseApp = import_firebase_admin.default.apps[0];
     return firebaseApp;
   }
-  try {
-    if (env.FIREBASE_SERVICE_ACCOUNT_PATH && import_fs.default.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
-      const serviceAccount = JSON.parse(import_fs.default.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, "utf8"));
-      firebaseApp = import_firebase_admin.default.initializeApp({
-        credential: import_firebase_admin.default.credential.cert(serviceAccount)
-      });
-      console.log("Firebase Admin initialized with service account file.");
-      return firebaseApp;
-    }
-    if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY) {
-      const privateKey = env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n");
-      firebaseApp = import_firebase_admin.default.initializeApp({
-        credential: import_firebase_admin.default.credential.cert({
-          projectId: env.FIREBASE_PROJECT_ID,
-          clientEmail: env.FIREBASE_CLIENT_EMAIL,
-          privateKey
-        })
-      });
-      console.log("Firebase Admin initialized with credentials from environment.");
-      return firebaseApp;
-    }
-    console.warn("WARNING: Firebase Admin credentials not fully configured. Running in mock/development mode.");
-    firebaseApp = import_firebase_admin.default.initializeApp({
-      projectId: "levix-dev-mock"
-    });
+  if (env.FIREBASE_SERVICE_ACCOUNT_PATH && import_fs.default.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
+    const serviceAccount = JSON.parse(import_fs.default.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, "utf8"));
+    firebaseApp = import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(serviceAccount) });
+    console.log("\u2713 Firebase Admin initialised with service account file.");
     return firebaseApp;
-  } catch (err) {
-    console.error("Failed to initialize Firebase Admin SDK:", err.message);
-    throw err;
   }
+  const privateKey = (env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const keyLooksValid = privateKey.includes("-----BEGIN PRIVATE KEY-----") && privateKey.length > 1e3;
+  if (env.FIREBASE_PRIVATE_KEY && !keyLooksValid) {
+    console.warn("\u26A0\uFE0F FIREBASE_PRIVATE_KEY looks like a placeholder \u2014 ignoring it and verifying tokens with the project id only.");
+  }
+  if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && keyLooksValid) {
+    firebaseApp = import_firebase_admin.default.initializeApp({
+      credential: import_firebase_admin.default.credential.cert({
+        projectId: env.FIREBASE_PROJECT_ID,
+        clientEmail: env.FIREBASE_CLIENT_EMAIL,
+        privateKey
+      })
+    });
+    console.log("\u2713 Firebase Admin initialised with service account credentials.");
+    return firebaseApp;
+  }
+  if (!env.FIREBASE_PROJECT_ID) {
+    throw new Error("FIREBASE_PROJECT_ID is not configured \u2014 cannot verify sign-in tokens.");
+  }
+  firebaseApp = import_firebase_admin.default.initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
+  console.log(`\u2713 Firebase Admin initialised for token verification (project: ${env.FIREBASE_PROJECT_ID}).`);
+  return firebaseApp;
 }
 var adminAuth = () => getFirebaseAdmin().auth();
 
-// backend/src/middleware/verifyFirebaseToken.ts
-var import_client3 = require("@prisma/client");
+// src/middleware/verifyFirebaseToken.ts
+var USER_CACHE_TTL_MS = 5 * 60 * 1e3;
+var userCache = /* @__PURE__ */ new Map();
+function extractBearer(req) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) return null;
+  const token = header.slice(7).trim();
+  return token || null;
+}
+async function syncUser(decoded) {
+  const uid = decoded.uid;
+  const email = (decoded.email || `${uid}@users.thelevix.shop`).trim().toLowerCase();
+  const emailVerified = Boolean(decoded.email_verified);
+  const role = emailVerified && isAdminEmail(email) ? import_client3.Role.ADMIN : import_client3.Role.CUSTOMER;
+  const cacheKey = `${uid}:${email}:${role}`;
+  const cached = userCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.user;
+  let user = await prisma.user.findUnique({ where: { firebaseUid: uid } });
+  if (!user) {
+    const byEmail = await prisma.user.findUnique({ where: { email } });
+    if (byEmail) {
+      user = await prisma.user.update({
+        where: { id: byEmail.id },
+        data: { firebaseUid: uid, role, ...decoded.name && !byEmail.name ? { name: decoded.name } : {} }
+      });
+    } else {
+      user = await prisma.user.create({
+        data: { firebaseUid: uid, email, name: decoded.name || null, role }
+      });
+    }
+  } else if (user.email !== email || user.role !== role || !user.name && decoded.name) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { email, role, ...!user.name && decoded.name ? { name: decoded.name } : {} }
+    });
+  }
+  const authUser = {
+    id: user.id,
+    firebaseUid: user.firebaseUid,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    emailVerified
+  };
+  userCache.set(cacheKey, { user: authUser, expires: Date.now() + USER_CACHE_TTL_MS });
+  if (userCache.size > 5e3) {
+    const now = Date.now();
+    for (const [k, v] of userCache) if (v.expires < now) userCache.delete(k);
+  }
+  return authUser;
+}
 async function verifyFirebaseToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Unauthorized: Missing or invalid Authorization header" });
+  const token = extractBearer(req);
+  if (!token) {
+    res.status(401).json({ error: "Please sign in to continue." });
     return;
   }
-  const token = authHeader.split("Bearer ")[1]?.trim();
-  if (!token) {
-    res.status(401).json({ error: "Unauthorized: Empty bearer token" });
+  let decoded;
+  try {
+    decoded = await adminAuth().verifyIdToken(token);
+  } catch (err) {
+    res.status(401).json({ error: "Your session has expired. Please sign in again." });
     return;
   }
   try {
-    let uid;
-    let email;
-    let name = null;
-    if (token.startsWith("dev-mock-token-")) {
-      const payload = token.replace("dev-mock-token-", "");
-      const lastDash = payload.lastIndexOf("-");
-      if (lastDash !== -1 && payload.includes("@")) {
-        email = payload.substring(0, lastDash);
-        uid = payload.substring(lastDash + 1);
-      } else {
-        email = payload.includes("@") ? payload : `${payload}@customer.levix.local`;
-        uid = payload;
-      }
-      name = email.toLowerCase() === "levixfashions@gmail.com" ? "Levix Owner" : email.split("@")[0];
-    } else {
-      try {
-        const decoded = await adminAuth().verifyIdToken(token);
-        uid = decoded.uid;
-        email = decoded.email || `${uid}@firebase.levix.local`;
-        name = decoded.name || null;
-      } catch (authErr) {
-        uid = "guest_user";
-        email = "customer@levix.local";
-        name = "Customer";
-      }
-    }
-    const isAdminEmail = email.trim().toLowerCase() === "levixfashions@gmail.com";
-    const targetRole = isAdminEmail ? import_client3.Role.ADMIN : import_client3.Role.CUSTOMER;
-    let user = null;
-    try {
-      user = await prisma.user.upsert({
-        where: { firebaseUid: uid },
-        update: {
-          email,
-          name: name || void 0,
-          ...isAdminEmail ? { role: import_client3.Role.ADMIN } : {}
-        },
-        create: {
-          firebaseUid: uid,
-          email,
-          name,
-          role: targetRole
-        }
-      });
-    } catch (dbErr) {
-      console.warn("\u26A0\uFE0F Database user sync skipped, using memory user:", dbErr.message);
-      user = {
-        id: `usr_${uid}`,
-        firebaseUid: uid,
-        email,
-        name,
-        role: targetRole
-      };
-    }
-    req.user = {
-      id: user.id,
-      firebaseUid: user.firebaseUid,
-      email: user.email,
-      name: user.name,
-      role: user.role || targetRole
-    };
+    req.user = await syncUser(decoded);
     next();
   } catch (err) {
-    console.error("Firebase token verification failed:", err.message);
-    res.status(401).json({ error: "Unauthorized: Invalid or expired Firebase ID token" });
+    next(err);
   }
 }
-async function optionalAuth(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return next();
-  }
-  const token = authHeader.split("Bearer ")[1]?.trim();
+async function optionalAuth(req, _res, next) {
+  const token = extractBearer(req);
   if (!token) return next();
   try {
-    let uid;
-    let email;
-    let name = null;
-    if (process.env.NODE_ENV === "development" && token.startsWith("dev-mock-token-")) {
-      uid = token.replace("dev-mock-token-", "");
-      email = `${uid}@test.levix.local`;
-      name = "Local Dev User";
-    } else {
-      const decoded = await adminAuth().verifyIdToken(token);
-      uid = decoded.uid;
-      email = decoded.email || `${uid}@firebase.levix.local`;
-      name = decoded.name || null;
-    }
-    const user = await prisma.user.upsert({
-      where: { firebaseUid: uid },
-      update: { email },
-      create: {
-        firebaseUid: uid,
-        email,
-        name,
-        role: import_client3.Role.CUSTOMER
-      }
-    });
-    req.user = {
-      id: user.id,
-      firebaseUid: user.firebaseUid,
-      email: user.email,
-      name: user.name,
-      role: user.role
-    };
-  } catch (err) {
+    const decoded = await adminAuth().verifyIdToken(token);
+    req.user = await syncUser(decoded);
+  } catch {
   }
   next();
 }
 function requireAdmin(req, res, next) {
   if (!req.user) {
-    res.status(401).json({ error: "Unauthorized: Authentication required" });
+    res.status(401).json({ error: "Please sign in to continue." });
     return;
   }
-  const isOwner = req.user.role === import_client3.Role.ADMIN && req.user.email?.trim().toLowerCase() === "levixfashions@gmail.com";
-  if (!isOwner) {
-    res.status(403).json({ error: "Forbidden: Admin console restricted to store owner (levixfashions@gmail.com)" });
+  if (req.user.role !== import_client3.Role.ADMIN || !req.user.emailVerified || !isAdminEmail(req.user.email)) {
+    res.status(403).json({ error: "Admin access is restricted to the store owner." });
     return;
   }
   next();
 }
 
-// backend/src/routes/authRoutes.ts
+// src/controllers/authController.ts
+var import_zod3 = require("zod");
+var phoneSchema = import_zod3.z.string().trim().transform((v) => v.replace(/[\s-]/g, "")).refine((v) => /^(\+91)?[6-9]\d{9}$/.test(v), "Enter a valid 10-digit Indian mobile number");
+var addressSchema = import_zod3.z.object({
+  fullName: import_zod3.z.string().trim().min(2).max(100),
+  line1: import_zod3.z.string().trim().min(3).max(200),
+  line2: import_zod3.z.string().trim().max(200).optional().or(import_zod3.z.literal("")).transform((v) => v || void 0),
+  city: import_zod3.z.string().trim().min(2).max(80),
+  state: import_zod3.z.string().trim().min(2).max(80),
+  postalCode: import_zod3.z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit PIN code"),
+  country: import_zod3.z.string().trim().default("India"),
+  phone: phoneSchema,
+  isDefault: import_zod3.z.boolean().default(false)
+});
+async function getProfile(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    include: {
+      addresses: { orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] },
+      _count: { select: { orders: true, reviews: true } }
+    }
+  });
+  if (!user) throw new AppError("Profile not found", 404);
+  res.set("Cache-Control", "no-store");
+  res.json({ user: { ...user, emailVerified: req.user.emailVerified } });
+}
+async function updateProfile(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const { name, phone } = import_zod3.z.object({
+    name: import_zod3.z.string().trim().min(2).max(100).optional(),
+    phone: phoneSchema.optional()
+  }).parse(req.body);
+  const user = await prisma.user.update({
+    where: { id: req.user.id },
+    data: { ...name ? { name } : {}, ...phone ? { phone } : {} }
+  });
+  res.json({ user });
+}
+async function addAddress(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const data2 = addressSchema.parse(req.body);
+  const count = await prisma.address.count({ where: { userId: req.user.id } });
+  if (count >= 10) throw new AppError("You can save up to 10 addresses", 400);
+  const makeDefault = data2.isDefault || count === 0;
+  const address = await prisma.$transaction(async (tx) => {
+    if (makeDefault) {
+      await tx.address.updateMany({ where: { userId: req.user.id }, data: { isDefault: false } });
+    }
+    return tx.address.create({ data: { ...data2, isDefault: makeDefault, userId: req.user.id } });
+  });
+  res.status(201).json({ address });
+}
+async function setDefaultAddress(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const address = await prisma.address.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!address) throw new AppError("Address not found", 404);
+  await prisma.$transaction([
+    prisma.address.updateMany({ where: { userId: req.user.id }, data: { isDefault: false } }),
+    prisma.address.update({ where: { id: address.id }, data: { isDefault: true } })
+  ]);
+  res.json({ success: true });
+}
+async function deleteAddress(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  await prisma.address.deleteMany({ where: { id: req.params.id, userId: req.user.id } });
+  res.json({ success: true });
+}
+
+// src/routes/authRoutes.ts
 var router = (0, import_express.Router)();
 router.use(authRateLimiter);
 router.use(verifyFirebaseToken);
-router.get("/profile", getProfile);
-router.put("/profile", updateProfile);
-router.post("/addresses", addAddress);
-router.delete("/addresses/:id", deleteAddress);
+router.get("/profile", asyncHandler(getProfile));
+router.put("/profile", asyncHandler(updateProfile));
+router.post("/addresses", asyncHandler(addAddress));
+router.patch("/addresses/:id/default", asyncHandler(setDefaultAddress));
+router.delete("/addresses/:id", asyncHandler(deleteAddress));
 var authRoutes_default = router;
 
-// backend/src/routes/productRoutes.ts
+// src/routes/productRoutes.ts
 var import_express2 = require("express");
 
-// backend/src/controllers/productController.ts
-async function getProducts(req, res, next) {
-  try {
-    const { category, collection, search, sort, page = "1", limit = "12" } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const take = Math.min(50, Math.max(1, parseInt(limit, 10) || 12));
-    const skip = (pageNum - 1) * take;
-    const where = { isActive: true };
-    if (category) {
-      where.category = { slug: category };
-    }
-    if (collection) {
-      where.collections = {
-        some: {
-          collection: { slug: collection, isActive: true }
-        }
-      };
-    }
-    if (search) {
-      const q = search.trim();
-      where.OR = [
-        { name: { contains: q, mode: "insensitive" } },
-        { description: { contains: q, mode: "insensitive" } },
-        { slug: { contains: q, mode: "insensitive" } }
-      ];
-    }
-    let orderBy = { createdAt: "desc" };
-    if (sort === "price-asc") orderBy = { basePrice: "asc" };
-    if (sort === "price-desc") orderBy = { basePrice: "desc" };
-    if (sort === "name-asc") orderBy = { name: "asc" };
-    if (sort === "featured") orderBy = [{ isFeatured: "desc" }, { createdAt: "desc" }];
-    const [total, products] = await Promise.all([
-      prisma.product.count({ where }),
-      prisma.product.findMany({
-        where,
-        orderBy,
-        skip,
-        take,
-        include: {
-          category: { select: { name: true, slug: true } },
-          images: { orderBy: { sortOrder: "asc" }, take: 2 },
-          variants: { select: { id: true, size: true, stockQuantity: true } }
-        }
-      })
-    ]);
-    res.json({
-      products,
-      pagination: {
-        page: pageNum,
-        limit: take,
-        total,
-        totalPages: Math.ceil(total / take)
-      }
-    });
-  } catch (err) {
-    next(err);
+// src/utils/serialize.ts
+var SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL"];
+function sizeRank(size) {
+  const idx = SIZE_ORDER.indexOf(size.toUpperCase());
+  if (idx !== -1) return idx;
+  const n = Number(size);
+  return Number.isFinite(n) ? 100 + n : 1e3;
+}
+function sortVariants(variants = []) {
+  return [...variants].sort((a, b) => sizeRank(a.size) - sizeRank(b.size));
+}
+function serializeProduct(p) {
+  if (!p) return p;
+  return {
+    ...p,
+    images: [...p.images || []].sort((a, b) => a.sortOrder - b.sortOrder),
+    variants: sortVariants(p.variants || [])
+  };
+}
+function slugify(value) {
+  return value.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
+}
+var productListInclude = {
+  category: { select: { id: true, name: true, slug: true } },
+  images: { orderBy: { sortOrder: "asc" }, take: 2 },
+  variants: { select: { id: true, productId: true, size: true, sku: true, stockQuantity: true, priceDelta: true } }
+};
+var productFullInclude = {
+  category: true,
+  images: { orderBy: { sortOrder: "asc" } },
+  variants: true
+};
+
+// src/controllers/productController.ts
+function buildOrderBy(sort) {
+  switch (sort) {
+    case "price-asc":
+      return { basePrice: "asc" };
+    case "price-desc":
+      return { basePrice: "desc" };
+    case "name-asc":
+      return { name: "asc" };
+    case "newest":
+      return { createdAt: "desc" };
+    case "featured":
+    default:
+      return [{ isFeatured: "desc" }, { createdAt: "desc" }];
   }
 }
-async function getProductBySlug(req, res, next) {
-  try {
-    const { slug } = req.params;
-    const product = await prisma.product.findUnique({
-      where: { slug },
-      include: {
-        category: true,
-        images: { orderBy: { sortOrder: "asc" } },
-        variants: { orderBy: { size: "asc" } },
-        reviews: {
-          where: { isApproved: true },
-          orderBy: { createdAt: "desc" },
-          take: 10
+async function getProducts(req, res) {
+  const { category, collection, search, sort, featured } = req.query;
+  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+  const take = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "24"), 10) || 24));
+  const skip = (page - 1) * take;
+  const where = { isActive: true };
+  const catSlug = category || collection;
+  if (catSlug && !["all", "all-products", "new-in"].includes(catSlug)) {
+    where.OR = [
+      { category: { slug: catSlug } },
+      { collections: { some: { collection: { slug: catSlug, isActive: true } } } }
+    ];
+  }
+  if (featured === "true") where.isFeatured = true;
+  const and = [];
+  const sizes = String(req.query.sizes || "").split(",").map((v) => v.trim().toUpperCase()).filter(Boolean).slice(0, 20);
+  const inStock = req.query.inStock === "true";
+  if (sizes.length || inStock) {
+    and.push({
+      variants: {
+        some: {
+          ...sizes.length ? { size: { in: sizes } } : {},
+          ...inStock ? { stockQuantity: { gt: 0 } } : {}
         }
       }
     });
-    if (!product || !product.isActive) {
-      throw new AppError("Product not found or inactive", 404);
-    }
-    const relatedProducts = await prisma.product.findMany({
-      where: {
-        categoryId: product.categoryId,
-        id: { not: product.id },
-        isActive: true
-      },
-      take: 4,
-      include: {
-        images: { orderBy: { sortOrder: "asc" }, take: 2 }
-      }
-    });
-    res.json({ product, relatedProducts });
-  } catch (err) {
-    next(err);
   }
+  const colors = String(req.query.colors || "").split(",").map((v) => v.trim().toUpperCase()).filter(Boolean).slice(0, 20);
+  if (colors.length) and.push({ colorGroup: { in: colors } });
+  const minPrice = parseInt(String(req.query.minPrice || ""), 10);
+  const maxPrice = parseInt(String(req.query.maxPrice || ""), 10);
+  if (Number.isFinite(minPrice) && minPrice > 0) and.push({ basePrice: { gte: minPrice } });
+  if (Number.isFinite(maxPrice) && maxPrice > 0) and.push({ basePrice: { lte: maxPrice } });
+  if (and.length) where.AND = [...Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [], ...and];
+  if (search && search.trim()) {
+    const q = search.trim().slice(0, 100);
+    const searchOr = [
+      { name: { contains: q } },
+      { description: { contains: q } },
+      { slug: { contains: q } },
+      { category: { name: { contains: q } } }
+    ];
+    where.AND = [...Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [], { OR: searchOr }];
+  }
+  const [total, products] = await Promise.all([
+    prisma.product.count({ where }),
+    prisma.product.findMany({ where, orderBy: buildOrderBy(sort), skip, take, include: productListInclude })
+  ]);
+  res.set("Cache-Control", "public, max-age=30");
+  res.json({
+    products: products.map(serializeProduct),
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
+  });
+}
+async function getProductBySlug(req, res) {
+  const { slug } = req.params;
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    include: {
+      ...productFullInclude,
+      reviews: { where: { isApproved: true }, orderBy: { createdAt: "desc" }, take: 10 }
+    }
+  });
+  if (!product || !product.isActive) {
+    throw new AppError("This product is no longer available", 404);
+  }
+  const relatedProducts = await prisma.product.findMany({
+    where: {
+      id: { not: product.id },
+      isActive: true,
+      ...product.categoryId ? { categoryId: product.categoryId } : {}
+    },
+    orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+    take: 4,
+    include: productListInclude
+  });
+  res.set("Cache-Control", "public, max-age=30");
+  res.json({ product: serializeProduct(product), relatedProducts: relatedProducts.map(serializeProduct) });
+}
+async function getCategories(_req, res) {
+  const categories = await prisma.category.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    include: { _count: { select: { products: { where: { isActive: true } } } } }
+  });
+  res.set("Cache-Control", "public, max-age=60");
+  res.json({ categories });
+}
+async function getFilterOptions(_req, res) {
+  const [variants, colors, agg] = await Promise.all([
+    prisma.productVariant.findMany({ where: { product: { isActive: true } }, distinct: ["size"], select: { size: true } }),
+    prisma.product.findMany({ where: { isActive: true, colorGroup: { not: null } }, distinct: ["colorGroup"], select: { colorGroup: true } }),
+    prisma.product.aggregate({ where: { isActive: true }, _min: { basePrice: true }, _max: { basePrice: true } })
+  ]);
+  const order = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+  res.set("Cache-Control", "public, max-age=60");
+  res.json({
+    sizes: variants.map((v) => v.size).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)),
+    colors: colors.map((c) => c.colorGroup).filter(Boolean),
+    minPrice: agg._min.basePrice || 0,
+    maxPrice: agg._max.basePrice || 0
+  });
 }
 
-// backend/src/routes/productRoutes.ts
+// src/routes/productRoutes.ts
 var router2 = (0, import_express2.Router)();
-router2.get("/", getProducts);
-router2.get("/:slug", getProductBySlug);
+router2.get("/", asyncHandler(getProducts));
+router2.get("/filters/options", asyncHandler(getFilterOptions));
+router2.get("/:slug", asyncHandler(getProductBySlug));
 var productRoutes_default = router2;
 
-// backend/src/routes/collectionRoutes.ts
+// src/routes/collectionRoutes.ts
 var import_express3 = require("express");
 
-// backend/src/controllers/collectionController.ts
-async function getCollections(req, res, next) {
-  try {
-    const collections = await prisma.collection.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: { select: { products: true } }
-      }
-    });
-    res.json({ collections });
-  } catch (err) {
-    next(err);
+// src/controllers/collectionController.ts
+function orderByFor(sort) {
+  switch (sort) {
+    case "price-asc":
+      return { basePrice: "asc" };
+    case "price-desc":
+      return { basePrice: "desc" };
+    case "newest":
+      return { createdAt: "desc" };
+    default:
+      return [{ isFeatured: "desc" }, { createdAt: "desc" }];
   }
 }
-async function getCollectionBySlug(req, res, next) {
-  try {
-    const { slug } = req.params;
-    const collection = await prisma.collection.findUnique({
-      where: { slug },
-      include: {
-        products: {
-          orderBy: { sortOrder: "asc" },
-          include: {
-            product: {
-              include: {
-                category: true,
-                images: { orderBy: { sortOrder: "asc" }, take: 2 },
-                variants: { select: { id: true, size: true, stockQuantity: true } }
-              }
-            }
-          }
-        }
+async function getCollections(_req, res) {
+  const [collections, categories] = await Promise.all([
+    prisma.collection.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      include: { _count: { select: { products: true } } }
+    }),
+    prisma.category.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: { _count: { select: { products: { where: { isActive: true } } } } }
+    })
+  ]);
+  const curated = collections.map((c) => ({
+    id: c.id,
+    type: "collection",
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    bannerImageUrl: c.bannerImageUrl,
+    mobileBannerUrl: c.mobileBannerUrl,
+    _count: { products: c._count.products }
+  }));
+  const seen = new Set(curated.map((c) => c.slug));
+  const cats = categories.filter((c) => !seen.has(c.slug)).map((c) => ({
+    id: c.id,
+    type: "category",
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    bannerImageUrl: c.imageUrl,
+    group: c.group,
+    _count: { products: c._count.products }
+  }));
+  res.set("Cache-Control", "public, max-age=60");
+  res.json({ collections: [...curated, ...cats] });
+}
+async function getCollectionBySlug(req, res) {
+  const { slug } = req.params;
+  const sort = String(req.query.sort || "featured");
+  const collection = await prisma.collection.findUnique({
+    where: { slug },
+    include: {
+      products: {
+        orderBy: { sortOrder: "asc" },
+        include: { product: { include: productListInclude } }
       }
-    });
-    if (!collection || !collection.isActive) {
-      throw new AppError("Collection not found or inactive", 404);
     }
-    const products = collection.products.map((cp) => cp.product).filter((p) => p.isActive);
+  });
+  if (collection && collection.isActive) {
+    let products2 = collection.products.map((cp) => cp.product).filter((p) => p.isActive);
+    if (sort === "price-asc") products2 = products2.sort((a, b) => a.basePrice - b.basePrice);
+    else if (sort === "price-desc") products2 = products2.sort((a, b) => b.basePrice - a.basePrice);
+    else if (sort === "newest") products2 = products2.sort((a, b) => +b.createdAt - +a.createdAt);
     res.json({
       collection: {
         id: collection.id,
+        type: "collection",
         name: collection.name,
         slug: collection.slug,
         description: collection.description,
-        bannerImageUrl: collection.bannerImageUrl
+        bannerImageUrl: collection.bannerImageUrl,
+        mobileBannerUrl: collection.mobileBannerUrl
       },
-      products
+      products: products2.map(serializeProduct)
     });
-  } catch (err) {
-    next(err);
+    return;
   }
+  const category = await prisma.category.findUnique({ where: { slug } });
+  if (!category) throw new AppError("Collection not found", 404);
+  const products = await prisma.product.findMany({
+    where: { isActive: true, categoryId: category.id },
+    orderBy: orderByFor(sort),
+    take: 200,
+    include: productListInclude
+  });
+  res.json({
+    collection: {
+      id: category.id,
+      type: "category",
+      name: category.name,
+      slug: category.slug,
+      description: category.description,
+      bannerImageUrl: category.imageUrl,
+      group: category.group
+    },
+    products: products.map(serializeProduct)
+  });
 }
 
-// backend/src/routes/collectionRoutes.ts
+// src/routes/collectionRoutes.ts
 var router3 = (0, import_express3.Router)();
-router3.get("/", getCollections);
-router3.get("/:slug", getCollectionBySlug);
+router3.get("/", asyncHandler(getCollections));
+router3.get("/:slug", asyncHandler(getCollectionBySlug));
 var collectionRoutes_default = router3;
 
-// backend/src/routes/cartRoutes.ts
+// src/routes/cartRoutes.ts
 var import_express4 = require("express");
 
-// backend/src/controllers/cartController.ts
+// src/controllers/cartController.ts
 var import_zod4 = require("zod");
-var addToCartSchema = import_zod4.z.object({
-  variantId: import_zod4.z.string().uuid(),
-  quantity: import_zod4.z.number().int().min(1).default(1),
-  anonymousToken: import_zod4.z.string().optional()
-});
-async function getOrCreateCart(userId, anonymousToken) {
-  if (userId) {
-    let cart = await prisma.cart.findUnique({
-      where: { userId },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: {
-                    images: { orderBy: { sortOrder: "asc" }, take: 1 }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-    if (!cart) {
-      cart = await prisma.cart.create({
-        data: { userId },
-        include: {
-          items: {
-            include: {
-              variant: {
-                include: {
-                  product: {
-                    images: { orderBy: { sortOrder: "asc" }, take: 1 }
-                  }
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-    return cart;
-  }
-  if (anonymousToken) {
-    let cart = await prisma.cart.findUnique({
-      where: { anonymousToken },
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  images: { orderBy: { sortOrder: "asc" }, take: 1 }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-    if (!cart) {
-      cart = await prisma.cart.create({
-        data: { anonymousToken },
-        include: {
-          items: {
-            include: {
-              variant: {
-                include: {
-                  product: {
-                    images: { orderBy: { sortOrder: "asc" }, take: 1 }
-                  }
-                }
-              }
-            }
-          }
-        }
-      });
-    }
-    return cart;
-  }
-  throw new AppError("Either user authentication or an anonymousToken is required for cart operations", 400);
-}
-async function getCart(req, res, next) {
-  try {
-    const anonymousToken = req.query.anonymousToken;
-    const cart = await getOrCreateCart(req.user?.id, anonymousToken);
-    let subtotalPaise = 0;
-    const formattedItems = cart.items.map((item) => {
-      const unitPrice = item.variant.product.basePrice + item.variant.priceDelta;
-      const total = unitPrice * item.quantity;
-      subtotalPaise += total;
-      return {
-        id: item.id,
-        variantId: item.variantId,
-        quantity: item.quantity,
-        size: item.variant.size,
-        stockQuantity: item.variant.stockQuantity,
-        productId: item.variant.product.id,
-        productName: item.variant.product.name,
-        productSlug: item.variant.product.slug,
-        unitPricePaise: unitPrice,
-        totalPaise: total,
-        imageUrl: item.variant.product.images[0]?.url || null
-      };
-    });
-    const FREE_SHIPPING_THRESHOLD_PAISE = 299900;
-    const shippingPaise = subtotalPaise >= FREE_SHIPPING_THRESHOLD_PAISE || subtotalPaise === 0 ? 0 : 15e3;
-    const remainingForFreeShippingPaise = Math.max(0, FREE_SHIPPING_THRESHOLD_PAISE - subtotalPaise);
-    res.json({
-      cartId: cart.id,
-      items: formattedItems,
-      itemCount: formattedItems.reduce((acc, it) => acc + it.quantity, 0),
-      subtotalPaise,
-      shippingPaise,
-      totalPaise: subtotalPaise + shippingPaise,
-      freeShippingThresholdPaise: FREE_SHIPPING_THRESHOLD_PAISE,
-      remainingForFreeShippingPaise
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-async function addToCart(req, res, next) {
-  try {
-    const { variantId, quantity, anonymousToken } = addToCartSchema.parse(req.body);
-    const variant = await prisma.productVariant.findUnique({
-      where: { id: variantId },
-      include: { product: true }
-    });
-    if (!variant || !variant.product.isActive) {
-      throw new AppError("Product variant not found or inactive", 404);
-    }
-    const cart = await getOrCreateCart(req.user?.id, anonymousToken);
-    const existingItem = await prisma.cartItem.findUnique({
-      where: {
-        cartId_variantId: {
-          cartId: cart.id,
-          variantId
-        }
-      }
-    });
-    const newQuantity = (existingItem?.quantity || 0) + quantity;
-    if (newQuantity > variant.stockQuantity) {
-      throw new AppError(`Only ${variant.stockQuantity} items available in stock`, 400);
-    }
-    if (existingItem) {
-      await prisma.cartItem.update({
-        where: { id: existingItem.id },
-        data: { quantity: newQuantity }
-      });
-    } else {
-      await prisma.cartItem.create({
-        data: {
-          cartId: cart.id,
-          variantId,
-          quantity
-        }
-      });
-    }
-    return getCart(req, res, next);
-  } catch (err) {
-    next(err);
-  }
-}
-async function updateCartItem(req, res, next) {
-  try {
-    const { id } = req.params;
-    const { quantity } = import_zod4.z.object({ quantity: import_zod4.z.number().int().min(0) }).parse(req.body);
-    const cartItem = await prisma.cartItem.findUnique({
-      where: { id },
-      include: { variant: true, cart: true }
-    });
-    if (!cartItem) {
-      throw new AppError("Cart item not found", 404);
-    }
-    if (req.user?.id && cartItem.cart.userId !== req.user.id) {
-      throw new AppError("Unauthorized access to cart", 403);
-    }
-    if (quantity === 0) {
-      await prisma.cartItem.delete({ where: { id } });
-    } else {
-      if (quantity > cartItem.variant.stockQuantity) {
-        throw new AppError(`Only ${cartItem.variant.stockQuantity} items available in stock`, 400);
-      }
-      await prisma.cartItem.update({
-        where: { id },
-        data: { quantity }
-      });
-    }
-    return getCart(req, res, next);
-  } catch (err) {
-    next(err);
-  }
-}
-async function removeCartItem(req, res, next) {
-  try {
-    const { id } = req.params;
-    await prisma.cartItem.delete({ where: { id } });
-    return getCart(req, res, next);
-  } catch (err) {
-    next(err);
-  }
-}
 
-// backend/src/routes/cartRoutes.ts
-var router4 = (0, import_express4.Router)();
-router4.use(optionalAuth);
-router4.get("/", getCart);
-router4.post("/items", addToCart);
-router4.put("/items/:id", updateCartItem);
-router4.delete("/items/:id", removeCartItem);
-var cartRoutes_default = router4;
-
-// backend/src/routes/orderRoutes.ts
-var import_express5 = require("express");
-
-// backend/src/config/razorpay.ts
-var import_razorpay = __toESM(require("razorpay"), 1);
-var import_crypto = __toESM(require("crypto"), 1);
-var razorpay = new import_razorpay.default({
-  key_id: env.RAZORPAY_KEY_ID,
-  key_secret: env.RAZORPAY_KEY_SECRET
-});
-function verifyPaymentSignature(orderId, paymentId, signature) {
-  try {
-    const text = `${orderId}|${paymentId}`;
-    const generatedSignature = import_crypto.default.createHmac("sha256", env.RAZORPAY_KEY_SECRET).update(text).digest("hex");
-    return generatedSignature === signature;
-  } catch (err) {
-    console.error("Signature verification error:", err);
-    return false;
-  }
-}
-function verifyWebhookSignature(body, signature) {
-  if (!env.RAZORPAY_WEBHOOK_SECRET) {
-    console.warn("RAZORPAY_WEBHOOK_SECRET not configured, skipping HMAC verification");
-    return true;
-  }
-  try {
-    const expectedSignature = import_crypto.default.createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET).update(body).digest("hex");
-    return expectedSignature === signature;
-  } catch (err) {
-    console.error("Webhook signature verification error:", err);
-    return false;
-  }
-}
-
-// backend/src/controllers/orderController.ts
-var import_zod5 = require("zod");
-var import_client4 = require("@prisma/client");
-var createOrderSchema = import_zod5.z.object({
-  customerEmail: import_zod5.z.string().email(),
-  customerName: import_zod5.z.string().min(2),
-  customerPhone: import_zod5.z.string().min(10),
-  shippingAddress: import_zod5.z.object({
-    fullName: import_zod5.z.string().min(2),
-    line1: import_zod5.z.string().min(3),
-    line2: import_zod5.z.string().optional(),
-    city: import_zod5.z.string().min(2),
-    state: import_zod5.z.string().min(2),
-    postalCode: import_zod5.z.string().min(4),
-    country: import_zod5.z.string().default("India"),
-    phone: import_zod5.z.string().min(10)
-  }),
-  cartId: import_zod5.z.string().uuid().optional(),
-  couponCode: import_zod5.z.string().optional(),
-  anonymousToken: import_zod5.z.string().optional()
-});
-async function createOrder(req, res, next) {
-  try {
-    const data = createOrderSchema.parse(req.body);
-    const cartWhere = req.user?.id ? { userId: req.user.id } : data.cartId ? { id: data.cartId } : data.anonymousToken ? { anonymousToken: data.anonymousToken } : null;
-    if (!cartWhere) {
-      throw new AppError("A valid cart is required to place an order", 400);
-    }
-    const cart = await prisma.cart.findFirst({
-      where: cartWhere,
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-    if (!cart || cart.items.length === 0) {
-      throw new AppError("Your cart is empty", 400);
-    }
-    let subtotalPaise = 0;
-    for (const item of cart.items) {
-      if (item.quantity > item.variant.stockQuantity) {
-        throw new AppError(`Product ${item.variant.product.name} (Size: ${item.variant.size}) only has ${item.variant.stockQuantity} in stock`, 400);
-      }
-      const unitPrice = item.variant.product.basePrice + item.variant.priceDelta;
-      subtotalPaise += unitPrice * item.quantity;
-    }
-    let discountPaise = 0;
-    if (data.couponCode) {
-      const coupon = await prisma.coupon.findUnique({
-        where: { code: data.couponCode.toUpperCase() }
-      });
-      if (coupon && coupon.isActive && subtotalPaise >= coupon.minOrderPaise) {
-        if (coupon.discountType === import_client4.DiscountType.PERCENTAGE) {
-          discountPaise = Math.round(subtotalPaise * coupon.discountValue / 100);
-        } else {
-          discountPaise = coupon.discountValue;
-        }
-      }
-    }
-    const FREE_SHIPPING_THRESHOLD_PAISE = 299900;
-    const shippingPaise = subtotalPaise >= FREE_SHIPPING_THRESHOLD_PAISE ? 0 : 15e3;
-    const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise;
-    const orderNumber = `BLU-${(/* @__PURE__ */ new Date()).getFullYear()}-${Math.floor(1e5 + Math.random() * 9e5)}`;
-    let razorpayOrderId = null;
-    try {
-      const rzpOrder = await razorpay.orders.create({
-        amount: totalPaise,
-        // amount in paise
-        currency: "INR",
-        receipt: orderNumber,
-        notes: {
-          customerEmail: data.customerEmail,
-          customerName: data.customerName
-        }
-      });
-      razorpayOrderId = rzpOrder.id;
-    } catch (rzpErr) {
-      console.warn("Razorpay order creation fallback (test/sandbox):", rzpErr.message);
-      razorpayOrderId = `order_mock_${Date.now()}`;
-    }
-    const newOrder = await prisma.$transaction(async (tx) => {
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
-          userId: req.user?.id || null,
-          customerEmail: data.customerEmail,
-          customerName: data.customerName,
-          customerPhone: data.customerPhone,
-          shippingAddressSnapshot: data.shippingAddress,
-          subtotalPaise,
-          shippingPaise,
-          discountPaise,
-          totalPaise,
-          status: import_client4.OrderStatus.PENDING,
-          paymentStatus: import_client4.PaymentStatus.PENDING,
-          razorpayOrderId,
-          items: {
-            create: cart.items.map((item) => ({
-              productId: item.variant.product.id,
-              variantId: item.variantId,
-              productName: item.variant.product.name,
-              productSlug: item.variant.product.slug,
-              size: item.variant.size,
-              unitPricePaise: item.variant.product.basePrice + item.variant.priceDelta,
-              quantity: item.quantity,
-              subtotalPaise: (item.variant.product.basePrice + item.variant.priceDelta) * item.quantity,
-              imageUrl: item.variant.product.images[0]?.url || null
-            }))
-          }
-        },
-        include: { items: true }
-      });
-      return order;
-    });
-    res.status(201).json({
-      order: newOrder,
-      razorpayOrderId,
-      amountPaise: totalPaise,
-      currency: "INR",
-      keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder"
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-async function getUserOrders(req, res, next) {
-  try {
-    if (!req.user) {
-      throw new AppError("Unauthorized", 401);
-    }
-    const orders = await prisma.order.findMany({
-      where: { userId: req.user.id },
-      orderBy: { createdAt: "desc" },
-      include: {
-        items: true,
-        payment: true
-      }
-    });
-    res.json({ orders });
-  } catch (err) {
-    next(err);
-  }
-}
-async function getOrderByNumber(req, res, next) {
-  try {
-    const { orderNumber } = req.params;
-    const order = await prisma.order.findUnique({
-      where: { orderNumber },
-      include: {
-        items: true,
-        payment: true
-      }
-    });
-    if (!order) {
-      throw new AppError("Order not found", 404);
-    }
-    if (req.user && order.userId && order.userId !== req.user.id && req.user.role !== "ADMIN") {
-      throw new AppError("Forbidden access to order details", 403);
-    }
-    res.json({ order });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// backend/src/routes/orderRoutes.ts
-var router5 = (0, import_express5.Router)();
-router5.post("/", checkoutRateLimiter, optionalAuth, createOrder);
-router5.get("/my-orders", verifyFirebaseToken, getUserOrders);
-router5.get("/:orderNumber", optionalAuth, getOrderByNumber);
-var orderRoutes_default = router5;
-
-// backend/src/routes/paymentRoutes.ts
-var import_express6 = require("express");
-
-// backend/src/controllers/paymentController.ts
-var import_zod6 = require("zod");
-var import_client5 = require("@prisma/client");
-var verifyPaymentSchema = import_zod6.z.object({
-  orderNumber: import_zod6.z.string(),
-  razorpayOrderId: import_zod6.z.string(),
-  razorpayPaymentId: import_zod6.z.string(),
-  razorpaySignature: import_zod6.z.string(),
-  cartId: import_zod6.z.string().optional()
-});
-async function verifyPayment(req, res, next) {
-  try {
-    const { orderNumber, razorpayOrderId, razorpayPaymentId, razorpaySignature, cartId } = verifyPaymentSchema.parse(req.body);
-    const order = await prisma.order.findUnique({
-      where: { orderNumber },
-      include: { items: true, payment: true }
-    });
-    if (!order) {
-      throw new AppError("Order not found", 404);
-    }
-    if (order.status === import_client5.OrderStatus.PAID) {
-      res.json({ message: "Order is already marked as paid", order });
-      return;
-    }
-    const isMock = process.env.NODE_ENV === "development" && razorpayPaymentId.startsWith("pay_mock_");
-    const isValidSignature = isMock || verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature);
-    if (!isValidSignature) {
-      await prisma.payment.upsert({
-        where: { orderId: order.id },
-        update: {
-          status: import_client5.PaymentStatus.FAILED,
-          razorpayPaymentId,
-          razorpaySignature
-        },
-        create: {
-          orderId: order.id,
-          amountPaise: order.totalPaise,
-          razorpayOrderId,
-          razorpayPaymentId,
-          razorpaySignature,
-          status: import_client5.PaymentStatus.FAILED
-        }
-      });
-      throw new AppError("Payment verification failed: Invalid cryptographic signature", 400);
-    }
-    const updatedOrder = await prisma.$transaction(async (tx) => {
-      const ord = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          status: import_client5.OrderStatus.PAID,
-          paymentStatus: import_client5.PaymentStatus.PAID
-        },
-        include: { items: true }
-      });
-      await tx.payment.upsert({
-        where: { orderId: order.id },
-        update: {
-          status: import_client5.PaymentStatus.PAID,
-          razorpayPaymentId,
-          razorpaySignature
-        },
-        create: {
-          orderId: order.id,
-          amountPaise: order.totalPaise,
-          razorpayOrderId,
-          razorpayPaymentId,
-          razorpaySignature,
-          status: import_client5.PaymentStatus.PAID
-        }
-      });
-      for (const item of order.items) {
-        if (item.variantId) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: {
-              stockQuantity: {
-                decrement: item.quantity
-              }
-            }
-          });
-        }
-      }
-      if (cartId) {
-        await tx.cartItem.deleteMany({
-          where: { cartId }
-        });
-      } else if (order.userId) {
-        const userCart = await tx.cart.findUnique({
-          where: { userId: order.userId }
-        });
-        if (userCart) {
-          await tx.cartItem.deleteMany({
-            where: { cartId: userCart.id }
-          });
-        }
-      }
-      return ord;
-    });
-    res.json({
-      success: true,
-      message: "Payment verified and order confirmed successfully",
-      order: updatedOrder
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-async function handleWebhook(req, res, next) {
-  try {
-    const signature = req.headers["x-razorpay-signature"];
-    if (!signature) {
-      res.status(400).json({ error: "Missing Razorpay webhook signature" });
-      return;
-    }
-    const rawBody = req.rawBody || JSON.stringify(req.body);
-    const isValid = verifyWebhookSignature(rawBody, signature);
-    if (!isValid) {
-      res.status(400).json({ error: "Invalid webhook signature" });
-      return;
-    }
-    const event = req.body.event;
-    const payload = req.body.payload;
-    if (event === "payment.captured") {
-      const paymentEntity = payload.payment.entity;
-      const rzpOrderId = paymentEntity.order_id;
-      if (rzpOrderId) {
-        const order = await prisma.order.findUnique({
-          where: { razorpayOrderId: rzpOrderId },
-          include: { items: true }
-        });
-        if (order && order.status !== import_client5.OrderStatus.PAID) {
-          await prisma.$transaction(async (tx) => {
-            await tx.order.update({
-              where: { id: order.id },
-              data: {
-                status: import_client5.OrderStatus.PAID,
-                paymentStatus: import_client5.PaymentStatus.PAID
-              }
-            });
-            await tx.payment.upsert({
-              where: { orderId: order.id },
-              update: {
-                status: import_client5.PaymentStatus.PAID,
-                razorpayPaymentId: paymentEntity.id,
-                rawPayload: payload
-              },
-              create: {
-                orderId: order.id,
-                amountPaise: paymentEntity.amount,
-                razorpayOrderId: rzpOrderId,
-                razorpayPaymentId: paymentEntity.id,
-                status: import_client5.PaymentStatus.PAID,
-                rawPayload: payload
-              }
-            });
-            for (const item of order.items) {
-              if (item.variantId) {
-                await tx.productVariant.update({
-                  where: { id: item.variantId },
-                  data: {
-                    stockQuantity: {
-                      decrement: item.quantity
-                    }
-                  }
-                });
-              }
-            }
-          });
-        }
-      }
-    }
-    res.json({ status: "ok" });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// backend/src/routes/paymentRoutes.ts
-var router6 = (0, import_express6.Router)();
-router6.post("/verify", checkoutRateLimiter, verifyPayment);
-router6.post("/webhook", handleWebhook);
-var paymentRoutes_default = router6;
-
-// backend/src/routes/adminRoutes.ts
-var import_express7 = require("express");
-
-// backend/src/controllers/adminController.ts
-var import_zod7 = require("zod");
-var import_client6 = require("@prisma/client");
-async function getDashboardMetrics(req, res, next) {
-  try {
-    const [totalOrders, paidOrders, totalCustomers, totalProducts, lowStockVariants, recentOrders] = await Promise.all([
-      prisma.order.count(),
-      prisma.order.findMany({
-        where: { paymentStatus: "PAID" },
-        select: { totalPaise: true }
-      }),
-      prisma.user.count({ where: { role: "CUSTOMER" } }),
-      prisma.product.count({ where: { isActive: true } }),
-      prisma.productVariant.findMany({
-        where: { stockQuantity: { lte: 5 } },
-        include: { product: { select: { name: true, slug: true } } },
-        take: 10
-      }),
-      prisma.order.findMany({
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        include: { items: true }
-      })
-    ]);
-    const totalRevenuePaise = paidOrders.reduce((sum, ord) => sum + ord.totalPaise, 0);
-    res.json({
-      metrics: {
-        totalOrders,
-        totalRevenuePaise,
-        totalRevenueINR: Math.round(totalRevenuePaise / 100),
-        totalCustomers,
-        totalProducts,
-        lowStockAlertsCount: lowStockVariants.length
-      },
-      lowStockVariants,
-      recentOrders
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-async function getAllOrders(req, res, next) {
-  try {
-    const { status, page = "1", limit = "20" } = req.query;
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const take = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
-    const skip = (pageNum - 1) * take;
-    const where = {};
-    if (status) {
-      where.status = status;
-    }
-    const [total, orders] = await Promise.all([
-      prisma.order.count({ where }),
-      prisma.order.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take,
-        include: { items: true, payment: true }
-      })
-    ]);
-    res.json({
-      orders,
-      pagination: {
-        page: pageNum,
-        limit: take,
-        total,
-        totalPages: Math.ceil(total / take)
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-}
-async function updateOrderStatus(req, res, next) {
-  try {
-    const { id } = req.params;
-    const { status } = import_zod7.z.object({
-      status: import_zod7.z.nativeEnum(import_client6.OrderStatus)
-    }).parse(req.body);
-    const updated = await prisma.order.update({
-      where: { id },
-      data: { status }
-    });
-    res.json({ order: updated });
-  } catch (err) {
-    next(err);
-  }
-}
-async function createProduct(req, res, next) {
-  try {
-    const productSchema = import_zod7.z.object({
-      name: import_zod7.z.string().min(2),
-      slug: import_zod7.z.string().min(2),
-      description: import_zod7.z.string().min(5),
-      details: import_zod7.z.string().optional(),
-      fabricCare: import_zod7.z.string().optional(),
-      fitGuide: import_zod7.z.string().optional(),
-      basePrice: import_zod7.z.number().int().positive(),
-      // in paise
-      comparePrice: import_zod7.z.number().int().positive().optional(),
-      categoryId: import_zod7.z.string().optional(),
-      isFeatured: import_zod7.z.boolean().default(false),
-      images: import_zod7.z.array(import_zod7.z.object({
-        url: import_zod7.z.string(),
-        altText: import_zod7.z.string().optional(),
-        isCover: import_zod7.z.boolean().default(false),
-        sortOrder: import_zod7.z.number().int().default(0)
-      })).min(1),
-      variants: import_zod7.z.array(import_zod7.z.object({
-        size: import_zod7.z.string(),
-        sku: import_zod7.z.string(),
-        stockQuantity: import_zod7.z.number().int().min(0),
-        priceDelta: import_zod7.z.number().int().default(0)
-      })).min(1)
-    });
-    const data = productSchema.parse(req.body);
-    const product = await prisma.product.create({
-      data: {
-        name: data.name,
-        slug: data.slug,
-        description: data.description,
-        details: data.details,
-        fabricCare: data.fabricCare,
-        fitGuide: data.fitGuide,
-        basePrice: data.basePrice,
-        comparePrice: data.comparePrice,
-        categoryId: data.categoryId,
-        isFeatured: data.isFeatured,
-        images: { create: data.images },
-        variants: { create: data.variants }
-      },
-      include: {
-        images: true,
-        variants: true
-      }
-    });
-    res.status(201).json({ product });
-  } catch (err) {
-    next(err);
-  }
-}
-async function updateProduct(req, res, next) {
-  try {
-    const { id } = req.params;
-    const productSchema = import_zod7.z.object({
-      name: import_zod7.z.string().min(2).optional(),
-      slug: import_zod7.z.string().min(2).optional(),
-      description: import_zod7.z.string().optional(),
-      details: import_zod7.z.string().optional(),
-      fabricCare: import_zod7.z.string().optional(),
-      fitGuide: import_zod7.z.string().optional(),
-      basePrice: import_zod7.z.number().int().positive().optional(),
-      comparePrice: import_zod7.z.number().int().positive().nullable().optional(),
-      categoryId: import_zod7.z.string().optional(),
-      isFeatured: import_zod7.z.boolean().optional(),
-      isActive: import_zod7.z.boolean().optional(),
-      images: import_zod7.z.array(import_zod7.z.object({
-        url: import_zod7.z.string(),
-        altText: import_zod7.z.string().optional(),
-        isCover: import_zod7.z.boolean().default(false),
-        sortOrder: import_zod7.z.number().int().default(0)
-      })).optional(),
-      variants: import_zod7.z.array(import_zod7.z.object({
-        size: import_zod7.z.string(),
-        sku: import_zod7.z.string(),
-        stockQuantity: import_zod7.z.number().int().min(0),
-        priceDelta: import_zod7.z.number().int().default(0)
-      })).optional()
-    });
-    const data = productSchema.parse(req.body);
-    await prisma.product.update({
-      where: { id },
-      data: {
-        ...data.name && { name: data.name },
-        ...data.slug && { slug: data.slug },
-        ...data.description && { description: data.description },
-        ...data.details !== void 0 && { details: data.details },
-        ...data.fabricCare !== void 0 && { fabricCare: data.fabricCare },
-        ...data.fitGuide !== void 0 && { fitGuide: data.fitGuide },
-        ...data.basePrice && { basePrice: data.basePrice },
-        ...data.comparePrice !== void 0 && { comparePrice: data.comparePrice },
-        ...data.categoryId !== void 0 && { categoryId: data.categoryId },
-        ...data.isFeatured !== void 0 && { isFeatured: data.isFeatured },
-        ...data.isActive !== void 0 && { isActive: data.isActive }
-      }
-    });
-    if (data.variants && data.variants.length > 0) {
-      await prisma.productVariant.deleteMany({ where: { productId: id } });
-      await prisma.productVariant.createMany({
-        data: data.variants.map((v) => ({ ...v, productId: id }))
-      });
-    }
-    if (data.images && data.images.length > 0) {
-      await prisma.productImage.deleteMany({ where: { productId: id } });
-      await prisma.productImage.createMany({
-        data: data.images.map((img) => ({ ...img, productId: id }))
-      });
-    }
-    const fullProduct = await prisma.product.findUnique({
-      where: { id },
-      include: { images: true, variants: true, category: true }
-    });
-    res.json({ product: fullProduct });
-  } catch (err) {
-    next(err);
-  }
-}
-async function deleteProduct(req, res, next) {
-  try {
-    const { id } = req.params;
-    await prisma.product.delete({ where: { id } });
-    res.json({ success: true, message: "Product deleted successfully" });
-  } catch (err) {
-    next(err);
-  }
-}
-var serverStoreSettings = {
-  announcementText: "FREE DOMESTIC SHIPPING ON ALL PREPAID ORDERS \u2022 LEVIX WINTER DROPS LIVE \u2022 COMPLIMENTARY EXCHANGES \u2022 ",
+// src/services/store.ts
+var DEFAULT_SETTINGS = {
+  announcementText: "FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 \u2022 NEW LEVIX DROPS LIVE \u2022 EASY EXCHANGES \u2022 ",
   heroHeadline: "STREETWEAR ARCHITECTURE",
   heroSubtitle: "Heavyweight Custom-Milled Silhouettes & Limited Private Drops.",
   supportEmail: "levixfashions@gmail.com",
   supportPhone: "",
   instagramHandle: "thelevix.shop",
-  freeShippingThreshold: 1999
+  freeShippingThreshold: 1999,
+  shippingFee: 150,
+  announcementEnabled: false,
+  heroDesktopImage: "",
+  heroMobileImage: "",
+  heroLink: "/collections/all-products",
+  heroCtaText: "Shop now",
+  latestDropTitle: "Latest drop",
+  seoTitle: "Feel the Luxury of Premium Streetwear with LEVIX",
+  seoText: "LEVIX is an independent streetwear label built around heavyweight fabrics, oversized silhouettes and limited drops. Every piece is designed to drape well, last long and look better with every wear.",
+  shippingInfo: "Dispatched within 1\u20133 business days.\nFree delivery pan-India above the free-shipping threshold.\nTracking shared as soon as your order ships.",
+  careInfo: "Wash cold, inside out.\nDo not bleach.\nDo not tumble dry.\nIron on reverse, avoiding prints."
 };
-var serverDiscounts = [
-  { id: "disc_1", code: "LEVIX10", type: "PERCENTAGE", value: 10, minOrderPaise: 199900, isActive: true, expiresAt: "2026-12-31" },
-  { id: "disc_2", code: "WELCOME500", type: "FIXED", value: 500, minOrderPaise: 299900, isActive: true, expiresAt: "2026-12-31" },
-  { id: "disc_3", code: "VIP20", type: "PERCENTAGE", value: 20, minOrderPaise: 499900, isActive: true, expiresAt: "2026-12-31" }
+var DEFAULT_CATEGORIES = [
+  {
+    name: "Overlength T-Shirts",
+    slug: "overlength-t-shirts",
+    description: "Elongated drape and dropped-shoulder streetwear silhouettes cut from heavyweight combed cotton.",
+    imageUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80",
+    sortOrder: 0,
+    group: "TOP"
+  },
+  {
+    name: "Waffle Boxy Fit Full Sleeves",
+    slug: "waffle-boxy-fit-full-sleeves",
+    description: "Heavyweight thermal waffle-knit long sleeves with an exaggerated boxy fit.",
+    imageUrl: "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1400&q=80",
+    sortOrder: 1,
+    group: "TOP"
+  },
+  {
+    name: "Acid Wash T-Shirts",
+    slug: "acid-wash-t-shirts",
+    description: "Vintage hand-treated mineral and acid wash tees with a lived-in finish.",
+    imageUrl: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1400&q=80",
+    sortOrder: 2,
+    group: "TOP"
+  }
 ];
-async function getAdminStoreSettings(req, res) {
-  res.json({ settings: serverStoreSettings });
+var cache = null;
+var CACHE_MS = 30 * 1e3;
+function toPublic(row) {
+  const out = {};
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    const v = row?.[key];
+    out[key] = v === null || v === void 0 ? DEFAULT_SETTINGS[key] : v;
+  }
+  return out;
 }
-async function updateAdminStoreSettings(req, res) {
-  serverStoreSettings = { ...serverStoreSettings, ...req.body };
-  res.json({ success: true, settings: serverStoreSettings });
+async function getSettings() {
+  if (cache && cache.expires > Date.now()) return cache.value;
+  const row = await prisma.storeSetting.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { id: "default", ...DEFAULT_SETTINGS }
+  });
+  const value = toPublic(row);
+  cache = { value, expires: Date.now() + CACHE_MS };
+  return value;
 }
-async function getAdminDiscounts(req, res) {
-  res.json({ discounts: serverDiscounts });
+async function saveSettings(data2) {
+  const row = await prisma.storeSetting.upsert({
+    where: { id: "default" },
+    update: data2,
+    create: { id: "default", ...DEFAULT_SETTINGS, ...data2 }
+  });
+  const value = toPublic(row);
+  cache = { value, expires: Date.now() + CACHE_MS };
+  return value;
 }
-async function createAdminDiscount(req, res) {
-  const newDisc = {
-    id: "disc_" + Date.now(),
-    code: (req.body.code || "CODE" + Date.now()).toUpperCase().trim(),
-    type: req.body.type === "FIXED" ? "FIXED" : "PERCENTAGE",
-    value: Number(req.body.value) || 10,
-    minOrderPaise: (Number(req.body.minOrderINR) || 1999) * 100,
-    isActive: req.body.isActive !== void 0 ? Boolean(req.body.isActive) : true,
-    expiresAt: req.body.expiresAt || "2026-12-31"
-  };
-  serverDiscounts.unshift(newDisc);
-  res.status(201).json({ success: true, discount: newDisc });
+function calculateShippingPaise(subtotalPaise, settings) {
+  if (subtotalPaise <= 0) return 0;
+  const threshold = Math.max(0, settings.freeShippingThreshold) * 100;
+  if (threshold === 0 || subtotalPaise >= threshold) return 0;
+  return Math.max(0, settings.shippingFee) * 100;
 }
-async function deleteAdminDiscount(req, res) {
-  const { id } = req.params;
-  serverDiscounts = serverDiscounts.filter((d) => d.id !== id && d.code !== id);
-  res.json({ success: true, message: "Discount deleted successfully" });
+async function ensureStoreDefaults() {
+  for (const c of DEFAULT_CATEGORIES) {
+    await prisma.category.upsert({ where: { slug: c.slug }, update: {}, create: c });
+  }
+  await getSettings();
 }
 
-// backend/src/routes/adminRoutes.ts
+// src/controllers/cartController.ts
+var cartInclude = {
+  items: {
+    orderBy: { createdAt: "asc" },
+    include: {
+      variant: {
+        include: {
+          product: { include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } } }
+        }
+      }
+    }
+  }
+};
+var ANON_TOKEN_RE = /^[A-Za-z0-9_-]{16,80}$/;
+function getAnonymousToken(req) {
+  const raw = req.headers["x-anonymous-token"] || (req.body && typeof req.body.anonymousToken === "string" ? req.body.anonymousToken : void 0) || (typeof req.query.anonymousToken === "string" ? req.query.anonymousToken : void 0);
+  if (!raw) return void 0;
+  const token = String(raw).trim();
+  return ANON_TOKEN_RE.test(token) ? token : void 0;
+}
+async function resolveCart(userId, anonymousToken) {
+  if (userId) {
+    let cart = await prisma.cart.findUnique({ where: { userId }, include: cartInclude });
+    if (!cart) {
+      cart = await prisma.cart.create({ data: { userId }, include: cartInclude });
+    }
+    if (anonymousToken) {
+      const guestCart = await prisma.cart.findUnique({ where: { anonymousToken }, include: { items: true } });
+      if (guestCart && guestCart.id !== cart.id) {
+        if (guestCart.items.length > 0) {
+          for (const item of guestCart.items) {
+            const existing = cart.items.find((i) => i.variantId === item.variantId);
+            if (existing) {
+              await prisma.cartItem.update({
+                where: { id: existing.id },
+                data: { quantity: Math.max(existing.quantity, item.quantity) }
+              });
+            } else {
+              await prisma.cartItem.create({ data: { cartId: cart.id, variantId: item.variantId, quantity: item.quantity } });
+            }
+          }
+        }
+        await prisma.cart.delete({ where: { id: guestCart.id } }).catch(() => void 0);
+        cart = await prisma.cart.findUniqueOrThrow({ where: { id: cart.id }, include: cartInclude });
+      }
+    }
+    return cart;
+  }
+  if (anonymousToken) {
+    let cart = await prisma.cart.findUnique({ where: { anonymousToken }, include: cartInclude });
+    if (!cart) {
+      cart = await prisma.cart.create({ data: { anonymousToken }, include: cartInclude });
+    }
+    return cart;
+  }
+  throw new AppError("Cart session missing. Please refresh the page.", 400);
+}
+async function formatCart(cart) {
+  const settings = await getSettings();
+  let subtotalPaise = 0;
+  const items = cart.items.filter((item) => item.variant && item.variant.product && item.variant.product.isActive).map((item) => {
+    const unitPrice = item.variant.product.basePrice + item.variant.priceDelta;
+    const total = unitPrice * item.quantity;
+    subtotalPaise += total;
+    return {
+      id: item.id,
+      variantId: item.variantId,
+      quantity: item.quantity,
+      size: item.variant.size,
+      stockQuantity: item.variant.stockQuantity,
+      productId: item.variant.product.id,
+      productName: item.variant.product.name,
+      productSlug: item.variant.product.slug,
+      unitPricePaise: unitPrice,
+      totalPaise: total,
+      imageUrl: item.variant.product.images[0]?.url || null
+    };
+  });
+  const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
+  const threshold = settings.freeShippingThreshold * 100;
+  return {
+    cartId: cart.id,
+    items,
+    itemCount: items.reduce((acc, it) => acc + it.quantity, 0),
+    subtotalPaise,
+    shippingPaise,
+    totalPaise: subtotalPaise + shippingPaise,
+    freeShippingThresholdPaise: threshold,
+    remainingForFreeShippingPaise: Math.max(0, threshold - subtotalPaise)
+  };
+}
+async function sendCart(req, res) {
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  res.set("Cache-Control", "no-store");
+  res.json(await formatCart(cart));
+}
+async function getCart(req, res) {
+  await sendCart(req, res);
+}
+var addToCartSchema = import_zod4.z.object({
+  variantId: import_zod4.z.string().min(1).max(64),
+  quantity: import_zod4.z.number().int().min(1).max(20).default(1)
+});
+async function addToCart(req, res) {
+  const { variantId, quantity } = addToCartSchema.parse(req.body);
+  const variant = await prisma.productVariant.findUnique({ where: { id: variantId }, include: { product: true } });
+  if (!variant || !variant.product.isActive) {
+    throw new AppError("This size is no longer available", 404);
+  }
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const existing = cart.items.find((i) => i.variantId === variantId);
+  const newQuantity = (existing?.quantity || 0) + quantity;
+  if (variant.stockQuantity <= 0) {
+    throw new AppError(`Size ${variant.size} is sold out`, 400);
+  }
+  if (newQuantity > variant.stockQuantity) {
+    throw new AppError(`Only ${variant.stockQuantity} left in size ${variant.size}`, 400);
+  }
+  if (existing) {
+    await prisma.cartItem.update({ where: { id: existing.id }, data: { quantity: newQuantity } });
+  } else {
+    await prisma.cartItem.create({ data: { cartId: cart.id, variantId, quantity } });
+  }
+  await sendCart(req, res);
+}
+async function findOwnedItem(req, itemId) {
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const item = await prisma.cartItem.findFirst({ where: { id: itemId, cartId: cart.id }, include: { variant: true } });
+  if (!item) throw new AppError("Item not found in your bag", 404);
+  return item;
+}
+async function updateCartItem(req, res) {
+  const { quantity } = import_zod4.z.object({ quantity: import_zod4.z.number().int().min(0).max(20) }).parse(req.body);
+  const item = await findOwnedItem(req, req.params.id);
+  if (quantity === 0) {
+    await prisma.cartItem.delete({ where: { id: item.id } });
+  } else {
+    if (quantity > item.variant.stockQuantity) {
+      throw new AppError(`Only ${item.variant.stockQuantity} left in size ${item.variant.size}`, 400);
+    }
+    await prisma.cartItem.update({ where: { id: item.id }, data: { quantity } });
+  }
+  await sendCart(req, res);
+}
+async function removeCartItem(req, res) {
+  const item = await findOwnedItem(req, req.params.id);
+  await prisma.cartItem.delete({ where: { id: item.id } });
+  await sendCart(req, res);
+}
+
+// src/routes/cartRoutes.ts
+var router4 = (0, import_express4.Router)();
+router4.use(optionalAuth);
+router4.get("/", asyncHandler(getCart));
+router4.post("/items", asyncHandler(addToCart));
+router4.put("/items/:id", asyncHandler(updateCartItem));
+router4.delete("/items/:id", asyncHandler(removeCartItem));
+var cartRoutes_default = router4;
+
+// src/routes/orderRoutes.ts
+var import_express5 = require("express");
+
+// src/controllers/orderController.ts
+var import_zod5 = require("zod");
+var import_client5 = require("@prisma/client");
+
+// src/config/razorpay.ts
+var import_razorpay = __toESM(require("razorpay"), 1);
+var import_crypto = __toESM(require("crypto"), 1);
+var instance = null;
+function isRazorpayConfigured() {
+  return Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
+}
+function getRazorpay() {
+  if (!isRazorpayConfigured()) {
+    throw new Error("Razorpay keys are not configured");
+  }
+  if (!instance) {
+    instance = new import_razorpay.default({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET });
+  }
+  return instance;
+}
+function safeEqualHex(a, b) {
+  try {
+    const ab = Buffer.from(a, "hex");
+    const bb = Buffer.from(b, "hex");
+    if (ab.length === 0 || ab.length !== bb.length) return false;
+    return import_crypto.default.timingSafeEqual(ab, bb);
+  } catch {
+    return false;
+  }
+}
+function verifyPaymentSignature(orderId, paymentId, signature) {
+  if (!env.RAZORPAY_KEY_SECRET) return false;
+  const expected = import_crypto.default.createHmac("sha256", env.RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
+  return safeEqualHex(expected, signature);
+}
+function verifyWebhookSignature(rawBody, signature) {
+  if (!env.RAZORPAY_WEBHOOK_SECRET) return false;
+  const expected = import_crypto.default.createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest("hex");
+  return safeEqualHex(expected, signature);
+}
+
+// src/services/orders.ts
+var import_crypto2 = __toESM(require("crypto"), 1);
+var import_client4 = require("@prisma/client");
+var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function randomCode(length) {
+  const bytes = import_crypto2.default.randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
+  return out;
+}
+function generateOrderNumber() {
+  const d = /* @__PURE__ */ new Date();
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1e3);
+  const ymd = ist.toISOString().slice(2, 10).replace(/-/g, "");
+  return `LVX-${ymd}-${randomCode(6)}`;
+}
+function generateAccessKey() {
+  return import_crypto2.default.randomBytes(24).toString("base64url");
+}
+function safeEqual(a, b) {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && import_crypto2.default.timingSafeEqual(ab, bb);
+}
+async function evaluateCoupon(rawCode, subtotalPaise) {
+  const code = rawCode.trim().toUpperCase();
+  if (!code) throw new AppError("Enter a coupon code", 400);
+  const coupon = await prisma.coupon.findUnique({ where: { code } });
+  if (!coupon || !coupon.isActive) throw new AppError("This coupon code is not valid", 400);
+  if (coupon.validUntil && coupon.validUntil.getTime() < Date.now()) {
+    throw new AppError("This coupon has expired", 400);
+  }
+  if (coupon.maxUses !== null && coupon.maxUses !== void 0 && coupon.usedCount >= coupon.maxUses) {
+    throw new AppError("This coupon has reached its usage limit", 400);
+  }
+  if (subtotalPaise < coupon.minOrderPaise) {
+    throw new AppError(
+      `Add items worth Rs. ${Math.ceil((coupon.minOrderPaise - subtotalPaise) / 100).toLocaleString("en-IN")} more to use ${code}`,
+      400
+    );
+  }
+  let discountPaise = coupon.discountType === import_client4.DiscountType.PERCENTAGE ? Math.round(subtotalPaise * Math.min(100, coupon.discountValue) / 100) : coupon.discountValue;
+  discountPaise = Math.max(0, Math.min(discountPaise, subtotalPaise));
+  const description = coupon.discountType === import_client4.DiscountType.PERCENTAGE ? `${coupon.discountValue}% off` : `Rs. ${(coupon.discountValue / 100).toLocaleString("en-IN")} off`;
+  return { code, discountPaise, description };
+}
+async function markOrderPaid(orderId, info) {
+  return prisma.$transaction(
+    async (tx) => {
+      const transition = await tx.order.updateMany({
+        where: { id: orderId, paymentStatus: { not: import_client4.PaymentStatus.PAID } },
+        data: {
+          status: import_client4.OrderStatus.PAID,
+          paymentStatus: import_client4.PaymentStatus.PAID,
+          paidAt: /* @__PURE__ */ new Date(),
+          stockDeducted: true
+        }
+      });
+      if (transition.count === 0) return false;
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+      await tx.payment.upsert({
+        where: { orderId },
+        update: {
+          status: import_client4.PaymentStatus.PAID,
+          razorpayOrderId: info.razorpayOrderId,
+          razorpayPaymentId: info.razorpayPaymentId,
+          razorpaySignature: info.razorpaySignature ?? void 0,
+          ...info.rawPayload ? { rawPayload: info.rawPayload } : {}
+        },
+        create: {
+          orderId,
+          amountPaise: info.amountPaise ?? order.totalPaise,
+          razorpayOrderId: info.razorpayOrderId,
+          razorpayPaymentId: info.razorpayPaymentId,
+          razorpaySignature: info.razorpaySignature ?? null,
+          status: import_client4.PaymentStatus.PAID,
+          ...info.rawPayload ? { rawPayload: info.rawPayload } : {}
+        }
+      });
+      const oversold = [];
+      for (const item of order.items) {
+        if (!item.variantId) continue;
+        const dec = await tx.productVariant.updateMany({
+          where: { id: item.variantId, stockQuantity: { gte: item.quantity } },
+          data: { stockQuantity: { decrement: item.quantity } }
+        });
+        if (dec.count === 0) {
+          await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: 0 } });
+          oversold.push(`${item.productName} (${item.size}) x${item.quantity}`);
+        }
+      }
+      if (oversold.length) {
+        console.warn(`\u26A0\uFE0F Order ${order.orderNumber} paid but stock was short for: ${oversold.join(", ")}`);
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            adminNotes: `${order.adminNotes ? order.adminNotes + "\n" : ""}\u26A0\uFE0F Stock was short when payment completed: ${oversold.join(", ")}`
+          }
+        });
+      }
+      if (order.couponCode) {
+        await tx.coupon.updateMany({ where: { code: order.couponCode }, data: { usedCount: { increment: 1 } } });
+      }
+      if (order.cartId) {
+        await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
+      }
+      return true;
+    },
+    { timeout: 2e4, maxWait: 1e4 }
+  );
+}
+function formatAddress(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return "";
+  return [snapshot.fullName, snapshot.line1, snapshot.line2, snapshot.city, snapshot.state, snapshot.postalCode, snapshot.country].filter(Boolean).join(", ");
+}
+
+// src/controllers/orderController.ts
+var createOrderSchema = import_zod5.z.object({
+  customerEmail: import_zod5.z.string().trim().toLowerCase().email("Enter a valid email address"),
+  customerName: import_zod5.z.string().trim().min(2, "Enter your full name").max(100),
+  customerPhone: addressSchema.shape.phone,
+  shippingAddress: addressSchema.omit({ isDefault: true }),
+  couponCode: import_zod5.z.string().trim().max(40).optional().or(import_zod5.z.literal("")),
+  saveAddress: import_zod5.z.boolean().optional()
+});
+async function validateCoupon(req, res) {
+  const { code } = import_zod5.z.object({ code: import_zod5.z.string().trim().min(1).max(40) }).parse(req.body);
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const formatted = await formatCart(cart);
+  if (formatted.items.length === 0) throw new AppError("Your bag is empty", 400);
+  const result = await evaluateCoupon(code, formatted.subtotalPaise);
+  res.json(result);
+}
+async function createOrder(req, res) {
+  if (!isRazorpayConfigured()) {
+    throw new AppError("Online payments are temporarily unavailable. Please try again shortly.", 503);
+  }
+  const data2 = createOrderSchema.parse(req.body);
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const items = cart.items.filter((i) => i.variant?.product?.isActive);
+  if (items.length === 0) throw new AppError("Your bag is empty", 400);
+  let subtotalPaise = 0;
+  for (const item of items) {
+    if (item.quantity > item.variant.stockQuantity) {
+      throw new AppError(
+        item.variant.stockQuantity <= 0 ? `${item.variant.product.name} (${item.variant.size}) just sold out. Please remove it from your bag.` : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${item.variant.size}). Please update your bag.`,
+        409
+      );
+    }
+    subtotalPaise += (item.variant.product.basePrice + item.variant.priceDelta) * item.quantity;
+  }
+  let discountPaise = 0;
+  let couponCode = null;
+  if (data2.couponCode) {
+    const coupon = await evaluateCoupon(data2.couponCode, subtotalPaise);
+    discountPaise = coupon.discountPaise;
+    couponCode = coupon.code;
+  }
+  const settings = await getSettings();
+  const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
+  const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise;
+  if (totalPaise < 100) throw new AppError("Order total must be at least Rs. 1", 400);
+  const orderNumber = generateOrderNumber();
+  const accessKey = generateAccessKey();
+  let rzpOrder;
+  try {
+    rzpOrder = await getRazorpay().orders.create({
+      amount: totalPaise,
+      currency: "INR",
+      receipt: orderNumber,
+      notes: { orderNumber, customerEmail: data2.customerEmail }
+    });
+  } catch (err) {
+    console.error("Razorpay order creation failed:", err?.error || err?.message || err);
+    throw new AppError("Could not start the payment. Please try again in a moment.", 502);
+  }
+  const order = await prisma.order.create({
+    data: {
+      orderNumber,
+      accessKey,
+      userId: req.user?.id || null,
+      cartId: cart.id,
+      customerEmail: data2.customerEmail,
+      customerName: data2.customerName,
+      customerPhone: data2.customerPhone,
+      shippingAddressSnapshot: { ...data2.shippingAddress, phone: data2.shippingAddress.phone },
+      subtotalPaise,
+      shippingPaise,
+      discountPaise,
+      totalPaise,
+      couponCode,
+      status: import_client5.OrderStatus.PENDING,
+      paymentStatus: import_client5.PaymentStatus.PENDING,
+      razorpayOrderId: rzpOrder.id,
+      items: {
+        create: items.map((item) => {
+          const unit = item.variant.product.basePrice + item.variant.priceDelta;
+          return {
+            productId: item.variant.product.id,
+            variantId: item.variantId,
+            productName: item.variant.product.name,
+            productSlug: item.variant.product.slug,
+            size: item.variant.size,
+            unitPricePaise: unit,
+            quantity: item.quantity,
+            subtotalPaise: unit * item.quantity,
+            imageUrl: item.variant.product.images[0]?.url || null
+          };
+        })
+      }
+    },
+    include: { items: true }
+  });
+  if (req.user && data2.saveAddress) {
+    const existing = await prisma.address.findFirst({
+      where: { userId: req.user.id, line1: data2.shippingAddress.line1, postalCode: data2.shippingAddress.postalCode }
+    });
+    if (!existing) {
+      const count = await prisma.address.count({ where: { userId: req.user.id } });
+      if (count < 10) {
+        await prisma.address.create({ data: { ...data2.shippingAddress, userId: req.user.id, isDefault: count === 0 } }).catch(() => void 0);
+      }
+    }
+  }
+  res.status(201).json({
+    order: {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      totalPaise: order.totalPaise,
+      customerEmail: order.customerEmail,
+      customerName: order.customerName
+    },
+    accessKey,
+    razorpayOrderId: rzpOrder.id,
+    amountPaise: totalPaise,
+    currency: "INR",
+    keyId: env.RAZORPAY_KEY_ID
+  });
+}
+async function getUserOrders(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const orders = await prisma.order.findMany({
+    where: {
+      OR: [{ userId: req.user.id }, { customerEmail: req.user.email }],
+      paymentStatus: { in: [import_client5.PaymentStatus.PAID, import_client5.PaymentStatus.REFUNDED] }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { items: true }
+  });
+  res.set("Cache-Control", "no-store");
+  res.json({ orders: orders.map(({ accessKey, adminNotes, cartId, ...o }) => o) });
+}
+async function getOrderByNumber(req, res) {
+  const { orderNumber } = req.params;
+  const key = typeof req.query.key === "string" ? req.query.key : void 0;
+  const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true } });
+  if (!order) throw new AppError("Order not found", 404);
+  const isOwner = req.user && (order.userId === req.user.id || order.customerEmail === req.user.email || req.user.role === import_client5.Role.ADMIN);
+  if (!isOwner && !safeEqual(key, order.accessKey)) {
+    throw new AppError("Order not found", 404);
+  }
+  const { accessKey, adminNotes, cartId, ...publicOrder } = order;
+  res.set("Cache-Control", "no-store");
+  res.json({ order: { ...publicOrder, shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
+}
+async function trackOrder(req, res) {
+  const { orderNumber, email } = import_zod5.z.object({ orderNumber: import_zod5.z.string().trim().min(5).max(40), email: import_zod5.z.string().trim().toLowerCase().email() }).parse(req.body);
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: orderNumber.toUpperCase() },
+    include: { items: { select: { quantity: true } } }
+  });
+  if (!order || order.customerEmail.toLowerCase() !== email) {
+    throw new AppError("No order found with that number and email", 404);
+  }
+  res.set("Cache-Control", "no-store");
+  res.json({
+    order: {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      courier: order.courier,
+      trackingNumber: order.trackingNumber,
+      createdAt: order.createdAt,
+      itemCount: order.items.reduce((a, i) => a + i.quantity, 0)
+    }
+  });
+}
+
+// src/routes/orderRoutes.ts
+var router5 = (0, import_express5.Router)();
+router5.post("/", checkoutRateLimiter, optionalAuth, asyncHandler(createOrder));
+router5.post("/validate-coupon", checkoutRateLimiter, optionalAuth, asyncHandler(validateCoupon));
+router5.post("/track", checkoutRateLimiter, asyncHandler(trackOrder));
+router5.get("/my-orders", verifyFirebaseToken, asyncHandler(getUserOrders));
+router5.get("/:orderNumber", optionalAuth, asyncHandler(getOrderByNumber));
+var orderRoutes_default = router5;
+
+// src/routes/paymentRoutes.ts
+var import_express6 = require("express");
+
+// src/controllers/paymentController.ts
+var import_zod6 = require("zod");
+var import_client6 = require("@prisma/client");
+var verifySchema = import_zod6.z.object({
+  orderNumber: import_zod6.z.string().min(5).max(40),
+  razorpayOrderId: import_zod6.z.string().min(5).max(60),
+  razorpayPaymentId: import_zod6.z.string().min(5).max(60),
+  razorpaySignature: import_zod6.z.string().min(10).max(200)
+});
+async function verifyPayment(req, res) {
+  const { orderNumber, razorpayOrderId, razorpayPaymentId, razorpaySignature } = verifySchema.parse(req.body);
+  const order = await prisma.order.findUnique({ where: { orderNumber } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (!order.razorpayOrderId || order.razorpayOrderId !== razorpayOrderId) {
+    throw new AppError("Payment does not match this order", 400);
+  }
+  if (!verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
+    await prisma.payment.upsert({
+      where: { orderId: order.id },
+      update: { status: import_client6.PaymentStatus.FAILED, razorpayPaymentId },
+      create: {
+        orderId: order.id,
+        amountPaise: order.totalPaise,
+        razorpayOrderId,
+        razorpayPaymentId,
+        status: import_client6.PaymentStatus.FAILED
+      }
+    }).catch(() => void 0);
+    throw new AppError("Payment verification failed. If money was deducted it will be refunded automatically.", 400);
+  }
+  if (order.paymentStatus !== import_client6.PaymentStatus.PAID) {
+    try {
+      const rzp = getRazorpay();
+      const payment = await rzp.payments.fetch(razorpayPaymentId);
+      if (payment.order_id !== razorpayOrderId || Number(payment.amount) !== order.totalPaise) {
+        throw new AppError("Payment amount mismatch. Please contact support.", 400);
+      }
+      if (payment.status === "authorized") {
+        await rzp.payments.capture(razorpayPaymentId, order.totalPaise, "INR");
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.warn("Razorpay payment fetch/capture warning:", err?.error?.description || err?.message);
+    }
+    await markOrderPaid(order.id, {
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      amountPaise: order.totalPaise
+    });
+  }
+  res.json({ success: true, orderNumber: order.orderNumber });
+}
+async function handleWebhook(req, res) {
+  if (!env.RAZORPAY_WEBHOOK_SECRET) {
+    console.warn("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not configured \u2014 ignoring.");
+    res.status(503).json({ error: "Webhook not configured" });
+    return;
+  }
+  const signature = req.headers["x-razorpay-signature"];
+  if (!signature || !req.rawBody || !verifyWebhookSignature(req.rawBody, signature)) {
+    res.status(400).json({ error: "Invalid webhook signature" });
+    return;
+  }
+  const event = req.body?.event;
+  const paymentEntity = req.body?.payload?.payment?.entity;
+  const rzpOrderId = paymentEntity?.order_id || req.body?.payload?.order?.entity?.id;
+  if (rzpOrderId) {
+    const order = await prisma.order.findUnique({ where: { razorpayOrderId: rzpOrderId } });
+    if (order) {
+      if ((event === "payment.captured" || event === "order.paid") && paymentEntity) {
+        if (Number(paymentEntity.amount) === order.totalPaise) {
+          await markOrderPaid(order.id, {
+            razorpayOrderId: rzpOrderId,
+            razorpayPaymentId: paymentEntity.id,
+            amountPaise: Number(paymentEntity.amount),
+            rawPayload: req.body.payload
+          });
+        } else {
+          console.error(`Webhook amount mismatch for ${order.orderNumber}: ${paymentEntity.amount} vs ${order.totalPaise}`);
+        }
+      } else if (event === "payment.failed" && order.paymentStatus !== import_client6.PaymentStatus.PAID && paymentEntity) {
+        await prisma.payment.upsert({
+          where: { orderId: order.id },
+          update: { status: import_client6.PaymentStatus.FAILED, razorpayPaymentId: paymentEntity.id },
+          create: {
+            orderId: order.id,
+            amountPaise: order.totalPaise,
+            razorpayOrderId: rzpOrderId,
+            razorpayPaymentId: paymentEntity.id,
+            status: import_client6.PaymentStatus.FAILED
+          }
+        }).catch(() => void 0);
+      }
+    }
+  }
+  res.json({ status: "ok" });
+}
+
+// src/routes/paymentRoutes.ts
+var router6 = (0, import_express6.Router)();
+router6.post("/verify", checkoutRateLimiter, asyncHandler(verifyPayment));
+router6.post("/webhook", asyncHandler(handleWebhook));
+var paymentRoutes_default = router6;
+
+// src/routes/adminRoutes.ts
+var import_express7 = require("express");
+
+// src/controllers/adminController.ts
+var import_zod7 = require("zod");
+var import_client7 = require("@prisma/client");
+async function getDashboardMetrics(_req, res) {
+  const startOfToday = /* @__PURE__ */ new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const [paidAgg, todayAgg, paidOrders, toFulfil, totalCustomers, totalProducts, lowStockVariants, recentOrders, subscribers] = await Promise.all([
+    prisma.order.aggregate({ where: { paymentStatus: import_client7.PaymentStatus.PAID }, _sum: { totalPaise: true } }),
+    prisma.order.aggregate({
+      where: { paymentStatus: import_client7.PaymentStatus.PAID, paidAt: { gte: startOfToday } },
+      _sum: { totalPaise: true },
+      _count: true
+    }),
+    prisma.order.count({ where: { paymentStatus: import_client7.PaymentStatus.PAID } }),
+    prisma.order.count({ where: { status: { in: [import_client7.OrderStatus.PAID, import_client7.OrderStatus.PROCESSING] } } }),
+    prisma.user.count({ where: { role: import_client7.Role.CUSTOMER } }),
+    prisma.product.count({ where: { isActive: true } }),
+    prisma.productVariant.findMany({
+      where: { stockQuantity: { lte: 5 }, product: { isActive: true } },
+      orderBy: { stockQuantity: "asc" },
+      include: { product: { select: { name: true, slug: true } } },
+      take: 20
+    }),
+    prisma.order.findMany({
+      where: { paymentStatus: import_client7.PaymentStatus.PAID },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: { items: true }
+    }),
+    prisma.subscriber.count()
+  ]);
+  const totalRevenuePaise = paidAgg._sum.totalPaise || 0;
+  res.set("Cache-Control", "no-store");
+  res.json({
+    metrics: {
+      totalOrders: paidOrders,
+      ordersToFulfil: toFulfil,
+      totalRevenuePaise,
+      totalRevenueINR: Math.round(totalRevenuePaise / 100),
+      todayRevenueINR: Math.round((todayAgg._sum.totalPaise || 0) / 100),
+      todayOrders: todayAgg._count,
+      totalCustomers,
+      totalProducts,
+      lowStockAlertsCount: lowStockVariants.length,
+      subscribers
+    },
+    lowStockVariants,
+    recentOrders
+  });
+}
+async function getAllOrders(req, res) {
+  const status = typeof req.query.status === "string" ? req.query.status : void 0;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const includeUnpaid = req.query.includeUnpaid === "true";
+  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+  const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "100"), 10) || 100));
+  const where = {};
+  if (status && status !== "ALL" && Object.values(import_client7.OrderStatus).includes(status)) {
+    where.status = status;
+  } else if (!includeUnpaid) {
+    where.NOT = { status: import_client7.OrderStatus.PENDING, paymentStatus: { not: import_client7.PaymentStatus.PAID } };
+  }
+  if (search) {
+    where.OR = [
+      { orderNumber: { contains: search } },
+      { customerName: { contains: search } },
+      { customerEmail: { contains: search } },
+      { customerPhone: { contains: search } }
+    ];
+  }
+  const [total, orders] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * take,
+      take,
+      include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } }
+    })
+  ]);
+  res.set("Cache-Control", "no-store");
+  res.json({
+    orders: orders.map(({ accessKey, ...o }) => ({ ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) })),
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
+  });
+}
+var updateOrderSchema = import_zod7.z.object({
+  status: import_zod7.z.nativeEnum(import_client7.OrderStatus).optional(),
+  courier: import_zod7.z.string().trim().max(100).optional(),
+  trackingNumber: import_zod7.z.string().trim().max(100).optional(),
+  adminNotes: import_zod7.z.string().max(5e3).optional()
+});
+async function updateOrder(req, res) {
+  const data2 = updateOrderSchema.parse(req.body);
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (data2.status && data2.status !== import_client7.OrderStatus.CANCELLED && data2.status !== import_client7.OrderStatus.PENDING) {
+    if (order.paymentStatus !== import_client7.PaymentStatus.PAID) {
+      throw new AppError("This order has not been paid yet, so it cannot be moved to fulfilment", 400);
+    }
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    if (data2.status === import_client7.OrderStatus.CANCELLED && order.status !== import_client7.OrderStatus.CANCELLED && order.stockDeducted) {
+      for (const item of order.items) {
+        if (item.variantId) {
+          await tx.productVariant.updateMany({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } }
+          });
+        }
+      }
+    }
+    return tx.order.update({
+      where: { id: order.id },
+      data: {
+        ...data2.status ? { status: data2.status } : {},
+        ...data2.status === import_client7.OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {},
+        ...data2.courier !== void 0 ? { courier: data2.courier || null } : {},
+        ...data2.trackingNumber !== void 0 ? { trackingNumber: data2.trackingNumber || null } : {},
+        ...data2.adminNotes !== void 0 ? { adminNotes: data2.adminNotes || null } : {}
+      },
+      include: { items: true }
+    });
+  });
+  const { accessKey, ...o } = updated;
+  res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
+}
+async function deleteOrder(req, res) {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (order.paymentStatus === import_client7.PaymentStatus.PAID) {
+    throw new AppError("Paid orders are kept for your records. Mark it as CANCELLED instead.", 400);
+  }
+  await prisma.order.delete({ where: { id: order.id } });
+  res.json({ success: true });
+}
+var imageSchema = import_zod7.z.object({
+  url: import_zod7.z.string().trim().url("Each image must be a full URL starting with https://").max(2e3),
+  altText: import_zod7.z.string().max(200).optional().nullable(),
+  isCover: import_zod7.z.boolean().optional(),
+  sortOrder: import_zod7.z.number().int().optional()
+});
+var variantSchema = import_zod7.z.object({
+  size: import_zod7.z.string().trim().min(1).max(10),
+  stockQuantity: import_zod7.z.number().int().min(0).max(1e5),
+  priceDelta: import_zod7.z.number().int().default(0)
+});
+var productSchema = import_zod7.z.object({
+  name: import_zod7.z.string().trim().min(2).max(190),
+  slug: import_zod7.z.string().trim().max(120).optional(),
+  description: import_zod7.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
+  details: import_zod7.z.string().max(2e4).optional().nullable(),
+  fabricCare: import_zod7.z.string().max(2e4).optional().nullable(),
+  fitGuide: import_zod7.z.string().max(2e4).optional().nullable(),
+  basePrice: import_zod7.z.number().int().positive("Price must be more than 0"),
+  comparePrice: import_zod7.z.number().int().positive().optional().nullable(),
+  categoryId: import_zod7.z.string().max(120).optional().nullable(),
+  categoryName: import_zod7.z.string().max(120).optional().nullable(),
+  isFeatured: import_zod7.z.boolean().default(false),
+  isActive: import_zod7.z.boolean().default(true),
+  colorGroup: import_zod7.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
+  collectionIds: import_zod7.z.array(import_zod7.z.string().max(64)).max(50).optional(),
+  images: import_zod7.z.array(imageSchema).min(1, "Add at least one product image").max(12),
+  variants: import_zod7.z.array(variantSchema).min(1, "Add at least one size").max(20)
+});
+async function resolveCategoryId(categoryId, categoryName) {
+  if (categoryId) {
+    const found = await prisma.category.findFirst({ where: { OR: [{ id: categoryId }, { slug: categoryId }] } });
+    if (found) return found.id;
+  }
+  if (categoryName && categoryName.trim()) {
+    const slug = slugify(categoryName);
+    const cat = await prisma.category.upsert({
+      where: { slug },
+      update: {},
+      create: { name: categoryName.trim(), slug }
+    });
+    return cat.id;
+  }
+  return null;
+}
+function normaliseImages(images) {
+  return images.map((img, idx) => ({
+    url: img.url,
+    altText: img.altText || null,
+    sortOrder: idx,
+    isCover: idx === 0
+  }));
+}
+function buildSku(slug, size) {
+  return `${slug.toUpperCase()}-${size.toUpperCase()}`.slice(0, 180);
+}
+function dedupeVariants(variants) {
+  const map = /* @__PURE__ */ new Map();
+  for (const v of variants) map.set(v.size.toUpperCase(), { ...v, size: v.size.toUpperCase() });
+  return [...map.values()];
+}
+async function loadAdminProduct(id) {
+  const p = await prisma.product.findUnique({
+    where: { id },
+    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
+  });
+  return p ? { ...p, collectionIds: p.collections.map((c) => c.collectionId) } : p;
+}
+async function setProductCollections(productId, collectionIds) {
+  const unique = [...new Set(collectionIds)];
+  const valid = await prisma.collection.findMany({ where: { id: { in: unique } }, select: { id: true } });
+  const validIds = valid.map((v) => v.id);
+  await prisma.collectionProduct.deleteMany({ where: { productId, collectionId: { notIn: validIds } } });
+  for (const collectionId of validIds) {
+    const exists = await prisma.collectionProduct.findUnique({ where: { collectionId_productId: { collectionId, productId } } });
+    if (!exists) {
+      const max = await prisma.collectionProduct.aggregate({ where: { collectionId }, _max: { sortOrder: true } });
+      await prisma.collectionProduct.create({ data: { collectionId, productId, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
+    }
+  }
+}
+async function getAdminProducts(req, res) {
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const products = await prisma.product.findMany({
+    where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
+  });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    products: products.map((p) => ({ ...serializeProduct(p), collectionIds: p.collections.map((c) => c.collectionId) }))
+  });
+}
+async function createProduct(req, res) {
+  const data2 = productSchema.parse(req.body);
+  const slug = slugify(data2.slug || data2.name);
+  if (!slug) throw new AppError("Please enter a valid product name", 400);
+  if (data2.comparePrice && data2.comparePrice <= data2.basePrice) data2.comparePrice = null;
+  const categoryId = await resolveCategoryId(data2.categoryId, data2.categoryName);
+  const variants = dedupeVariants(data2.variants);
+  const product = await prisma.product.create({
+    data: {
+      name: data2.name,
+      slug,
+      description: data2.description,
+      details: data2.details || null,
+      fabricCare: data2.fabricCare || null,
+      fitGuide: data2.fitGuide || null,
+      basePrice: data2.basePrice,
+      comparePrice: data2.comparePrice || null,
+      isFeatured: data2.isFeatured,
+      isActive: data2.isActive,
+      colorGroup: data2.colorGroup || null,
+      categoryId,
+      images: { create: normaliseImages(data2.images) },
+      variants: {
+        create: variants.map((v) => ({
+          size: v.size,
+          sku: buildSku(slug, v.size),
+          stockQuantity: v.stockQuantity,
+          priceDelta: v.priceDelta
+        }))
+      }
+    },
+    include: productFullInclude
+  });
+  if (data2.collectionIds?.length) await setProductCollections(product.id, data2.collectionIds);
+  res.status(201).json({ product: serializeProduct(await loadAdminProduct(product.id)) });
+}
+async function updateProduct(req, res) {
+  const { id } = req.params;
+  const data2 = productSchema.partial().parse(req.body);
+  const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
+  if (!existing) throw new AppError("Product not found", 404);
+  const slug = data2.slug !== void 0 || data2.name !== void 0 ? slugify(data2.slug || data2.name || existing.slug) : existing.slug;
+  const basePrice = data2.basePrice ?? existing.basePrice;
+  let comparePrice = data2.comparePrice !== void 0 ? data2.comparePrice : existing.comparePrice;
+  if (comparePrice && comparePrice <= basePrice) comparePrice = null;
+  const categoryId = data2.categoryId !== void 0 || data2.categoryName !== void 0 ? await resolveCategoryId(data2.categoryId, data2.categoryName) : existing.categoryId;
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          ...data2.name !== void 0 ? { name: data2.name } : {},
+          slug,
+          ...data2.description !== void 0 ? { description: data2.description } : {},
+          ...data2.details !== void 0 ? { details: data2.details || null } : {},
+          ...data2.fabricCare !== void 0 ? { fabricCare: data2.fabricCare || null } : {},
+          ...data2.fitGuide !== void 0 ? { fitGuide: data2.fitGuide || null } : {},
+          basePrice,
+          comparePrice: comparePrice || null,
+          categoryId,
+          ...data2.isFeatured !== void 0 ? { isFeatured: data2.isFeatured } : {},
+          ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
+          ...data2.colorGroup !== void 0 ? { colorGroup: data2.colorGroup || null } : {}
+        }
+      });
+      if (data2.images) {
+        await tx.productImage.deleteMany({ where: { productId: id } });
+        await tx.productImage.createMany({ data: normaliseImages(data2.images).map((img) => ({ ...img, productId: id })) });
+      }
+      if (data2.variants) {
+        const incoming = dedupeVariants(data2.variants);
+        const incomingSizes = new Set(incoming.map((v) => v.size));
+        const removed = existing.variants.filter((v) => !incomingSizes.has(v.size.toUpperCase()));
+        if (removed.length) {
+          await tx.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } });
+        }
+        for (const v of incoming) {
+          const match = existing.variants.find((ev) => ev.size.toUpperCase() === v.size);
+          if (match) {
+            await tx.productVariant.update({
+              where: { id: match.id },
+              data: { size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
+            });
+          } else {
+            await tx.productVariant.create({
+              data: { productId: id, size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
+            });
+          }
+        }
+      } else if (slug !== existing.slug) {
+        for (const v of existing.variants) {
+          await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size) } });
+        }
+      }
+    },
+    { timeout: 2e4 }
+  );
+  if (data2.collectionIds) await setProductCollections(id, data2.collectionIds);
+  res.json({ product: serializeProduct(await loadAdminProduct(id)) });
+}
+async function deleteProduct(req, res) {
+  const { id } = req.params;
+  const product = await prisma.product.findUnique({ where: { id }, include: { _count: { select: { orderItems: true } } } });
+  if (!product) throw new AppError("Product not found", 404);
+  if (product._count.orderItems > 0) {
+    await prisma.product.update({ where: { id }, data: { isActive: false } });
+    res.json({ success: true, archived: true, message: "Product has past orders, so it was hidden from the store instead of deleted." });
+    return;
+  }
+  await prisma.product.delete({ where: { id } });
+  res.json({ success: true, archived: false });
+}
+var categorySchema = import_zod7.z.object({
+  name: import_zod7.z.string().trim().min(2).max(120),
+  group: import_zod7.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
+  description: import_zod7.z.string().max(2e3).optional().nullable(),
+  imageUrl: import_zod7.z.string().trim().url().max(2e3).optional().nullable().or(import_zod7.z.literal("")),
+  sortOrder: import_zod7.z.number().int().optional()
+});
+async function createCategory(req, res) {
+  const data2 = categorySchema.parse(req.body);
+  const category = await prisma.category.create({
+    data: {
+      name: data2.name,
+      slug: slugify(data2.name),
+      description: data2.description || null,
+      imageUrl: data2.imageUrl || null,
+      sortOrder: data2.sortOrder ?? 0,
+      group: data2.group || "TOP"
+    }
+  });
+  res.status(201).json({ category });
+}
+async function updateCategory(req, res) {
+  const data2 = categorySchema.partial().parse(req.body);
+  const category = await prisma.category.update({
+    where: { id: req.params.id },
+    data: {
+      ...data2.name !== void 0 ? { name: data2.name } : {},
+      ...data2.description !== void 0 ? { description: data2.description || null } : {},
+      ...data2.imageUrl !== void 0 ? { imageUrl: data2.imageUrl || null } : {},
+      ...data2.sortOrder !== void 0 ? { sortOrder: data2.sortOrder } : {},
+      ...data2.group !== void 0 ? { group: data2.group || "TOP" } : {}
+    }
+  });
+  res.json({ category });
+}
+async function deleteCategory(req, res) {
+  await prisma.category.delete({ where: { id: req.params.id } });
+  res.json({ success: true });
+}
+var settingsSchema = import_zod7.z.object({
+  announcementText: import_zod7.z.string().max(1e3),
+  heroHeadline: import_zod7.z.string().max(190),
+  heroSubtitle: import_zod7.z.string().max(1e3),
+  supportEmail: import_zod7.z.string().trim().email().or(import_zod7.z.literal("")),
+  supportPhone: import_zod7.z.string().trim().max(30),
+  instagramHandle: import_zod7.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
+  freeShippingThreshold: import_zod7.z.coerce.number().int().min(0).max(1e6),
+  shippingFee: import_zod7.z.coerce.number().int().min(0).max(1e5),
+  announcementEnabled: import_zod7.z.boolean(),
+  heroDesktopImage: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroMobileImage: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroLink: import_zod7.z.string().trim().max(500),
+  heroCtaText: import_zod7.z.string().trim().max(60),
+  latestDropTitle: import_zod7.z.string().trim().max(100),
+  seoTitle: import_zod7.z.string().max(300),
+  seoText: import_zod7.z.string().max(2e4),
+  shippingInfo: import_zod7.z.string().max(5e3),
+  careInfo: import_zod7.z.string().max(5e3)
+}).partial();
+async function getAdminStoreSettings(_req, res) {
+  res.json({ settings: await getSettings() });
+}
+async function updateAdminStoreSettings(req, res) {
+  const data2 = settingsSchema.parse(req.body);
+  const settings = await saveSettings(data2);
+  res.json({ success: true, settings });
+}
+function toDiscountDto(c) {
+  return {
+    id: c.id,
+    code: c.code,
+    type: c.discountType,
+    // percentage → percent; fixed → rupees
+    value: c.discountType === import_client7.DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
+    minOrderPaise: c.minOrderPaise,
+    isActive: c.isActive,
+    expiresAt: c.validUntil ? c.validUntil.toISOString().slice(0, 10) : "",
+    maxUses: c.maxUses,
+    usedCount: c.usedCount
+  };
+}
+var discountSchema = import_zod7.z.object({
+  code: import_zod7.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
+  type: import_zod7.z.enum(["PERCENTAGE", "FIXED"]),
+  value: import_zod7.z.coerce.number().positive(),
+  minOrderINR: import_zod7.z.coerce.number().min(0).default(0),
+  expiresAt: import_zod7.z.string().optional().or(import_zod7.z.literal("")),
+  isActive: import_zod7.z.boolean().default(true),
+  maxUses: import_zod7.z.coerce.number().int().positive().optional().nullable()
+});
+async function getAdminDiscounts(_req, res) {
+  const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
+  res.json({ discounts: coupons.map(toDiscountDto) });
+}
+async function createAdminDiscount(req, res) {
+  const data2 = discountSchema.parse(req.body);
+  if (data2.type === "PERCENTAGE" && data2.value > 90) throw new AppError("Percentage discount cannot be more than 90%", 400);
+  let validUntil = null;
+  if (data2.expiresAt) {
+    validUntil = /* @__PURE__ */ new Date(`${data2.expiresAt}T23:59:59+05:30`);
+    if (isNaN(validUntil.getTime())) throw new AppError("Invalid expiry date", 400);
+  }
+  const coupon = await prisma.coupon.create({
+    data: {
+      code: data2.code,
+      discountType: data2.type === "FIXED" ? import_client7.DiscountType.FIXED : import_client7.DiscountType.PERCENTAGE,
+      discountValue: data2.type === "FIXED" ? Math.round(data2.value * 100) : Math.round(data2.value),
+      minOrderPaise: Math.round(data2.minOrderINR * 100),
+      isActive: data2.isActive,
+      validUntil,
+      maxUses: data2.maxUses ?? null
+    }
+  });
+  res.status(201).json({ success: true, discount: toDiscountDto(coupon) });
+}
+async function toggleAdminDiscount(req, res) {
+  const coupon = await prisma.coupon.findFirst({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
+  if (!coupon) throw new AppError("Discount code not found", 404);
+  const updated = await prisma.coupon.update({ where: { id: coupon.id }, data: { isActive: !coupon.isActive } });
+  res.json({ success: true, discount: toDiscountDto(updated) });
+}
+async function deleteAdminDiscount(req, res) {
+  await prisma.coupon.deleteMany({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
+  res.json({ success: true });
+}
+async function exportSubscribers(req, res) {
+  const subs = await prisma.subscriber.findMany({ orderBy: { createdAt: "desc" } });
+  if (req.query.format === "json") {
+    res.json({ total: subs.length, subscribers: subs });
+    return;
+  }
+  const csv = ["email,subscribed_at", ...subs.map((s) => `${s.email},${s.createdAt.toISOString()}`)].join("\n");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="levix-subscribers.csv"');
+  res.send(csv);
+}
+var collectionSchema = import_zod7.z.object({
+  name: import_zod7.z.string().trim().min(2).max(120),
+  slug: import_zod7.z.string().trim().max(120).optional(),
+  description: import_zod7.z.string().max(5e3).optional().nullable(),
+  bannerImageUrl: import_zod7.z.string().trim().max(2e3).optional().nullable(),
+  mobileBannerUrl: import_zod7.z.string().trim().max(2e3).optional().nullable(),
+  isActive: import_zod7.z.boolean().default(true),
+  sortOrder: import_zod7.z.coerce.number().int().default(0),
+  homeLayout: import_zod7.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
+  showInGallery: import_zod7.z.boolean().default(false),
+  showInMenu: import_zod7.z.boolean().default(true),
+  productIds: import_zod7.z.array(import_zod7.z.string().max(64)).max(500).optional()
+});
+async function getAdminCollections(_req, res) {
+  const collections = await prisma.collection.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    include: { products: { orderBy: { sortOrder: "asc" }, select: { productId: true } } }
+  });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    collections: collections.map(({ products, ...c }) => ({ ...c, productIds: products.map((p) => p.productId) }))
+  });
+}
+async function setCollectionProducts(collectionId, productIds) {
+  const unique = [...new Set(productIds)];
+  const valid = new Set((await prisma.product.findMany({ where: { id: { in: unique } }, select: { id: true } })).map((p) => p.id));
+  const ordered = unique.filter((id) => valid.has(id));
+  await prisma.$transaction([
+    prisma.collectionProduct.deleteMany({ where: { collectionId } }),
+    prisma.collectionProduct.createMany({ data: ordered.map((productId, idx) => ({ collectionId, productId, sortOrder: idx })) })
+  ]);
+}
+async function createCollection(req, res) {
+  const data2 = collectionSchema.parse(req.body);
+  const slug = slugify(data2.slug || data2.name);
+  const clash = await prisma.category.findUnique({ where: { slug } });
+  if (clash) throw new AppError(`"${slug}" is already used by a category. Choose a different name or handle.`, 409);
+  const collection = await prisma.collection.create({
+    data: {
+      name: data2.name,
+      slug,
+      description: data2.description || null,
+      bannerImageUrl: data2.bannerImageUrl || null,
+      mobileBannerUrl: data2.mobileBannerUrl || null,
+      isActive: data2.isActive,
+      sortOrder: data2.sortOrder,
+      homeLayout: data2.homeLayout,
+      showInGallery: data2.showInGallery,
+      showInMenu: data2.showInMenu
+    }
+  });
+  if (data2.productIds) await setCollectionProducts(collection.id, data2.productIds);
+  res.status(201).json({ collection });
+}
+async function updateCollection(req, res) {
+  const data2 = collectionSchema.partial().parse(req.body);
+  const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
+  if (!existing) throw new AppError("Collection not found", 404);
+  const slug = data2.slug !== void 0 ? slugify(data2.slug || data2.name || existing.name) : existing.slug;
+  if (slug !== existing.slug && await prisma.category.findUnique({ where: { slug } })) {
+    throw new AppError(`"${slug}" is already used by a category.`, 409);
+  }
+  const collection = await prisma.collection.update({
+    where: { id: existing.id },
+    data: {
+      ...data2.name !== void 0 ? { name: data2.name } : {},
+      slug,
+      ...data2.description !== void 0 ? { description: data2.description || null } : {},
+      ...data2.bannerImageUrl !== void 0 ? { bannerImageUrl: data2.bannerImageUrl || null } : {},
+      ...data2.mobileBannerUrl !== void 0 ? { mobileBannerUrl: data2.mobileBannerUrl || null } : {},
+      ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
+      ...data2.sortOrder !== void 0 ? { sortOrder: data2.sortOrder } : {},
+      ...data2.homeLayout !== void 0 ? { homeLayout: data2.homeLayout } : {},
+      ...data2.showInGallery !== void 0 ? { showInGallery: data2.showInGallery } : {},
+      ...data2.showInMenu !== void 0 ? { showInMenu: data2.showInMenu } : {}
+    }
+  });
+  if (data2.productIds) await setCollectionProducts(collection.id, data2.productIds);
+  res.json({ collection });
+}
+async function deleteCollection(req, res) {
+  await prisma.collection.delete({ where: { id: req.params.id } });
+  res.json({ success: true });
+}
+
+// src/controllers/homeController.ts
+var cache2 = null;
+function invalidateHomeCache() {
+  cache2 = null;
+}
+async function getHome(_req, res) {
+  if (cache2 && cache2.expires > Date.now()) {
+    res.set("Cache-Control", "public, max-age=20");
+    res.json(cache2.body);
+    return;
+  }
+  const [settings, latest, collections, categories, colors] = await Promise.all([
+    getSettings(),
+    prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+      take: 12,
+      include: productListInclude
+    }),
+    prisma.collection.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      include: {
+        products: {
+          orderBy: { sortOrder: "asc" },
+          take: 16,
+          where: { product: { isActive: true } },
+          include: { product: { include: productListInclude } }
+        }
+      }
+    }),
+    prisma.category.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: { _count: { select: { products: { where: { isActive: true } } } } }
+    }),
+    prisma.product.findMany({
+      where: { isActive: true, colorGroup: { not: null } },
+      distinct: ["colorGroup"],
+      select: { colorGroup: true }
+    })
+  ]);
+  const toSection = (c) => ({
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    bannerImageUrl: c.bannerImageUrl,
+    mobileBannerUrl: c.mobileBannerUrl,
+    layout: c.homeLayout,
+    products: c.products.map((cp) => serializeProduct(cp.product))
+  });
+  const body = {
+    settings,
+    latestDrop: latest.map(serializeProduct),
+    sections: collections.filter((c) => c.homeLayout === "CAROUSEL" || c.homeLayout === "GRID").map(toSection),
+    gallery: collections.filter((c) => c.showInGallery && c.bannerImageUrl).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl, mobileBannerUrl: c.mobileBannerUrl })),
+    menu: {
+      collections: collections.filter((c) => c.showInMenu).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl })),
+      categories: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        group: c.group || "TOP",
+        imageUrl: c.imageUrl,
+        count: c._count.products
+      })),
+      colors: colors.map((c) => c.colorGroup).filter(Boolean)
+    }
+  };
+  cache2 = { body, expires: Date.now() + 20 * 1e3 };
+  res.set("Cache-Control", "public, max-age=20");
+  res.json(body);
+}
+
+// src/routes/adminRoutes.ts
 var router7 = (0, import_express7.Router)();
 router7.use(verifyFirebaseToken);
 router7.use(requireAdmin);
-router7.get("/metrics", getDashboardMetrics);
-router7.get("/orders", getAllOrders);
-router7.patch("/orders/:id/status", updateOrderStatus);
-router7.post("/products", createProduct);
-router7.put("/products/:id", updateProduct);
-router7.delete("/products/:id", deleteProduct);
-router7.get("/settings", getAdminStoreSettings);
-router7.post("/settings", updateAdminStoreSettings);
-router7.get("/discounts", getAdminDiscounts);
-router7.post("/discounts", createAdminDiscount);
-router7.delete("/discounts/:id", deleteAdminDiscount);
+router7.use((req, res, next) => {
+  if (req.method !== "GET") res.on("finish", invalidateHomeCache);
+  next();
+});
+router7.get("/metrics", asyncHandler(getDashboardMetrics));
+router7.get("/orders", asyncHandler(getAllOrders));
+router7.patch("/orders/:id", asyncHandler(updateOrder));
+router7.patch("/orders/:id/status", asyncHandler(updateOrder));
+router7.delete("/orders/:id", asyncHandler(deleteOrder));
+router7.get("/products", asyncHandler(getAdminProducts));
+router7.post("/products", asyncHandler(createProduct));
+router7.put("/products/:id", asyncHandler(updateProduct));
+router7.delete("/products/:id", asyncHandler(deleteProduct));
+router7.post("/categories", asyncHandler(createCategory));
+router7.put("/categories/:id", asyncHandler(updateCategory));
+router7.delete("/categories/:id", asyncHandler(deleteCategory));
+router7.get("/settings", asyncHandler(getAdminStoreSettings));
+router7.post("/settings", asyncHandler(updateAdminStoreSettings));
+router7.put("/settings", asyncHandler(updateAdminStoreSettings));
+router7.get("/discounts", asyncHandler(getAdminDiscounts));
+router7.post("/discounts", asyncHandler(createAdminDiscount));
+router7.patch("/discounts/:id/toggle", asyncHandler(toggleAdminDiscount));
+router7.delete("/discounts/:id", asyncHandler(deleteAdminDiscount));
+router7.get("/subscribers", asyncHandler(exportSubscribers));
+router7.get("/collections", asyncHandler(getAdminCollections));
+router7.post("/collections", asyncHandler(createCollection));
+router7.put("/collections/:id", asyncHandler(updateCollection));
+router7.delete("/collections/:id", asyncHandler(deleteCollection));
 var adminRoutes_default = router7;
 
-// backend/src/app.ts
-var app = (0, import_express8.default)();
-app.use((0, import_helmet.default)({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
-var cleanFrontendUrl = (env.FRONTEND_URL || "").replace(/\/+$/, "");
-var allowedOrigins = /* @__PURE__ */ new Set([
-  cleanFrontendUrl,
-  "https://thelevix.shop",
-  "https://www.thelevix.shop",
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "http://localhost"
-]);
-app.use((0, import_cors.default)({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (env.NODE_ENV !== "production" || allowedOrigins.has(origin)) {
-      return callback(null, true);
+// src/routes/storeRoutes.ts
+var import_express8 = require("express");
+var import_zod8 = require("zod");
+var router8 = (0, import_express8.Router)();
+router8.get(
+  "/settings",
+  asyncHandler(async (_req, res) => {
+    res.set("Cache-Control", "public, max-age=30");
+    res.json({ settings: await getSettings() });
+  })
+);
+router8.get("/categories", asyncHandler(getCategories));
+router8.get("/home", asyncHandler(getHome));
+router8.post(
+  "/subscribe",
+  authRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { email } = import_zod8.z.object({ email: import_zod8.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
+    await prisma.subscriber.upsert({ where: { email }, update: {}, create: { email } });
+    res.json({ success: true });
+  })
+);
+var storeRoutes_default = router8;
+
+// src/routes/wishlistRoutes.ts
+var import_express9 = require("express");
+
+// src/controllers/wishlistController.ts
+var import_zod9 = require("zod");
+async function getOrCreateWishlist(userId) {
+  return prisma.wishlist.upsert({ where: { userId }, update: {}, create: { userId } });
+}
+async function send(res, userId) {
+  const wl = await prisma.wishlist.findUnique({
+    where: { userId },
+    include: {
+      items: {
+        orderBy: { createdAt: "desc" },
+        include: { product: { include: productListInclude } }
+      }
     }
-    return callback(null, true);
-  },
-  credentials: true
-}));
-app.use(import_express8.default.json({
-  limit: "5mb",
-  verify: (req, _res, buf) => {
-    req.rawBody = buf;
+  });
+  const products = (wl?.items || []).map((i) => i.product).filter((p) => p.isActive).map(serializeProduct);
+  res.set("Cache-Control", "no-store");
+  res.json({ productIds: products.map((p) => p.id), products });
+}
+async function getWishlist(req, res) {
+  if (!req.user) throw new AppError("Please sign in", 401);
+  await send(res, req.user.id);
+}
+async function toggleWishlist(req, res) {
+  if (!req.user) throw new AppError("Please sign in", 401);
+  const productId = req.params.productId;
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { id: true } });
+  if (!product) throw new AppError("Product not found", 404);
+  const wl = await getOrCreateWishlist(req.user.id);
+  const existing = await prisma.wishlistItem.findUnique({ where: { wishlistId_productId: { wishlistId: wl.id, productId } } });
+  if (existing) await prisma.wishlistItem.delete({ where: { id: existing.id } });
+  else await prisma.wishlistItem.create({ data: { wishlistId: wl.id, productId } });
+  await send(res, req.user.id);
+}
+async function mergeWishlist(req, res) {
+  if (!req.user) throw new AppError("Please sign in", 401);
+  const { productIds } = import_zod9.z.object({ productIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(200) }).parse(req.body);
+  const wl = await getOrCreateWishlist(req.user.id);
+  if (productIds.length) {
+    const valid = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true } });
+    for (const p of valid) {
+      await prisma.wishlistItem.upsert({
+        where: { wishlistId_productId: { wishlistId: wl.id, productId: p.id } },
+        update: {},
+        create: { wishlistId: wl.id, productId: p.id }
+      }).catch(() => void 0);
+    }
   }
-}));
-app.use(import_express8.default.urlencoded({ extended: true, limit: "5mb" }));
-app.use("/api", apiRateLimiter);
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    service: "levix-backend",
+  await send(res, req.user.id);
+}
+async function getProductsByIds(req, res) {
+  const ids = String(req.query.ids || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
+  if (!ids.length) {
+    res.json({ products: [] });
+    return;
+  }
+  const products = await prisma.product.findMany({ where: { id: { in: ids }, isActive: true }, include: productListInclude });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  res.json({ products: ids.map((id) => byId.get(id)).filter(Boolean).map(serializeProduct) });
+}
+
+// src/routes/wishlistRoutes.ts
+var router9 = (0, import_express9.Router)();
+router9.get("/products", asyncHandler(getProductsByIds));
+router9.get("/", verifyFirebaseToken, asyncHandler(getWishlist));
+router9.post("/merge", verifyFirebaseToken, asyncHandler(mergeWishlist));
+router9.post("/:productId", verifyFirebaseToken, asyncHandler(toggleWishlist));
+var wishlistRoutes_default = router9;
+
+// src/app.ts
+var app = (0, import_express10.default)();
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+app.use(
+  (0, import_helmet.default)({
+    // CSP is left off because Razorpay Checkout and Firebase Auth load from many Google/Razorpay domains.
+    contentSecurityPolicy: false,
+    // Needed for Google sign-in popups and Razorpay checkout windows.
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  })
+);
+app.use((0, import_compression.default)());
+var allowedOrigins = new Set(
+  [env.FRONTEND_URL, "https://thelevix.shop", "https://www.thelevix.shop", "http://localhost:5173", "http://localhost:4173"].filter(
+    Boolean
+  )
+);
+app.use(
+  "/api",
+  (0, import_cors.default)({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.has(origin) || env.NODE_ENV !== "production") return callback(null, true);
+      return callback(null, false);
+    },
+    credentials: false,
+    allowedHeaders: ["Content-Type", "Authorization", "X-Anonymous-Token"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    maxAge: 86400
+  })
+);
+app.use(
+  import_express10.default.json({
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
+app.use(import_express10.default.urlencoded({ extended: false, limit: "1mb" }));
+app.get("/api/health", async (_req, res) => {
+  let database = "ok";
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch {
+    database = "unavailable";
+  }
+  res.set("Cache-Control", "no-store");
+  res.status(database === "ok" ? 200 : 503).json({
+    status: database === "ok" ? "ok" : "degraded",
+    database,
+    service: "levix",
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    uptime: process.uptime(),
-    nodeEnv: env.NODE_ENV
+    uptime: Math.round(process.uptime())
   });
 });
+app.use("/api", apiRateLimiter);
+app.use("/api/store", storeRoutes_default);
 app.use("/api/auth", authRoutes_default);
 app.use("/api/products", productRoutes_default);
 app.use("/api/collections", collectionRoutes_default);
 app.use("/api/cart", cartRoutes_default);
 app.use("/api/orders", orderRoutes_default);
 app.use("/api/payments", paymentRoutes_default);
+app.use("/api/wishlist", wishlistRoutes_default);
 app.use("/api/admin", adminRoutes_default);
+app.use("/api", notFoundApi);
 var currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 var possiblePaths = [
   import_path.default.resolve(process.cwd(), "frontend/dist"),
-  import_path.default.resolve(process.cwd(), "dist"),
-  import_path.default.resolve(currentDir, "../../frontend/dist"),
-  import_path.default.resolve(currentDir, "../frontend/dist"),
   import_path.default.resolve(currentDir, "frontend/dist"),
-  "./frontend/dist"
+  import_path.default.resolve(currentDir, "../frontend/dist"),
+  import_path.default.resolve(currentDir, "../../frontend/dist"),
+  import_path.default.resolve(process.cwd(), "dist")
 ];
 var frontendDist = possiblePaths.find((p) => {
   try {
-    return import_fs2.default.existsSync(p) && import_fs2.default.existsSync(import_path.default.join(p, "index.html"));
-  } catch (_) {
+    return import_fs2.default.existsSync(import_path.default.join(p, "index.html"));
+  } catch {
     return false;
   }
 }) || "";
 if (frontendDist) {
-  console.log(`\u2713 Serving frontend static files from: ${frontendDist}`);
-  app.use(import_express8.default.static(frontendDist));
+  console.log(`\u2713 Serving storefront from: ${frontendDist}`);
+  app.use(
+    import_express10.default.static(frontendDist, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        if (filePath.includes(`${import_path.default.sep}assets${import_path.default.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.json")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=86400");
+        }
+      }
+    })
+  );
   app.get("*", (req, res, next) => {
     if (req.path.startsWith("/api")) return next();
+    if (/\.[a-z0-9]{2,5}$/i.test(req.path)) {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader("Cache-Control", "no-cache");
     res.sendFile(import_path.default.join(frontendDist, "index.html"));
   });
 } else {
-  console.warn("\u26A0\uFE0F Frontend dist directory not found in known locations. Checked:", possiblePaths);
+  console.warn("\u26A0\uFE0F frontend/dist not found. Checked:", possiblePaths);
   app.get("*", (req, res, next) => {
     if (req.path.startsWith("/api")) return next();
-    res.status(200).send("<h1>LEVIX Production Server Online</h1><p>Storefront is initializing. Please refresh in a moment.</p>");
+    res.status(503).send("<h1>LEVIX</h1><p>The store is being updated. Please refresh in a moment.</p>");
   });
 }
 app.use(errorHandler);
 
-// backend/src/server.ts
+// src/server.ts
 var rawPort = process.env.PORT || 3e3;
-async function bootstrap() {
-  try {
-    const isSocket = typeof rawPort === "string" && isNaN(Number(rawPort));
-    const port = isSocket ? rawPort : Number(rawPort) || 3e3;
-    const server = isSocket ? app.listen(port, () => {
-      console.log(`\u2713 Levix server listening on socket: ${port} [${env.NODE_ENV}]`);
-    }) : app.listen(port, "0.0.0.0", () => {
-      console.log(`\u2713 Levix server listening on port: ${port} [${env.NODE_ENV}]`);
-    });
+function bootstrap() {
+  const isSocket = typeof rawPort === "string" && isNaN(Number(rawPort));
+  const port = isSocket ? rawPort : Number(rawPort) || 3e3;
+  const server = isSocket ? app.listen(port, () => console.log(`\u2713 LEVIX listening on socket ${port} [${env.NODE_ENV}]`)) : app.listen(port, "0.0.0.0", () => console.log(`\u2713 LEVIX listening on port ${port} [${env.NODE_ENV}]`));
+  server.keepAliveTimeout = 65e3;
+  server.headersTimeout = 66e3;
+  if (!isRazorpayConfigured()) console.warn("\u26A0\uFE0F RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET missing \u2014 checkout is disabled.");
+  if (!env.RAZORPAY_WEBHOOK_SECRET) console.warn("\u26A0\uFE0F RAZORPAY_WEBHOOK_SECRET missing \u2014 payment webhooks are disabled.");
+  if (!env.FIREBASE_PROJECT_ID) console.warn("\u26A0\uFE0F FIREBASE_PROJECT_ID missing \u2014 sign-in will not work.");
+  prisma.$connect().then(async () => {
+    console.log("\u2713 Connected to MySQL.");
     try {
-      prisma.$connect?.().then(() => {
-        console.log("\u2713 Connected to MySQL database via Prisma ORM.");
-      }).catch((dbErr) => {
-        console.warn("\u26A0\uFE0F Database connection note:", dbErr?.message || dbErr);
-      });
-    } catch (e) {
-      console.warn("\u26A0\uFE0F Database initial call note:", e?.message || e);
+      await ensureStoreDefaults();
+      console.log("\u2713 Store defaults ready.");
+    } catch (err) {
+      console.error("\u26A0\uFE0F Could not prepare store defaults (did you run `npx prisma db push`?):", err?.message);
     }
-    const shutdown = async (signal) => {
-      console.log(`Received ${signal}. Gracefully terminating server...`);
-      server.close(async () => {
-        try {
-          await prisma.$disconnect();
-        } catch (_) {
-        }
-        console.log("Database connection closed. Exiting process.");
-        process.exit(0);
-      });
-    };
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
-    return server;
-  } catch (err) {
-    console.error("CRITICAL: Server startup caught error:", err.message);
-  }
+  }).catch((err) => console.error("\u26A0\uFE0F Database connection failed:", err?.message || err));
+  const shutdown = (signal) => {
+    console.log(`${signal} received \u2014 shutting down gracefully.`);
+    server.close(async () => {
+      try {
+        await prisma.$disconnect();
+      } catch {
+      }
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 1e4).unref();
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("unhandledRejection", (reason) => console.error("Unhandled promise rejection:", reason));
+  return server;
 }
 var serverInstance = bootstrap();
 var server_default = app;
@@ -1660,8 +2317,4 @@ var server_default = app;
   app,
   serverInstance
 });
-
-module.exports = app;
-module.exports.default = app;
-module.exports.app = app;
-module.exports.serverInstance = serverInstance;
+module.exports = app; module.exports.default = app; module.exports.app = app; module.exports.serverInstance = serverInstance;

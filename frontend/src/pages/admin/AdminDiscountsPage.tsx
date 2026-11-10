@@ -20,7 +20,7 @@ export const AdminDiscountsPage: React.FC = () => {
   const [type, setType] = useState<'PERCENTAGE' | 'FIXED'>('PERCENTAGE');
   const [value, setValue] = useState('20');
   const [minOrderINR, setMinOrderINR] = useState('1999');
-  const [expiresAt, setExpiresAt] = useState('2026-12-31');
+  const [expiresAt, setExpiresAt] = useState('');
   const [isActive, setIsActive] = useState(true);
 
   const loadDiscounts = async () => {
@@ -50,7 +50,7 @@ export const AdminDiscountsPage: React.FC = () => {
     setType('PERCENTAGE');
     setValue('20');
     setMinOrderINR('1999');
-    setExpiresAt('2026-12-31');
+    setExpiresAt('');
     setIsActive(true);
     setShowModal(true);
   };
@@ -63,7 +63,7 @@ export const AdminDiscountsPage: React.FC = () => {
       await apiClient.post('/admin/discounts', {
         code: code.trim().toUpperCase(),
         type,
-        value: parseFloat(value) || 10,
+        value: parseFloat(value),
         minOrderINR: parseFloat(minOrderINR) || 0,
         expiresAt,
         isActive
@@ -221,7 +221,8 @@ export const AdminDiscountsPage: React.FC = () => {
                       Orders over RS. {(d.minOrderPaise / 100).toLocaleString('en-IN')}
                     </td>
                     <td className="py-3.5 px-4 font-mono text-neutral-500">
-                      {d.expiresAt}
+                      {d.expiresAt ? `Expires ${d.expiresAt}` : 'No expiry'}
+                      {typeof d.usedCount === 'number' ? ` • Used ${d.usedCount}×` : ''}
                     </td>
                     <td className="py-3.5 px-4">
                       <button
@@ -333,11 +334,10 @@ export const AdminDiscountsPage: React.FC = () => {
 
                 <div>
                   <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                    Valid Until Date
+                    Valid Until (optional)
                   </label>
                   <input
                     type="date"
-                    required
                     value={expiresAt}
                     onChange={(e) => setExpiresAt(e.target.value)}
                     className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none"

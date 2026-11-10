@@ -86,12 +86,17 @@ export const AccountPage: React.FC = () => {
             Welcome, {user.displayName || user.email?.split('@')[0]}
           </h1>
           <p className="text-xs text-neutral-600 mt-1">{user.email}</p>
+          {!user.emailVerified && user.providerData.some((p) => p.providerId === 'password') && (
+            <p className="text-[11px] text-yellow-800 bg-yellow-50 border border-yellow-200 px-2 py-1 mt-2 inline-block">
+              Please verify your email — check your inbox for the verification link.
+            </p>
+          )}
         </div>
 
         <div className="flex items-center space-x-3">
           {isAdmin && (
             <Link
-              to="/admin/products"
+              to="/admin"
               className="px-4 py-2.5 bg-[#FF5400] text-white text-xs font-bold uppercase tracking-widest hover:bg-[#e04a00] flex items-center gap-1.5 shadow-sm"
             >
               <Shield className="w-3.5 h-3.5" />
@@ -131,7 +136,7 @@ export const AccountPage: React.FC = () => {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              to="/admin/products"
+              to="/admin"
               className="px-5 py-2.5 bg-[#FF5400] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#e04a00] flex items-center gap-1.5 transition-all shadow-sm"
             >
               <span>Add / Edit Products</span>
@@ -208,7 +213,10 @@ export const AccountPage: React.FC = () => {
               {profile.addresses.map((addr) => (
                 <div key={addr.id} className="p-4 border border-black/15 space-y-2 relative bg-neutral-50/60">
                   <div className="flex justify-between items-start">
-                    <span className="font-bold text-xs uppercase text-black">{addr.fullName}</span>
+                    <span className="font-bold text-xs uppercase text-black">
+                      {addr.fullName}
+                      {addr.isDefault && <span className="ml-2 px-1.5 py-0.5 bg-black text-white text-[9px] tracking-wider">DEFAULT</span>}
+                    </span>
                     <button
                       onClick={() => handleDeleteAddress(addr.id)}
                       className="text-neutral-400 hover:text-red-600 p-1"

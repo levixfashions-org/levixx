@@ -76,8 +76,10 @@ model Category {
   id          String    @id @default(uuid())
   name        String
   slug        String    @unique
-  description String?
-  imageUrl    String?
+  description String?   @db.Text
+  imageUrl    String?   @db.Text
+  sortOrder   Int       @default(0)
+  group       String?   // TOP | BOTTOM | ACCESSORIES (used by the mega menu)
   products    Product[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -87,9 +89,14 @@ model Collection {
   id              String              @id @default(uuid())
   name            String
   slug            String              @unique
-  description     String?
-  bannerImageUrl  String?
+  description     String?             @db.Text
+  bannerImageUrl  String?             @db.Text
+  mobileBannerUrl String?             @db.Text
   isActive        Boolean             @default(true)
+  sortOrder       Int                 @default(0)
+  homeLayout      String              @default("NONE") // NONE | CAROUSEL | GRID — how it appears on the homepage
+  showInGallery   Boolean             @default(false)  // appears in the homepage banner slideshow
+  showInMenu      Boolean             @default(true)
   products        CollectionProduct[]
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
@@ -99,14 +106,15 @@ model Product {
   id           String              @id @default(uuid())
   name         String
   slug         String              @unique
-  description  String
-  details      String?
-  fabricCare   String?
-  fitGuide     String?
+  description  String              @db.Text
+  details      String?             @db.Text
+  fabricCare   String?             @db.Text
+  fitGuide     String?             @db.Text
   basePrice    Int                 // Stored in paise (e.g. 499000 paise = Rs. 4,990)
   comparePrice Int?                // Compare at price in paise
   isFeatured   Boolean             @default(false)
   isActive     Boolean             @default(true)
+  colorGroup   String?             // e.g. BLACKS, BLUES — powers "Shop by colour"
   categoryId   String?
   category     Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   images       ProductImage[]
@@ -137,7 +145,7 @@ model ProductImage {
   id        String   @id @default(uuid())
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  url       String
+  url       String   @db.Text
   altText   String?
   sortOrder Int      @default(0)
   isCover   Boolean  @default(false)
@@ -207,7 +215,7 @@ model WishlistItem {
 
 model Order {
   id                      String        @id @default(uuid())
-  orderNumber             String        @unique // e.g. "BLU-2026-1001"
+  orderNumber             String        @unique // e.g. "LVX-261110-A7K2Q9"
   userId                  String?
   user                    User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   customerEmail           String
@@ -221,6 +229,14 @@ model Order {
   status                  OrderStatus   @default(PENDING)
   paymentStatus           PaymentStatus @default(PENDING)
   razorpayOrderId         String?       @unique
+  couponCode              String?
+  cartId                  String?
+  accessKey               String?       // secret key so guest buyers can view their own order
+  courier                 String?
+  trackingNumber          String?
+  adminNotes              String?       @db.Text
+  stockDeducted           Boolean       @default(false)
+  paidAt                  DateTime?
   payment                 Payment?
   items                   OrderItem[]
   createdAt               DateTime      @default(now())
@@ -245,7 +261,7 @@ model OrderItem {
   unitPricePaise Int
   quantity       Int
   subtotalPaise  Int
-  imageUrl       String?
+  imageUrl       String?         @db.Text
   createdAt      DateTime        @default(now())
 
   @@index([orderId])
@@ -272,9 +288,35 @@ model Coupon {
   discountType  DiscountType
   discountValue Int          // percentage (e.g. 10 for 10%) or fixed paise (e.g. 50000 for Rs. 500)
   minOrderPaise Int          @default(0)
+  maxUses       Int?
+  usedCount     Int          @default(0)
   isActive      Boolean      @default(true)
   validUntil    DateTime?
   createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+}
+
+model StoreSetting {
+  id                    String   @id @default("default")
+  announcementText      String   @db.Text
+  heroHeadline          String
+  heroSubtitle          String   @db.Text
+  supportEmail          String
+  supportPhone          String   @default("")
+  instagramHandle       String   @default("")
+  freeShippingThreshold Int      @default(1999) // rupees
+  shippingFee           Int      @default(150)  // rupees
+  announcementEnabled   Boolean  @default(false)
+  heroDesktopImage      String?  @db.Text
+  heroMobileImage       String?  @db.Text
+  heroLink              String   @default("/collections/all-products")
+  heroCtaText           String   @default("Shop now")
+  latestDropTitle       String   @default("Latest drop")
+  seoTitle              String?  @db.Text
+  seoText               String?  @db.Text
+  shippingInfo          String?  @db.Text
+  careInfo              String?  @db.Text
+  updatedAt             DateTime @default(now()) @updatedAt
 }
 
 model Review {
@@ -285,9 +327,15 @@ model Review {
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   authorName String
   rating     Int      // 1 to 5
-  comment    String
+  comment    String   @db.Text
   isApproved Boolean  @default(true)
   createdAt  DateTime @default(now())
 
   @@index([productId])
+}
+
+model Subscriber {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
 }

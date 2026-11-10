@@ -1,11 +1,39 @@
 import { Router } from 'express';
-import { getDashboardMetrics, getAllOrders, updateOrderStatus, createProduct } from '../controllers/adminController.js';
 import { verifyFirebaseToken, requireAdmin } from '../middleware/verifyFirebaseToken.js';
+import { asyncHandler as h } from '../middleware/errorHandler.js';
+import * as admin from '../controllers/adminController.js';
+import { invalidateHomeCache } from '../controllers/homeController.js';
 const router = Router();
 router.use(verifyFirebaseToken);
 router.use(requireAdmin);
-router.get('/metrics', getDashboardMetrics);
-router.get('/orders', getAllOrders);
-router.patch('/orders/:id/status', updateOrderStatus);
-router.post('/products', createProduct);
+// Any change made in the admin panel refreshes the cached homepage data.
+router.use((req, res, next) => {
+    if (req.method !== 'GET')
+        res.on('finish', invalidateHomeCache);
+    next();
+});
+router.get('/metrics', h(admin.getDashboardMetrics));
+router.get('/orders', h(admin.getAllOrders));
+router.patch('/orders/:id', h(admin.updateOrder));
+router.patch('/orders/:id/status', h(admin.updateOrder));
+router.delete('/orders/:id', h(admin.deleteOrder));
+router.get('/products', h(admin.getAdminProducts));
+router.post('/products', h(admin.createProduct));
+router.put('/products/:id', h(admin.updateProduct));
+router.delete('/products/:id', h(admin.deleteProduct));
+router.post('/categories', h(admin.createCategory));
+router.put('/categories/:id', h(admin.updateCategory));
+router.delete('/categories/:id', h(admin.deleteCategory));
+router.get('/settings', h(admin.getAdminStoreSettings));
+router.post('/settings', h(admin.updateAdminStoreSettings));
+router.put('/settings', h(admin.updateAdminStoreSettings));
+router.get('/discounts', h(admin.getAdminDiscounts));
+router.post('/discounts', h(admin.createAdminDiscount));
+router.patch('/discounts/:id/toggle', h(admin.toggleAdminDiscount));
+router.delete('/discounts/:id', h(admin.deleteAdminDiscount));
+router.get('/subscribers', h(admin.exportSubscribers));
+router.get('/collections', h(admin.getAdminCollections));
+router.post('/collections', h(admin.createCollection));
+router.put('/collections/:id', h(admin.updateCollection));
+router.delete('/collections/:id', h(admin.deleteCollection));
 export default router;

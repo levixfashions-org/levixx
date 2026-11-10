@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { apiClient, getStoreSettings, saveStoreSettings, DEFAULT_STORE_SETTINGS, StoreSettings } from '../../services/api';
+import { apiClient, DEFAULT_STORE_SETTINGS, StoreSettings } from '../../services/api';
+import { useSettingsStore } from '../../store/settingsStore';
+import { AdminCategoriesManager } from '../../components/admin/AdminCategoriesManager';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { Sliders, CheckCircle2, RotateCcw, Save, Sparkles, Megaphone, Mail, Phone, Globe, Truck } from 'lucide-react';
 
 export const AdminSettingsPage: React.FC = () => {
   const { user, isAdmin, loading: authLoading } = useAuth();
-  const [settings, setSettings] = useState<StoreSettings>(getStoreSettings());
+  const storeSettings = useSettingsStore((st) => st.settings);
+  const setStoreSettings = useSettingsStore((st) => st.setSettings);
+  const [settings, setSettings] = useState<StoreSettings>(storeSettings);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -17,14 +21,22 @@ export const AdminSettingsPage: React.FC = () => {
       navigate('/login');
       return;
     }
+    if (user && isAdmin) {
+      apiClient
+        .get('/admin/settings')
+        .then((res) => res.data?.settings && setSettings({ ...DEFAULT_STORE_SETTINGS, ...res.data.settings }))
+        .catch(() => undefined);
+    }
   }, [user, isAdmin, authLoading, navigate]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await apiClient.post('/admin/settings', settings);
-      saveStoreSettings(settings);
+      const res = await apiClient.post('/admin/settings', settings);
+      const saved = { ...DEFAULT_STORE_SETTINGS, ...(res.data?.settings || settings) };
+      setSettings(saved);
+      setStoreSettings(saved);
       setSuccessMsg('✓ Store settings saved and live across the entire website!');
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
@@ -35,10 +47,9 @@ export const AdminSettingsPage: React.FC = () => {
   };
 
   const handleResetDefaults = () => {
-    if (window.confirm('Reset all store content and announcement settings to initial brand defaults?')) {
+    if (window.confirm('Fill the form with the original brand defaults? Click "Save All Settings" afterwards to publish.')) {
       setSettings(DEFAULT_STORE_SETTINGS);
-      saveStoreSettings(DEFAULT_STORE_SETTINGS);
-      setSuccessMsg('✓ Restored official brand defaults.');
+      setSuccessMsg('Defaults loaded into the form — click Save to publish.');
       setTimeout(() => setSuccessMsg(null), 4000);
     }
   };
@@ -259,8 +270,78 @@ export const AdminSettingsPage: React.FC = () => {
                 />
               </div>
               <p className="text-[10px] text-neutral-500 mt-1">
-                Carts equal or greater than this value receive free courier delivery.
+                Carts equal or greater than this value receive free delivery. Set 0 for free shipping on everything.
               </p>
+            </div>
+
+            <div className="max-w-xs text-xs">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                Shipping Fee Below Threshold (INR)
+              </label>
+              <div className="flex">
+                <span className="bg-neutral-100 border border-r-0 border-black/20 px-3 py-2.5 font-mono font-bold text-neutral-700">RS.</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={settings.shippingFee}
+                  onChange={(e) => setSettings({ ...settings, shippingFee: parseFloat(e.target.value) || 0 })}
+                  className="w-full border border-black/20 p-2.5 font-mono font-bold focus:border-black focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Homepage hero, SEO & product page info */}
+          <div className="bg-white p-6 border border-black/10 shadow-sm space-y-5">
+            <h2 className="font-bold uppercase tracking-wider text-sm text-black">Homepage & Product Page</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700">Hero image — desktop (URL)</label>
+                <input value={settings.heroDesktopImage} onChange={(e) => setSettings({ ...settings, heroDesktopImage: e.target.value })} placeholder="https://thelevix.shop/images/hero-desktop.jpg" className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
+                <div className="aspect-[16/9] bg-neutral-100 overflow-hidden">
+                  <img src={settings.heroDesktopImage || '/hero_desktop.jpg'} alt="" className="w-full h-full object-cover" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700">Hero image — mobile (URL, portrait)</label>
+                <input value={settings.heroMobileImage} onChange={(e) => setSettings({ ...settings, heroMobileImage: e.target.value })} placeholder="https://thelevix.shop/images/hero-mobile.jpg" className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
+                <div className="h-[calc((100vw-3rem)*9/16)] md:h-auto md:aspect-[16/9] bg-neutral-100 overflow-hidden flex justify-center">
+                  <img src={settings.heroMobileImage || settings.heroDesktopImage || '/hero_mobile.jpg'} alt="" className="h-full aspect-[9/16] object-cover" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Hero button text</label>
+                <input value={settings.heroCtaText} onChange={(e) => setSettings({ ...settings, heroCtaText: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Hero link</label>
+                <input value={settings.heroLink} onChange={(e) => setSettings({ ...settings, heroLink: e.target.value })} placeholder="/collections/all-products" className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">"Latest drop" row title</label>
+                <input value={settings.latestDropTitle} onChange={(e) => setSettings({ ...settings, latestDropTitle: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <label className="flex items-center gap-2 font-semibold cursor-pointer self-end pb-2">
+                <input type="checkbox" checked={settings.announcementEnabled} onChange={(e) => setSettings({ ...settings, announcementEnabled: e.target.checked })} className="accent-black w-4 h-4" />
+                Show the scrolling announcement bar at the top of the site
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Footer SEO heading</label>
+                <input value={settings.seoTitle} onChange={(e) => setSettings({ ...settings, seoTitle: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1 mt-3">Footer SEO text ("Read more")</label>
+                <textarea rows={5} value={settings.seoText} onChange={(e) => setSettings({ ...settings, seoText: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Product page "Shipping" tab (one point per line)</label>
+                <textarea rows={4} value={settings.shippingInfo} onChange={(e) => setSettings({ ...settings, shippingInfo: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1 mt-3">Default "Washcare" tab (used when a product has no fabric & care text)</label>
+                <textarea rows={4} value={settings.careInfo} onChange={(e) => setSettings({ ...settings, careInfo: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
             </div>
           </div>
 
@@ -277,6 +358,8 @@ export const AdminSettingsPage: React.FC = () => {
           </div>
 
         </form>
+
+        <AdminCategoriesManager />
 
       </div>
     </div>

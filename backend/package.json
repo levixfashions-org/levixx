@@ -1,22 +1,21 @@
 {
   "name": "levix-backend",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "build": "prisma generate && tsc",
+    "bundle": "prisma generate && tsc --noEmit && esbuild src/server.ts --bundle --platform=node --target=node18 --format=cjs --packages=external --outfile=../server.js --footer:js=\"module.exports = app; module.exports.default = app; module.exports.app = app; module.exports.serverInstance = serverInstance;\"",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.10.2",
-    "cloudinary": "^2.5.1",
+    "compression": "^1.7.5",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -25,8 +24,15 @@
     "helmet": "^8.0.0",
     "prisma": "^6.4.1",
     "razorpay": "^2.9.5",
-    "tsx": "^4.19.2",
-    "typescript": "~5.7.2",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.7.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
   }
 }

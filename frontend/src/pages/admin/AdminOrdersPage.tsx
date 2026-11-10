@@ -35,13 +35,14 @@ export const AdminOrdersPage: React.FC = () => {
   const [courierName, setCourierName] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
   const [savingCourier, setSavingCourier] = useState(false);
+  const [showUnpaid, setShowUnpaid] = useState(false);
 
   const navigate = useNavigate();
 
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/admin/orders');
+      const res = await apiClient.get('/admin/orders', { includeUnpaid: showUnpaid ? 'true' : undefined, limit: 200 });
       setOrders(res.data.orders || []);
     } catch (err) {
       console.warn('Failed to load orders:', err);
@@ -56,13 +57,15 @@ export const AdminOrdersPage: React.FC = () => {
       return;
     }
     if (user && isAdmin) loadOrders();
-  }, [user, isAdmin, authLoading, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isAdmin, authLoading, navigate, showUnpaid]);
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     try {
       setUpdatingId(orderId);
       await apiClient.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
-      setActionMsg(`✓ Order #${orderId} marked as ${newStatus}.`);
+      const ordNo = orders.find((o) => o.id === orderId)?.orderNumber || '';
+      setActionMsg(`✓ Order ${ordNo} marked as ${newStatus}.`);
       await loadOrders();
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder({ ...selectedOrder, status: newStatus });
@@ -111,33 +114,9 @@ export const AdminOrdersPage: React.FC = () => {
     }
   };
 
-  const handleCreateTestOrder = async () => {
-    try {
-      await apiClient.post('/admin/orders', {
-        customerName: 'Test Client',
-        customerEmail: 'client@thelevix.shop',
-        customerPhone: '',
-        shippingAddress: 'Client Delivery Address, India',
-        status: 'PROCESSING',
-        paymentStatus: 'PAID',
-        totalPaise: 299900,
-        courier: 'Blue Dart Air Express',
-        trackingNumber: 'BD' + Math.floor(10000000 + Math.random() * 90000000) + 'IN',
-        items: [
-          { productName: 'Levix Heavyweight Streetwear Drop', size: 'L', quantity: 1, unitPricePaise: 299900 }
-        ]
-      });
-      setActionMsg('✓ New client test order created!');
-      await loadOrders();
-      setTimeout(() => setActionMsg(null), 4000);
-    } catch (err: any) {
-      alert(err.message || 'Failed to create test order');
-    }
-  };
-
   const openOrderInspector = (ord: any) => {
     setSelectedOrder(ord);
-    setCourierName(ord.courier || 'Blue Dart Express');
+    setCourierName(ord.courier || '');
     setTrackingNumber(ord.trackingNumber || '');
   };
 
@@ -167,17 +146,17 @@ export const AdminOrdersPage: React.FC = () => {
               Customer Orders Administration
             </h1>
             <p className="text-xs text-neutral-600 mt-1">
-              Track Razorpay payments, assign courier tracking numbers (Blue Dart, Delhivery), and update order status.
+              Paid orders from Razorpay. Add courier tracking and update status — customers see it in My Orders.
             </p>
           </div>
 
           <div className="flex items-center space-x-3">
-            <button
-              onClick={handleCreateTestOrder}
-              className="px-4 py-2.5 bg-black text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              <Plus className="w-4 h-4 text-[#FF5400]" />
-              <span>Add Test Order</span>
+            <label className="flex items-center gap-2 text-[11px] font-semibold text-neutral-700 cursor-pointer">
+              <input type="checkbox" checked={showUnpaid} onChange={(e) => setShowUnpaid(e.target.checked)} className="accent-black" />
+              Show abandoned / unpaid checkouts
+            </label>
+            <button onClick={loadOrders} className="px-4 py-2.5 border border-black text-black text-xs font-bold uppercase tracking-wider hover:bg-black hover:text-white">
+              Refresh
             </button>
           </div>
         </div>
@@ -374,7 +353,16 @@ export const AdminOrdersPage: React.FC = () => {
                   <p><span className="font-semibold text-black">Name:</span> {selectedOrder.customerName}</p>
                   <p><span className="font-semibold text-black">Email:</span> {selectedOrder.customerEmail}</p>
                   <p><span className="font-semibold text-black">Phone:</span> {selectedOrder.customerPhone || 'N/A'}</p>
-                  <p><span className="font-semibold text-black">Payment:</span> <span className="text-green-700 font-bold">{selectedOrder.paymentStatus} (Razorpay)</span></p>
+                  <p><span className="font-semibold text-black">Payment:</span> <span className={selectedOrder.paymentStatus === 'PAID' ? 'text-green-700 font-bold' : 'text-yellow-700 font-bold'}>{selectedOrder.paymentStatus} (Razorpay)</span></p>
+                  {selectedOrder.payment?.razorpayPaymentId && (
+                    <p><span className="font-semibold text-black">Payment ID:</span> <span className="font-mono">{selectedOrder.payment.razorpayPaymentId}</span></p>
+                  )}
+                  {selectedOrder.couponCode && (
+                    <p><span className="font-semibold text-black">Coupon:</span> {selectedOrder.couponCode} (- RS. {(selectedOrder.discountPaise / 100).toLocaleString('en-IN')})</p>
+                  )}
+                  {selectedOrder.adminNotes && (
+                    <p className="text-yellow-800 bg-yellow-50 border border-yellow-200 p-2 whitespace-pre-line">{selectedOrder.adminNotes}</p>
+                  )}
                 </div>
                 <div className="pt-2 border-t border-black/5">
                   <p className="font-semibold text-black flex items-center gap-1">
@@ -382,7 +370,7 @@ export const AdminOrdersPage: React.FC = () => {
                     <span>Shipping Address:</span>
                   </p>
                   <p className="text-neutral-700 font-sans mt-0.5">
-                    {selectedOrder.shippingAddress || 'Bandra West, Mumbai, Maharashtra 400050'}
+                    {selectedOrder.shippingAddress || '—'}
                   </p>
                 </div>
               </div>
@@ -398,7 +386,7 @@ export const AdminOrdersPage: React.FC = () => {
                         <p className="text-[10px] font-mono text-neutral-500">Size: <span className="font-bold text-black">{it.size}</span> | Qty: {it.quantity}</p>
                       </div>
                       <p className="font-mono font-bold text-black">
-                        RS. {((it.unitPricePaise || selectedOrder.totalPaise) / 100).toLocaleString('en-IN')}
+                        RS. {(((it.subtotalPaise ?? it.unitPricePaise * it.quantity) || 0) / 100).toLocaleString('en-IN')}
                       </p>
                     </div>
                   ))}

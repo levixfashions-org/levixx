@@ -1,838 +1,600 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { apiClient, resetStoredProducts } from '../../services/api';
-import { Product } from '../../types';
-import { AdminNav } from '../../components/admin/AdminNav';
-import { 
-  ArrowLeft, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  ExternalLink, 
-  X, 
-  Check, 
-  Image as ImageIcon, 
-  Copy, 
-  Search, 
-  RotateCcw, 
-  Filter,
-  Package,
-  Sparkles
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, ArrowUp, ArrowDown, Eye, EyeOff, Star
 } from 'lucide-react';
+import { apiClient, COLOR_GROUPS, COLOR_SWATCHES } from '../../services/api';
+import { Category, Product } from '../../types';
+import { AdminNav } from '../../components/admin/AdminNav';
 
-export const PRODUCT_CATEGORIES = [
-  { 
-    name: 'Overlength T-Shirts', 
-    slug: 'overlength-t-shirts',
-    sampleName: 'Levix Signature Overlength Heavyweight Tee',
-    samplePrice: '3290',
-    sampleCompare: '3990',
-    defaultDesc: 'Signature elongated streetwear silhouette cut from custom-milled 280 GSM combed cotton jersey. Tailored with dropped shoulders and architectural drape extending past the hip line.',
-    defaultFabric: '100% Combed Single Jersey Cotton (280 GSM). Cold gentle wash inside out.',
-    defaultFit: 'Overlength dropped-shoulder drape. Designed to stack naturally over streetwear trousers and denim.',
-    defaultImage1: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80',
-    defaultImage2: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?auto=format&fit=crop&w=1000&q=80'
-  },
-  { 
-    name: 'Waffle Boxy Fit Full Sleeves', 
-    slug: 'waffle-boxy-fit-full-sleeves',
-    sampleName: 'Levix Thermal Waffle Boxy Full Sleeve',
-    samplePrice: '3990',
-    sampleCompare: '4690',
-    defaultDesc: 'Engineered from ultra-heavy 340 GSM thermal honeycomb waffle weave. Features wide dropped shoulders, dense 2x2 ribbed storm cuffs, and an exaggerated relaxed boxy torso.',
-    defaultFabric: '100% Heavyweight Thermal Waffle Cotton (340 GSM). Machine wash cold, dry flat.',
-    defaultFit: 'Generous boxy cut with substantial sleeve volume and structured silhouette.',
-    defaultImage1: 'https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1000&q=80',
-    defaultImage2: 'https://images.unsplash.com/photo-1509967419530-da38b4704bc6?auto=format&fit=crop&w=1000&q=80'
-  },
-  { 
-    name: 'Acid Wash T-Shirts', 
-    slug: 'acid-wash-t-shirts',
-    sampleName: 'Levix Mineral Acid Wash Distressed Tee',
-    samplePrice: '3490',
-    sampleCompare: '4290',
-    defaultDesc: 'Custom hand-treated mineral acid wash yielding unique cloudy charcoal patterns on heavy 280 GSM combed cotton. High-density typographic branding with subtle raw hem distress.',
-    defaultFabric: '100% Mineral Washed Combed Cotton (280 GSM). Wash separately in cold water.',
-    defaultFit: 'Vintage boxy oversized drape. Pre-shrunk to preserve architectural proportions.',
-    defaultImage1: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1000&q=80',
-    defaultImage2: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80'
-  }
-];
+const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
+
+interface SizeRow {
+  size: string;
+  stock: string;
+}
+
+const emptySizes = (): SizeRow[] => DEFAULT_SIZES.map((size) => ({ size, stock: '0' }));
+
+function slugify(v: string) {
+  return v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
 
 export const AdminProductsPage: React.FC = () => {
-  const { user, isAdmin, loading: authLoading } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const navigate = useNavigate();
+  const [legacyProducts, setLegacyProducts] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
 
   // Form fields
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
-  const [categoryName, setCategoryName] = useState('Overlength T-Shirts');
-  const [priceINR, setPriceINR] = useState('2999');
-  const [comparePriceINR, setComparePriceINR] = useState('3499');
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [categoryId, setCategoryId] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [priceINR, setPriceINR] = useState('');
+  const [comparePriceINR, setComparePriceINR] = useState('');
   const [description, setDescription] = useState('');
-  const [fabricCare, setFabricCare] = useState('100% Heavyweight Cotton. Wash cold inside out.');
-  const [fitGuide, setFitGuide] = useState('Intentionally oversized streetwear boxy drape.');
-  const [imageUrl1, setImageUrl1] = useState('');
-  const [imageUrl2, setImageUrl2] = useState('');
-  const [isFeatured, setIsFeatured] = useState(true);
+  const [details, setDetails] = useState('');
+  const [fabricCare, setFabricCare] = useState('');
+  const [fitGuide, setFitGuide] = useState('');
+  const [images, setImages] = useState<string[]>(['']);
+  const [sizes, setSizes] = useState<SizeRow[]>(emptySizes());
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const [colorGroup, setColorGroup] = useState('');
+  const [collectionIds, setCollectionIds] = useState<string[]>([]);
+  const [allCollections, setAllCollections] = useState<{ id: string; name: string }[]>([]);
 
-  // Variant quantities
-  const [stockS, setStockS] = useState('15');
-  const [stockM, setStockM] = useState('20');
-  const [stockL, setStockL] = useState('25');
-  const [stockXL, setStockXL] = useState('10');
-  const [stockXXL, setStockXXL] = useState('5');
+  const flash = (msg: string) => {
+    setActionMsg(msg);
+    setTimeout(() => setActionMsg(null), 5000);
+  };
 
-  const loadProducts = async () => {
+  const loadAll = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/products', { limit: 50 });
-      setProducts(res.data.products || []);
-    } catch (err) {
-      console.warn('Failed to load products:', err);
+      setLoadError(null);
+      const [prodRes, catRes, colRes] = await Promise.all([
+        apiClient.get('/admin/products'),
+        apiClient.get('/store/categories'),
+        apiClient.get('/admin/collections')
+      ]);
+      setProducts(prodRes.data.products || []);
+      setCategories(catRes.data.categories || []);
+      setAllCollections((colRes.data.collections || []).map((c: any) => ({ id: c.id, name: c.name })));
+    } catch (err: any) {
+      setLoadError(err.message || 'Failed to load products');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!authLoading && (!user || !isAdmin)) {
-      navigate('/login');
-      return;
+    loadAll();
+    try {
+      const raw = localStorage.getItem('levix_custom_products');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed) && parsed.length > 0) setLegacyProducts(parsed);
+    } catch {
+      /* ignore */
     }
+  }, []);
 
-    if (user && isAdmin) {
-      loadProducts();
+  // One-time import of products that the old admin panel saved only in this browser.
+  const importLegacy = async () => {
+    if (!window.confirm(`Import ${legacyProducts.length} product(s) saved in this browser into the live store?`)) return;
+    setImporting(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const lp of legacyProducts) {
+      try {
+        const imgs = (lp.images || []).map((i: any) => i?.url).filter((u: string) => /^https?:\/\//.test(u || ''));
+        const variants = (lp.variants || [])
+          .filter((v: any) => v?.size)
+          .map((v: any) => ({ size: String(v.size).toUpperCase(), stockQuantity: Math.max(0, Number(v.stockQuantity) || 0), priceDelta: 0 }));
+        await apiClient.post('/admin/products', {
+          name: lp.name,
+          slug: lp.slug || slugify(lp.name || ''),
+          description: (lp.description && lp.description.length >= 5 ? lp.description : `${lp.name} by LEVIX.`),
+          details: lp.details || null,
+          fabricCare: lp.fabricCare || null,
+          fitGuide: lp.fitGuide || null,
+          basePrice: Number(lp.basePrice) || 0,
+          comparePrice: lp.comparePrice ? Number(lp.comparePrice) : null,
+          isFeatured: Boolean(lp.isFeatured),
+          isActive: lp.isActive !== false,
+          categoryName: lp.category?.name || null,
+          images: imgs.map((url: string) => ({ url })),
+          variants: variants.length ? variants : DEFAULT_SIZES.map((size) => ({ size, stockQuantity: 0, priceDelta: 0 }))
+        });
+        ok++;
+      } catch (err: any) {
+        failed.push(`${lp.name}: ${err.message}`);
+      }
     }
-  }, [user, isAdmin, authLoading, navigate]);
+    setImporting(false);
+    if (failed.length === 0) {
+      try {
+        localStorage.setItem('levix_custom_products_imported', localStorage.getItem('levix_custom_products') || '[]');
+        localStorage.removeItem('levix_custom_products');
+      } catch {
+        /* ignore */
+      }
+      setLegacyProducts([]);
+    }
+    flash(`Imported ${ok} product(s).${failed.length ? ` ${failed.length} failed — ${failed.join(' | ')}` : ''}`);
+    await loadAll();
+  };
 
-  const applyPreset = (catName: string) => {
-    const found = PRODUCT_CATEGORIES.find(c => c.name === catName) || PRODUCT_CATEGORIES[0];
+  const resetForm = () => {
     setEditingProduct(null);
-    setName(found.sampleName);
-    setSlug(found.sampleName.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
-    setCategoryName(found.name);
-    setPriceINR(found.samplePrice);
-    setComparePriceINR(found.sampleCompare);
-    setDescription(found.defaultDesc);
-    setFabricCare(found.defaultFabric);
-    setFitGuide(found.defaultFit);
-    setImageUrl1(found.defaultImage1);
-    setImageUrl2(found.defaultImage2);
-    setIsFeatured(true);
-    setStockS('15');
-    setStockM('20');
-    setStockL('25');
-    setStockXL('10');
-    setStockXXL('5');
+    setName('');
+    setSlug('');
+    setSlugTouched(false);
+    setCategoryId(categories[0]?.id || '');
+    setNewCategoryName('');
+    setPriceINR('');
+    setComparePriceINR('');
+    setDescription('');
+    setDetails('');
+    setFabricCare('100% cotton. Cold gentle wash inside out. Do not tumble dry.');
+    setFitGuide('Oversized fit. Choose your usual size for a relaxed drape, or size down for a closer fit.');
+    setImages(['']);
+    setSizes(emptySizes());
+    setIsFeatured(false);
+    setIsActive(true);
+    setColorGroup('');
+    setCollectionIds([]);
+    setFormError(null);
+  };
+
+  const fillForm = (p: Product, asCopy = false) => {
+    setEditingProduct(asCopy ? null : p);
+    setName(asCopy ? `${p.name} (Copy)` : p.name);
+    setSlug(asCopy ? `${p.slug}-copy` : p.slug);
+    setSlugTouched(true);
+    setCategoryId(p.category?.id || '');
+    setNewCategoryName('');
+    setPriceINR(String(Math.round(p.basePrice / 100)));
+    setComparePriceINR(p.comparePrice ? String(Math.round(p.comparePrice / 100)) : '');
+    setDescription(p.description || '');
+    setDetails(p.details || '');
+    setFabricCare(p.fabricCare || '');
+    setFitGuide(p.fitGuide || '');
+    setImages(p.images.length ? p.images.map((i) => i.url) : ['']);
+    setSizes(p.variants.length ? p.variants.map((v) => ({ size: v.size, stock: String(v.stockQuantity) })) : emptySizes());
+    setIsFeatured(Boolean(p.isFeatured));
+    setIsActive(asCopy ? true : p.isActive);
+    setColorGroup(p.colorGroup || '');
+    setCollectionIds(p.collectionIds || []);
+    setFormError(null);
     setShowModal(true);
   };
 
   const openAddModal = () => {
-    applyPreset('Overlength T-Shirts');
-  };
-
-  const openEditModal = (p: Product) => {
-    setEditingProduct(p);
-    setName(p.name);
-    setSlug(p.slug);
-    setCategoryName(p.category?.name || 'Overlength T-Shirts');
-    setPriceINR(String(Math.round(p.basePrice / 100)));
-    setComparePriceINR(p.comparePrice ? String(Math.round(p.comparePrice / 100)) : '');
-    setDescription(p.description || '');
-    setFabricCare(p.fabricCare || '');
-    setFitGuide(p.fitGuide || '');
-    setImageUrl1(p.images[0]?.url || '');
-    setImageUrl2(p.images[1]?.url || '');
-    setIsFeatured(Boolean(p.isFeatured));
-
-    // Fill variants stock
-    const findStock = (sz: string) => {
-      const v = p.variants?.find((va) => va.size.toUpperCase() === sz);
-      return v ? String(v.stockQuantity) : '0';
-    };
-    setStockS(findStock('S'));
-    setStockM(findStock('M'));
-    setStockL(findStock('L'));
-    setStockXL(findStock('XL'));
-    setStockXXL(findStock('XXL'));
-
+    resetForm();
     setShowModal(true);
-  };
-
-  const handleDuplicate = (p: Product) => {
-    setEditingProduct(null);
-    setName(`${p.name} (Copy)`);
-    setSlug(`${p.slug}-copy-${Date.now().toString().slice(-4)}`);
-    setCategoryName(p.category?.name || 'Overlength T-Shirts');
-    setPriceINR(String(Math.round(p.basePrice / 100)));
-    setComparePriceINR(p.comparePrice ? String(Math.round(p.comparePrice / 100)) : '');
-    setDescription(p.description || '');
-    setFabricCare(p.fabricCare || '');
-    setFitGuide(p.fitGuide || '');
-    setImageUrl1(p.images[0]?.url || '');
-    setImageUrl2(p.images[1]?.url || '');
-    setIsFeatured(Boolean(p.isFeatured));
-
-    const findStock = (sz: string) => {
-      const v = p.variants?.find((va) => va.size.toUpperCase() === sz);
-      return v ? String(v.stockQuantity) : '10';
-    };
-    setStockS(findStock('S'));
-    setStockM(findStock('M'));
-    setStockL(findStock('L'));
-    setStockXL(findStock('XL'));
-    setStockXXL(findStock('XXL'));
-
-    setShowModal(true);
-  };
-
-  const handleResetCatalog = () => {
-    if (window.confirm('Restore initial sample catalog? Any custom products will be reset to factory defaults.')) {
-      resetStoredProducts();
-      loadProducts();
-      setActionMsg('✓ Restored official factory sample catalog.');
-      setTimeout(() => setActionMsg(null), 4000);
-    }
-  };
-
-  const handleNameChange = (val: string) => {
-    setName(val);
-    if (!editingProduct) {
-      setSlug(val.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
-    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    const cleanImages = images.map((u) => u.trim()).filter(Boolean);
+    if (cleanImages.length === 0) return setFormError('Add at least one product image URL.');
+    const badUrl = cleanImages.find((u) => !/^https?:\/\//i.test(u));
+    if (badUrl) return setFormError(`Image URL must start with https:// — "${badUrl.slice(0, 60)}"`);
+
+    const cleanSizes = sizes
+      .map((s) => ({ size: s.size.trim().toUpperCase(), stockQuantity: Math.max(0, parseInt(s.stock, 10) || 0), priceDelta: 0 }))
+      .filter((s) => s.size);
+    if (cleanSizes.length === 0) return setFormError('Add at least one size.');
+
+    const basePaise = Math.round(parseFloat(priceINR || '0') * 100);
+    if (!basePaise || basePaise <= 0) return setFormError('Enter a valid price.');
+    const comparePaise = comparePriceINR ? Math.round(parseFloat(comparePriceINR) * 100) : null;
+
+    const payload: any = {
+      name: name.trim(),
+      slug: slugify(slug || name),
+      description: description.trim(),
+      details: details.trim() || null,
+      fabricCare: fabricCare.trim() || null,
+      fitGuide: fitGuide.trim() || null,
+      basePrice: basePaise,
+      comparePrice: comparePaise && comparePaise > basePaise ? comparePaise : null,
+      isFeatured,
+      isActive,
+      colorGroup: colorGroup || null,
+      collectionIds,
+      images: cleanImages.map((url) => ({ url })),
+      variants: cleanSizes
+    };
+    if (categoryId === '__new__') {
+      if (!newCategoryName.trim()) return setFormError('Enter the new category name.');
+      payload.categoryName = newCategoryName.trim();
+    } else {
+      payload.categoryId = categoryId || null;
+    }
+
     setSaving(true);
     try {
-      const basePaise = Math.round(parseFloat(priceINR || '0') * 100);
-      const comparePaise = comparePriceINR ? Math.round(parseFloat(comparePriceINR) * 100) : null;
-      const finalSlug = slug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-      const images = [
-        { url: imageUrl1.trim() || 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1000&q=80', isCover: true, sortOrder: 0 }
-      ];
-      if (imageUrl2.trim()) {
-        images.push({ url: imageUrl2.trim(), isCover: false, sortOrder: 1 });
-      }
-
-      const variants = [
-        { size: 'S', sku: `${finalSlug.toUpperCase().slice(0, 8)}-S`, stockQuantity: parseInt(stockS, 10) || 0, priceDelta: 0 },
-        { size: 'M', sku: `${finalSlug.toUpperCase().slice(0, 8)}-M`, stockQuantity: parseInt(stockM, 10) || 0, priceDelta: 0 },
-        { size: 'L', sku: `${finalSlug.toUpperCase().slice(0, 8)}-L`, stockQuantity: parseInt(stockL, 10) || 0, priceDelta: 0 },
-        { size: 'XL', sku: `${finalSlug.toUpperCase().slice(0, 8)}-XL`, stockQuantity: parseInt(stockXL, 10) || 0, priceDelta: 0 },
-        { size: 'XXL', sku: `${finalSlug.toUpperCase().slice(0, 8)}-XXL`, stockQuantity: parseInt(stockXXL, 10) || 0, priceDelta: 0 }
-      ];
-
-      const matchedCat = PRODUCT_CATEGORIES.find(c => c.name.toLowerCase() === categoryName.toLowerCase() || c.slug === categoryName.toLowerCase()) || {
-        name: categoryName,
-        slug: categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-      };
-
-      const payload = {
-        name: name.trim(),
-        slug: finalSlug,
-        description,
-        fabricCare,
-        fitGuide,
-        basePrice: basePaise,
-        comparePrice: comparePaise,
-        isFeatured,
-        categoryId: matchedCat.slug,
-        categoryName: matchedCat.name,
-        category: { id: matchedCat.slug, name: matchedCat.name, slug: matchedCat.slug },
-        images,
-        variants
-      };
-
       if (editingProduct) {
         await apiClient.put(`/admin/products/${editingProduct.id}`, payload);
-        setActionMsg(`✓ Product "${name}" updated successfully.`);
+        flash(`✓ "${payload.name}" updated.`);
       } else {
         await apiClient.post('/admin/products', payload);
-        setActionMsg(`✓ New Drop "${name}" published to catalog.`);
+        flash(`✓ "${payload.name}" is now live in the store.`);
       }
-
       setShowModal(false);
-      await loadProducts();
-      setTimeout(() => setActionMsg(null), 5000);
+      await loadAll();
     } catch (err: any) {
-      alert(err.message || 'Failed to save product. Please check required fields.');
+      setFormError(err.message || 'Failed to save product.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string, prodName: string) => {
-    if (!window.confirm(`Are you sure you want to permanently delete "${prodName}"?`)) {
-      return;
-    }
+  const handleToggleActive = async (p: Product) => {
     try {
-      await apiClient.delete(`/admin/products/${id}`);
-      setActionMsg(`✓ Product "${prodName}" deleted.`);
-      await loadProducts();
-      setTimeout(() => setActionMsg(null), 4000);
+      await apiClient.put(`/admin/products/${p.id}`, { isActive: !p.isActive });
+      flash(p.isActive ? `"${p.name}" hidden from the store.` : `"${p.name}" is visible again.`);
+      await loadAll();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDelete = async (p: Product) => {
+    if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+    try {
+      const res = await apiClient.delete(`/admin/products/${p.id}`);
+      flash(res.data?.archived ? res.data.message : `✓ "${p.name}" deleted.`);
+      await loadAll();
     } catch (err: any) {
       alert(err.message || 'Failed to delete product.');
     }
   };
 
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch = 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.category?.name && p.category.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesCat = 
-      categoryFilter === 'ALL' || 
-      (categoryFilter === 'FEATURED' && p.isFeatured) ||
-      (p.category?.slug && p.category.slug.toLowerCase().includes(categoryFilter.toLowerCase())) ||
-      (p.category?.name && p.category.name.toLowerCase().includes(categoryFilter.toLowerCase()));
+  const moveImage = (idx: number, dir: -1 | 1) => {
+    const next = [...images];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setImages(next);
+  };
 
-    return matchesSearch && matchesCat;
-  });
+  const filtered = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesQ = !q || p.name.toLowerCase().includes(q) || p.slug.includes(q);
+      const matchesCat = categoryFilter === 'ALL' || p.category?.id === categoryFilter;
+      return matchesQ && matchesCat;
+    });
+  }, [products, searchTerm, categoryFilter]);
+
+  const inputClass = 'w-full bg-white border border-black/20 p-2.5 text-sm focus:border-black focus:outline-none';
+  const labelClass = 'block text-[11px] font-bold uppercase tracking-wider text-neutral-600 mb-1';
 
   return (
     <div className="min-h-screen bg-[#EFEFEF] pb-24">
       <AdminNav />
-
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-10 space-y-8">
-        
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-black/10 pb-6 gap-4">
           <div>
             <div className="flex items-center space-x-2 text-[10px] font-mono uppercase tracking-widest text-[#FF5400] font-bold">
-              <span>CATALOG ADMINISTRATION</span>
+              <Package className="w-3.5 h-3.5" />
+              <span>CATALOG</span>
             </div>
-            <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black mt-1">
-              Products & Drops Management
-            </h1>
-            <p className="text-xs text-neutral-600 mt-1">
-              Create new streetwear drops, update retail pricing, edit descriptions, adjust size stock, or feature drops on homepage.
-            </p>
+            <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black mt-1">Products</h1>
+            <p className="text-xs text-neutral-600 mt-1">{products.length} products • changes go live instantly for every customer.</p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleResetCatalog}
-              className="px-3.5 py-2.5 border border-black/20 hover:border-black text-neutral-700 hover:text-black text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all"
-              title="Reset Catalog to Factory Sample Items"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Samples</span>
-            </button>
-
-            <button
-              onClick={openAddModal}
-              className="px-5 py-2.5 bg-[#FF5400] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#e04a00] flex items-center justify-center gap-2 shadow-sm transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Drop</span>
-            </button>
-          </div>
+          <button
+            onClick={openAddModal}
+            className="px-5 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 flex items-center gap-2 shadow-md"
+          >
+            <Plus className="w-4 h-4" /> Add Product
+          </button>
         </div>
 
-        {actionMsg && (
-          <div className="p-4 bg-black text-white text-xs font-semibold uppercase tracking-wider flex items-center justify-between shadow-md">
-            <span>{actionMsg}</span>
-            <button onClick={() => setActionMsg(null)} className="opacity-70 hover:opacity-100">
-              <X className="w-4 h-4" />
+        {actionMsg && <div className="p-3 bg-black text-white text-xs font-semibold">{actionMsg}</div>}
+        {legacyProducts.length > 0 && (
+          <div className="p-4 bg-yellow-50 border border-yellow-300 text-yellow-900 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span>
+              Found <b>{legacyProducts.length}</b> product(s) that the old admin panel saved only in this browser (customers could not see them). Import them into the live store?
+            </span>
+            <button onClick={importLegacy} disabled={importing} className="px-4 py-2 bg-black text-white font-bold uppercase tracking-wider disabled:opacity-50 whitespace-nowrap">
+              {importing ? 'Importing...' : 'Import Now'}
             </button>
           </div>
         )}
+        {loadError && (
+          <div className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs font-semibold flex items-center justify-between">
+            <span>{loadError}</span>
+            <button onClick={loadAll} className="underline">Retry</button>
+          </div>
+        )}
 
-        {/* Search & Filter Toolbar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 border border-black/10 shadow-xs">
-          
-          {/* Search Input */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
-              type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search drops by name, slug or category..."
-              className="w-full pl-9 pr-4 py-2 border border-black/20 text-xs focus:border-black focus:outline-none"
+              placeholder="Search products..."
+              className="w-full bg-white border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-black"
             />
           </div>
-
-          {/* Category Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider">
-            {[
-              { label: 'ALL', value: 'ALL' },
-              { label: 'FEATURED', value: 'FEATURED' },
-              { label: 'OVERLENGTH TEES', value: 'overlength-t-shirts' },
-              { label: 'WAFFLE FULL SLEEVES', value: 'waffle-boxy-fit-full-sleeves' },
-              { label: 'ACID WASH TEES', value: 'acid-wash-t-shirts' }
-            ].map((cat) => (
-              <button
-                key={cat.value}
-                onClick={() => setCategoryFilter(cat.value)}
-                className={`px-3 py-1.5 rounded-xs transition-all ${
-                  categoryFilter === cat.value
-                    ? 'bg-black text-white'
-                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-                }`}
-              >
-                {cat.label}
-              </button>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-white border border-black/15 px-3 py-2.5 text-sm">
+            <option value="ALL">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
-          </div>
-
+          </select>
         </div>
 
-        {loading ? (
-          <div className="py-20 text-center font-mono text-xs uppercase text-neutral-500">
-            Loading catalog items...
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="bg-white border border-black/10 p-16 text-center space-y-4">
-            <Package className="w-10 h-10 text-neutral-300 mx-auto" />
-            <h3 className="font-display font-black text-xl uppercase tracking-tight text-black">
-              {products.length === 0 ? 'Your Catalog is Ready for Drops' : 'No products match your filter criteria'}
-            </h3>
-            <p className="text-xs text-neutral-500 max-w-md mx-auto">
-              {products.length === 0
-                ? 'Your store is completely fresh with zero fake products. Click "+ New Drop" above to publish your first authentic piece.'
-                : 'Try adjusting your search query or category filter.'}
-            </p>
-            {products.length === 0 ? (
-              <div className="flex flex-wrap items-center justify-center gap-2.5 pt-3">
-                <button
-                  onClick={() => applyPreset('Overlength T-Shirts')}
-                  className="px-4 py-2.5 bg-[#FF5400] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#e04a00] transition-all shadow-sm cursor-pointer"
-                >
-                  + Add Overlength Tee
-                </button>
-                <button
-                  onClick={() => applyPreset('Waffle Boxy Fit Full Sleeves')}
-                  className="px-4 py-2.5 bg-black text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all shadow-sm cursor-pointer"
-                >
-                  + Add Waffle Full Sleeve
-                </button>
-                <button
-                  onClick={() => applyPreset('Acid Wash T-Shirts')}
-                  className="px-4 py-2.5 bg-black text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all shadow-sm cursor-pointer"
-                >
-                  + Add Acid Wash Tee
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => { setSearchTerm(''); setCategoryFilter('ALL'); }}
-                className="text-xs font-bold uppercase text-[#FF5400] underline cursor-pointer"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white border border-black/10 shadow-sm overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead>
-                <tr className="border-b border-black/10 uppercase tracking-wider text-[10px] text-neutral-500 bg-neutral-50">
-                  <th className="py-3 px-4">Image</th>
-                  <th className="py-3 px-4">Name & Slug</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4">Retail Price</th>
-                  <th className="py-3 px-4">Inventory by Size</th>
-                  <th className="py-3 px-4">Total Stock</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+        <div className="bg-white border border-black/10 shadow-sm overflow-x-auto">
+          <table className="w-full text-xs min-w-[760px]">
+            <thead className="bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500 font-mono">
+              <tr>
+                <th className="py-3 px-4 text-left">Image</th>
+                <th className="py-3 px-4 text-left">Product</th>
+                <th className="py-3 px-4 text-left">Category</th>
+                <th className="py-3 px-4 text-left">Price</th>
+                <th className="py-3 px-4 text-left">Stock</th>
+                <th className="py-3 px-4 text-left">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/5">
+              {loading ? (
+                <tr><td colSpan={7} className="py-16 text-center text-neutral-500 font-mono uppercase">Loading catalog...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-neutral-500">
+                    {products.length === 0 ? 'No products yet. Click "Add Product" to publish your first drop.' : 'No products match your search.'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5 font-sans">
-                {filteredProducts.map((p) => {
-                  const totalStock = p.variants?.reduce((acc, v) => acc + (v.stockQuantity || 0), 0) || 0;
+              ) : (
+                filtered.map((p) => {
+                  const totalStock = p.variants.reduce((a, v) => a + v.stockQuantity, 0);
                   return (
-                    <tr key={p.id} className="hover:bg-neutral-50/50 transition-colors">
+                    <tr key={p.id} className={`hover:bg-neutral-50/60 ${!p.isActive ? 'opacity-60' : ''}`}>
                       <td className="py-3 px-4">
-                        <div className="w-12 h-14 bg-neutral-100 overflow-hidden border border-black/5">
-                          {p.images && p.images[0] ? (
-                            <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-neutral-400">
-                              <ImageIcon className="w-4 h-4" />
-                            </div>
-                          )}
+                        <div className="w-12 h-16 bg-neutral-100 overflow-hidden flex items-center justify-center">
+                          {p.images[0] ? <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover" loading="lazy" /> : <ImageIcon className="w-4 h-4 text-neutral-400" />}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-black">
-                        <div className="flex items-center gap-2">
-                          <span>{p.name}</span>
-                          {p.isFeatured && (
-                            <span className="px-1.5 py-0.5 bg-[#FF5400]/10 text-[#FF5400] text-[9px] font-mono font-bold uppercase">
-                              Featured
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] font-mono text-neutral-400 mt-0.5">/{p.slug}</p>
-                      </td>
-                      <td className="py-3 px-4 uppercase text-neutral-600 font-medium">
-                        {p.category?.name || 'Streetwear'}
-                      </td>
-                      <td className="py-3 px-4 font-mono font-bold text-black">
-                        RS. {(p.basePrice / 100).toLocaleString('en-IN')}
-                        {p.comparePrice && (
-                          <span className="block text-[10px] text-neutral-400 line-through">
-                            RS. {(p.comparePrice / 100).toLocaleString('en-IN')}
-                          </span>
-                        )}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1 font-mono text-[9px]">
-                          {p.variants?.map((v) => (
-                            <span
-                              key={v.id || v.size}
-                              className={`px-1.5 py-0.5 rounded-xs border ${
-                                v.stockQuantity > 0 ? 'bg-neutral-50 border-neutral-300 text-neutral-700' : 'bg-red-50 border-red-200 text-red-600'
-                              }`}
-                            >
-                              {v.size}:{v.stockQuantity}
-                            </span>
-                          ))}
-                        </div>
+                        <p className="font-semibold text-black">{p.name}</p>
+                        <p className="text-[11px] text-neutral-500 font-mono">/{p.slug}</p>
                       </td>
+                      <td className="py-3 px-4 text-neutral-700">{p.category?.name || '—'}</td>
                       <td className="py-3 px-4 font-mono">
-                        <span className={`px-2 py-0.5 text-[10px] font-bold ${
-                          totalStock > 10 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {totalStock} in stock
-                        </span>
+                        <span className="font-bold">RS. {(p.basePrice / 100).toLocaleString('en-IN')}</span>
+                        {p.comparePrice ? <span className="block text-[11px] text-neutral-400 line-through">RS. {(p.comparePrice / 100).toLocaleString('en-IN')}</span> : null}
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
-                          <button
-                            onClick={() => handleDuplicate(p)}
-                            className="p-1.5 border border-black/20 hover:border-black text-neutral-700 hover:bg-neutral-100 transition-colors"
-                            title="Duplicate / Clone Drop"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
+                      <td className="py-3 px-4">
+                        <span className={`font-bold ${totalStock === 0 ? 'text-red-600' : totalStock <= 10 ? 'text-yellow-700' : 'text-black'}`}>{totalStock}</span>
+                        <span className="block text-[10px] text-neutral-500 font-mono">{p.variants.map((v) => `${v.size}:${v.stockQuantity}`).join(' ')}</span>
+                      </td>
+                      <td className="py-3 px-4 space-y-1">
+                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-neutral-200 text-neutral-700'}`}>
+                          {p.isActive ? 'Live' : 'Hidden'}
+                        </span>
+                        {p.isFeatured && <span className="flex items-center gap-1 text-[10px] text-[#FF5400] font-bold uppercase"><Star className="w-3 h-3" /> Featured</span>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => fillForm(p)} title="Edit" className="p-2 hover:bg-neutral-100"><Edit2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => fillForm(p, true)} title="Duplicate" className="p-2 hover:bg-neutral-100"><Copy className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleToggleActive(p)} title={p.isActive ? 'Hide from store' : 'Show in store'} className="p-2 hover:bg-neutral-100">
+                            {p.isActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
-                          <button
-                            onClick={() => openEditModal(p)}
-                            className="p-1.5 border border-black/20 hover:border-black text-black hover:bg-black hover:text-white transition-colors"
-                            title="Edit Product"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <Link
-                            to={`/products/${p.slug}`}
-                            target="_blank"
-                            className="p-1.5 border border-black/20 hover:border-black text-neutral-700 hover:bg-black hover:text-white transition-colors"
-                            title="View on Storefront"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </Link>
-                          <button
-                            onClick={() => handleDelete(p.id, p.name)}
-                            className="p-1.5 border border-red-200 text-red-600 hover:bg-red-600 hover:text-white transition-colors"
-                            title="Delete Product"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {p.isActive && (
+                            <Link to={`/products/${p.slug}`} target="_blank" title="View in store" className="p-2 hover:bg-neutral-100"><ExternalLink className="w-3.5 h-3.5" /></Link>
+                          )}
+                          <button onClick={() => handleDelete(p)} title="Delete" className="p-2 hover:bg-red-50 text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Product Add / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl my-8 p-6 sm:p-8 border border-black shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-black/10 pb-4">
-              <div>
-                <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest">
-                  {editingProduct ? 'EDITING CATALOG ITEM' : 'NEW STREETWEAR DROP'}
-                </span>
-                <h2 className="font-display font-black text-2xl uppercase tracking-tight text-black mt-0.5">
-                  {editingProduct ? `Edit: ${editingProduct.name}` : 'Create New Product'}
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1.5 hover:bg-neutral-100 text-black transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-start justify-center p-3 sm:p-6 overflow-y-auto" onMouseDown={(e) => e.target === e.currentTarget && !saving && setShowModal(false)}>
+          <form onSubmit={handleSave} className="bg-white w-full max-w-3xl my-4 shadow-2xl border border-black/10">
+            <div className="flex items-center justify-between p-5 border-b border-black/10 sticky top-0 bg-white z-10">
+              <h2 className="font-display font-black text-xl uppercase tracking-tight">{editingProduct ? 'Edit Product' : 'Add Product'}</h2>
+              <button type="button" onClick={() => setShowModal(false)} className="p-1.5 hover:bg-neutral-100" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
 
-            {!editingProduct && (
-              <div className="bg-neutral-50 p-3.5 border border-black/10 space-y-2">
-                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-[#FF5400] font-bold">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Quick Category Presets (1-Click Specifications):</span>
+            <div className="p-5 space-y-6">
+              {formError && <div role="alert" className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs font-semibold">{formError}</div>}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className={labelClass}>Product Name *</label>
+                  <input required value={name} onChange={(e) => { setName(e.target.value); if (!slugTouched) setSlug(slugify(e.target.value)); }} className={inputClass} placeholder="e.g. Signature Overlength Heavyweight Tee" />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {PRODUCT_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.slug}
-                      type="button"
-                      onClick={() => applyPreset(cat.name)}
-                      className={`px-2.5 py-1 text-[10px] font-bold uppercase border transition-all cursor-pointer ${
-                        categoryName === cat.name
-                          ? 'bg-black text-white border-black'
-                          : 'bg-white text-neutral-700 border-neutral-300 hover:border-black'
-                      }`}
-                    >
-                      + {cat.name}
-                    </button>
+                <div className="sm:col-span-2">
+                  <label className={labelClass}>URL Handle</label>
+                  <div className="flex items-center border border-black/20 bg-neutral-50">
+                    <span className="px-2 text-[11px] text-neutral-500 font-mono whitespace-nowrap">/products/</span>
+                    <input value={slug} onChange={(e) => { setSlug(slugify(e.target.value)); setSlugTouched(true); }} className="flex-1 bg-white p-2.5 text-sm font-mono focus:outline-none" placeholder="auto-generated" />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelClass}>Category</label>
+                  <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+                    <option value="">No category</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                    <option value="__new__">+ New category…</option>
+                  </select>
+                  {categoryId === '__new__' && (
+                    <input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className={`${inputClass} mt-2`} placeholder="New category name" />
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Price (₹) *</label>
+                    <input required type="number" min="1" step="1" value={priceINR} onChange={(e) => setPriceINR(e.target.value)} className={`${inputClass} font-mono`} placeholder="2999" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>MRP / Compare (₹)</label>
+                    <input type="number" min="0" step="1" value={comparePriceINR} onChange={(e) => setComparePriceINR(e.target.value)} className={`${inputClass} font-mono`} placeholder="optional" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Images */}
+              <div className="space-y-2">
+                <label className={labelClass}>Product Images (URLs) *</label>
+                <p className="text-[11px] text-neutral-500">
+                  Paste the full link of each image hosted on Hostinger (e.g. https://thelevix.shop/images/tee-front.jpg). The first image is the cover; the second shows on hover.
+                </p>
+                <div className="space-y-2">
+                  {images.map((url, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="w-12 h-14 bg-neutral-100 border border-black/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                        {/^https?:\/\//.test(url.trim()) ? <img src={url.trim()} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-neutral-400" />}
+                      </div>
+                      <input
+                        value={url}
+                        onChange={(e) => setImages(images.map((u, i) => (i === idx ? e.target.value : u)))}
+                        className={`${inputClass} font-mono text-xs`}
+                        placeholder={idx === 0 ? 'Cover image URL (https://...)' : 'Additional image URL'}
+                      />
+                      <div className="flex flex-col">
+                        <button type="button" onClick={() => moveImage(idx, -1)} disabled={idx === 0} className="p-1 disabled:opacity-20" aria-label="Move up"><ArrowUp className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => moveImage(idx, 1)} disabled={idx === images.length - 1} className="p-1 disabled:opacity-20" aria-label="Move down"><ArrowDown className="w-3 h-3" /></button>
+                      </div>
+                      <button type="button" onClick={() => setImages(images.length > 1 ? images.filter((_, i) => i !== idx) : [''])} className="p-2 text-red-600 hover:bg-red-50" aria-label="Remove image"><X className="w-3.5 h-3.5" /></button>
+                    </div>
                   ))}
                 </div>
+                {images.length < 10 && (
+                  <button type="button" onClick={() => setImages([...images, ''])} className="text-[11px] font-bold uppercase tracking-wider underline">+ Add another image</button>
+                )}
               </div>
-            )}
 
-            <form onSubmit={handleSave} className="space-y-5 text-xs">
-              
-              {/* Product Name & Slug */}
+              {/* Sizes */}
+              <div className="space-y-2">
+                <label className={labelClass}>Sizes & Stock *</label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {sizes.map((row, idx) => (
+                    <div key={idx} className="border border-black/15 p-2 space-y-1 relative">
+                      <input
+                        value={row.size}
+                        onChange={(e) => setSizes(sizes.map((r, i) => (i === idx ? { ...r, size: e.target.value.toUpperCase() } : r)))}
+                        className="w-full text-center font-bold text-sm uppercase bg-neutral-50 p-1 focus:outline-none"
+                        maxLength={6}
+                        aria-label="Size"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        value={row.stock}
+                        onChange={(e) => setSizes(sizes.map((r, i) => (i === idx ? { ...r, stock: e.target.value } : r)))}
+                        className="w-full text-center font-mono text-sm border border-black/10 p-1 focus:outline-none focus:border-black"
+                        aria-label={`Stock for ${row.size}`}
+                      />
+                      <button type="button" onClick={() => setSizes(sizes.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-white border border-black/20 rounded-full p-0.5" aria-label="Remove size"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={() => setSizes([...sizes, { size: '', stock: '0' }])} className="text-[11px] font-bold uppercase tracking-wider underline">+ Add size</button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className={labelClass}>Description *</label>
+                  <textarea required rows={4} value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} placeholder="What makes this piece special..." />
+                </div>
+                <div>
+                  <label className={labelClass}>Product Details</label>
+                  <textarea rows={2} value={details} onChange={(e) => setDetails(e.target.value)} className={inputClass} placeholder="GSM, print type, neck, finishing..." />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Fabric & Care</label>
+                    <textarea rows={3} value={fabricCare} onChange={(e) => setFabricCare(e.target.value)} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Fit Guide</label>
+                    <textarea rows={3} value={fitGuide} onChange={(e) => setFitGuide(e.target.value)} className={inputClass} />
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                    Product Title *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    placeholder="e.g. Acid Wash Boxy Graphic Tee"
-                    className="w-full border border-black/20 p-2.5 font-medium focus:border-black focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                    URL Slug *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    placeholder="e.g. acid-wash-boxy-tee"
-                    className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Category & Pricing */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                    Category *
-                  </label>
-                  <select
-                    value={categoryName}
-                    onChange={(e) => {
-                      const newCat = e.target.value;
-                      setCategoryName(newCat);
-                      const catObj = PRODUCT_CATEGORIES.find(c => c.name === newCat);
-                      if (catObj && !editingProduct) {
-                        setDescription(catObj.defaultDesc);
-                        setFabricCare(catObj.defaultFabric);
-                        setFitGuide(catObj.defaultFit);
-                        setPriceINR(catObj.samplePrice);
-                        setComparePriceINR(catObj.sampleCompare);
-                        setImageUrl1(catObj.defaultImage1);
-                        setImageUrl2(catObj.defaultImage2);
-                      }
-                    }}
-                    className="w-full border border-black/20 p-2.5 bg-white font-medium focus:border-black focus:outline-none uppercase"
-                  >
-                    {PRODUCT_CATEGORIES.map((c) => (
-                      <option key={c.slug} value={c.name}>
-                        {c.name}
-                      </option>
+                  <label className={labelClass}>Colour (for "Shop by colour")</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => setColorGroup('')} className={`px-3 py-1 rounded-full border text-[11px] ${!colorGroup ? 'border-black bg-black text-white' : 'border-black/15'}`}>None</button>
+                    {COLOR_GROUPS.map((c) => (
+                      <button key={c} type="button" onClick={() => setColorGroup(c)} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] ${colorGroup === c ? 'border-black ring-1 ring-black' : 'border-black/15'}`}>
+                        <span className="w-3 h-3 rounded-full border border-black/10" style={{ background: COLOR_SWATCHES[c] }} />
+                        {c.charAt(0) + c.slice(1).toLowerCase()}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                    Price (INR ₹) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={priceINR}
-                    onChange={(e) => setPriceINR(e.target.value)}
-                    placeholder="2999"
-                    className="w-full border border-black/20 p-2.5 font-mono font-bold focus:border-black focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                    MRP / Compare (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={comparePriceINR}
-                    onChange={(e) => setComparePriceINR(e.target.value)}
-                    placeholder="3499"
-                    className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
-                  Product Description *
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Detail the silhouette, fabric weight, screen printing technique, and styling."
-                  className="w-full border border-black/20 p-2.5 font-sans leading-relaxed focus:border-black focus:outline-none"
-                />
-              </div>
-
-              {/* Image URLs */}
-              <div className="space-y-3">
-                <label className="block uppercase font-bold text-neutral-700 tracking-wider">
-                  Product Imagery (Image URLs) *
-                </label>
-                <div className="space-y-2">
-                  <input
-                    type="url"
-                    required
-                    value={imageUrl1}
-                    onChange={(e) => setImageUrl1(e.target.value)}
-                    placeholder="Primary Cover Image URL (e.g. https://...)"
-                    className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none"
-                  />
-                  <input
-                    type="url"
-                    value={imageUrl2}
-                    onChange={(e) => setImageUrl2(e.target.value)}
-                    placeholder="Secondary Hover Image URL (optional)"
-                    className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Inventory by Size */}
-              <div className="space-y-2 pt-2 border-t border-black/10">
-                <label className="block uppercase font-bold text-neutral-700 tracking-wider">
-                  Inventory / Stock Quantity by Size
-                </label>
-                <div className="grid grid-cols-5 gap-3">
-                  <div>
-                    <span className="block text-[10px] font-mono text-center mb-1 font-bold">SIZE S</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={stockS}
-                      onChange={(e) => setStockS(e.target.value)}
-                      className="w-full border border-black/20 p-2 text-center font-mono focus:border-black focus:outline-none font-bold"
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-mono text-center mb-1 font-bold">SIZE M</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={stockM}
-                      onChange={(e) => setStockM(e.target.value)}
-                      className="w-full border border-black/20 p-2 text-center font-mono focus:border-black focus:outline-none font-bold"
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-mono text-center mb-1 font-bold">SIZE L</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={stockL}
-                      onChange={(e) => setStockL(e.target.value)}
-                      className="w-full border border-black/20 p-2 text-center font-mono focus:border-black focus:outline-none font-bold"
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-mono text-center mb-1 font-bold">SIZE XL</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={stockXL}
-                      onChange={(e) => setStockXL(e.target.value)}
-                      className="w-full border border-black/20 p-2 text-center font-mono focus:border-black focus:outline-none font-bold"
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-mono text-center mb-1 font-bold">SIZE XXL</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={stockXXL}
-                      onChange={(e) => setStockXXL(e.target.value)}
-                      className="w-full border border-black/20 p-2 text-center font-mono focus:border-black focus:outline-none font-bold"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Featured Drop Checkbox */}
-              <div className="pt-2 flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="featuredToggle"
-                  checked={isFeatured}
-                  onChange={(e) => setIsFeatured(e.target.checked)}
-                  className="w-4 h-4 accent-black"
-                />
-                <label htmlFor="featuredToggle" className="font-bold uppercase tracking-wider text-neutral-800 cursor-pointer">
-                  Feature this Drop on Homepage Carousel
-                </label>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-4 border-t border-black/10 flex items-center justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 border border-black/20 hover:border-black text-black uppercase font-bold text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-6 py-2.5 bg-black hover:bg-neutral-800 text-white uppercase font-bold text-xs tracking-wider flex items-center gap-1.5 shadow-sm"
-                >
-                  {saving ? (
-                    <span>Saving Drop...</span>
+                  <label className={labelClass}>Collections</label>
+                  {allCollections.length === 0 ? (
+                    <p className="text-[11px] text-neutral-500">No collections yet — create them in "Collections & Home".</p>
                   ) : (
-                    <>
-                      <Check className="w-4 h-4 text-[#FF5400]" />
-                      <span>{editingProduct ? 'Save Changes' : 'Publish Product'}</span>
-                    </>
+                    <div className="flex flex-wrap gap-1.5">
+                      {allCollections.map((c) => {
+                        const on = collectionIds.includes(c.id);
+                        return (
+                          <button key={c.id} type="button" onClick={() => setCollectionIds(on ? collectionIds.filter((x) => x !== c.id) : [...collectionIds, c.id])} className={`px-3 py-1 rounded-full border text-[11px] ${on ? 'border-black bg-black text-white' : 'border-black/15'}`}>
+                            {on ? '✓ ' : '+ '}{c.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
-                </button>
+                </div>
               </div>
 
-            </form>
-          </div>
+              <div className="flex flex-wrap gap-6">
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="accent-black w-4 h-4" /> Visible in store
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="accent-black w-4 h-4" /> Feature on homepage
+                </label>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-black/10 flex justify-end gap-3 sticky bottom-0 bg-white">
+              <button type="button" onClick={() => setShowModal(false)} className="px-5 py-3 border border-black/20 text-xs font-bold uppercase tracking-wider">Cancel</button>
+              <button type="submit" disabled={saving} className="px-6 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest disabled:opacity-50">
+                {saving ? 'Saving...' : editingProduct ? 'Save Changes' : 'Publish Product'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
-
     </div>
   );
 };

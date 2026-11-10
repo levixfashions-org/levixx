@@ -1,35 +1,32 @@
-# Production Security & Hardening Checklist
+# LEVIX Security Checklist (current implementation)
 
-**Target**: Full-Stack Levix Recreation & Hostinger VPS  
+## Authentication & authorisation
+- [x] Sign-in uses real **Firebase Authentication** (Google + Email/Password). Passwords never touch our server.
+- [x] Every protected API call verifies the Firebase ID token with `firebase-admin` (`verifyIdToken`). Invalid/expired tokens get `401`.
+- [x] No development/mock tokens are accepted in any environment.
+- [x] Admin = Firebase-**verified** email listed in `ADMIN_EMAILS` (default `levixfashions@gmail.com`). Enforced server-side on every `/api/admin/*` route; the UI guard is cosmetic only.
 
----
+## Payments
+- [x] Order totals are calculated on the server from database prices (client prices are ignored).
+- [x] Coupons are validated on the server (active, expiry, minimum order, usage limit).
+- [x] `/api/payments/verify` checks the Razorpay order id belongs to the order, verifies the HMAC signature (timing-safe), and confirms amount with Razorpay.
+- [x] Webhook requires `RAZORPAY_WEBHOOK_SECRET` and verifies the signature on the raw body.
+- [x] Order is marked paid exactly once (atomic), so stock is never deducted twice. Cancelling a paid order restocks it.
+- [x] No mock/sandbox payment paths remain — if Razorpay is not configured, checkout is disabled.
 
-## 1. Network & Port Hardening
-- [x] **PostgreSQL**: Bound strictly to `127.0.0.1:5432`. No public network interfaces listen on PostgreSQL.
-- [x] **Express Backend**: Listening only on loopback or behind Nginx on port `4000`. Direct access to port 4000 is blocked by the public firewall.
-- [x] **Public Ingress**: Only Ports `80` (HTTP), `443` (HTTPS), and custom SSH are permitted.
-- [x] **SSH**: Root password login disabled; SSH key-based authentication enforced.
+## Data access
+- [x] Carts are tied to the signed-in user or a random guest session id; items can only be changed by their owner.
+- [x] Order details require the owner's login, admin, or the secret per-order access key given after checkout. Order numbers are random (`LVX-YYMMDD-XXXXXX`).
 
----
+## Platform
+- [x] `trust proxy` enabled so rate limiting uses real visitor IPs.
+- [x] Rate limits: API 900 / 15 min / IP, account 200 / 15 min, checkout 30 / 10 min.
+- [x] CORS restricted to the store domains.
+- [x] Helmet security headers, HSTS, `X-Powered-By` removed, gzip compression.
+- [x] Request bodies limited to 1 MB; all inputs validated with Zod.
+- [x] Secrets live only in `.env` files, which are git-ignored.
 
-## 2. Authentication & Authorization
-- [x] **Firebase Admin Token Verification**: All protected backend endpoints verify the Bearer token via `admin.auth().verifyIdToken()`.
-- [x] **No Client-Trusted IDs**: Client requests never dictate user identity; the verified Firebase UID is extracted exclusively from the decoded cryptographic token.
-- [x] **Admin Authorization**: Administrative endpoints (`/api/admin/*`) require server-verified `Role.ADMIN` claims.
-- [x] **No Password Storage**: Zero customer passwords exist in PostgreSQL; all credential security is delegated to Google Firebase Authentication.
-
----
-
-## 3. Financial Integrity & Payments
-- [x] **Integer Paise Precision**: All currency values (`basePrice`, `subtotalPaise`, `totalPaise`) are stored as whole integers in paise (`1 INR = 100 paise`), preventing binary floating-point rounding errors.
-- [x] **Cryptographic Signature Verification**: Orders are never transitioned to `PAID` based on client callbacks alone; HMAC SHA-256 signatures from Razorpay are verified on the backend.
-- [x] **Atomic Inventory Deduction**: Variant stock deductions occur within transactional database locks to prevent race conditions or double-spending.
-
----
-
-## 4. API & Application Defenses
-- [x] **Helmet**: Enforces secure HTTP headers (`X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`).
-- [x] **Rate Limiting**: Rate limiting configured for auth routes (30/15min) and checkout routes (20/10min) to mitigate brute-force and DDoS attempts.
-- [x] **Input Validation**: Centralized request validation via Zod schemas for all mutations.
-- [x] **Error Masking**: Internal server errors and database stack traces are suppressed in production mode to avoid reconnaissance leakage.
-- [x] **Dotfile Shielding**: Nginx blocks public requests matching `/\.` (e.g. `.env`, `.git`).
+## Owner actions
+- [ ] Rotate the Razorpay secret and Firebase service-account key if they were ever shared (e.g. in a zip).
+- [ ] Enable 2-step verification on levixfashions@gmail.com (it is the admin key to the store).
+- [ ] Turn on Hostinger daily backups for the MySQL database.

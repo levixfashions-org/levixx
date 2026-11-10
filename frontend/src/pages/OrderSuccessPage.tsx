@@ -1,108 +1,146 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Clock, ArrowRight, ShieldCheck } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { Order } from '../types';
-import { CheckCircle2, Package, ArrowRight, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useSettingsStore } from '../store/settingsStore';
 
 export const OrderSuccessPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
+  const [params] = useSearchParams();
+  const { user, loading: authLoading } = useAuth();
+  const supportEmail = useSettingsStore((s) => s.settings.supportEmail);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    async function loadOrder() {
+    if (authLoading || !orderNumber) return;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    let key = params.get('key') || '';
+    if (!key) {
       try {
-        const res = await apiClient.get(`/orders/${orderNumber}`);
+        key = sessionStorage.getItem(`levix_order_${orderNumber}`) || '';
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const load = async () => {
+      try {
+        const res = await apiClient.get(`/orders/${orderNumber}`, key ? { key } : undefined);
         setOrder(res.data.order);
-      } catch (err) {
-        console.warn('Could not load order:', err);
+        // Payment confirmation can take a few seconds (webhook) — poll briefly.
+        if (res.data.order?.paymentStatus !== 'PAID' && attempts < 6) {
+          attempts++;
+          timer = setTimeout(load, 3000);
+        }
+      } catch {
+        setNotFound(true);
       } finally {
         setLoading(false);
       }
-    }
-    loadOrder();
-  }, [orderNumber]);
+    };
+    load();
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderNumber, authLoading, user?.uid]);
+
+  if (loading) {
+    return <div className="max-w-2xl mx-auto px-4 py-24 text-center font-mono text-xs uppercase tracking-widest text-neutral-500">Loading your order...</div>;
+  }
+
+  if (notFound || !order) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-24 text-center space-y-4">
+        <h1 className="font-display font-black text-2xl uppercase text-black">Order {orderNumber}</h1>
+        <p className="text-xs text-neutral-600">
+          We couldn't show this order on this device. Sign in with the email you used at checkout to see it under My Orders, or contact{' '}
+          <a className="underline" href={`mailto:${supportEmail}`}>{supportEmail}</a>.
+        </p>
+        <Link to="/account/orders" className="inline-block px-8 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest">My Orders</Link>
+      </div>
+    );
+  }
+
+  const paid = order.paymentStatus === 'PAID';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16 sm:py-24 text-center space-y-8">
-      
       <div className="flex flex-col items-center space-y-3">
-        <CheckCircle2 className="w-16 h-16 text-black stroke-[1.5]" />
+        {paid ? <CheckCircle2 className="w-16 h-16 text-black stroke-[1.5]" /> : <Clock className="w-16 h-16 text-black stroke-[1.5]" />}
         <span className="text-[11px] font-mono uppercase tracking-widest text-[#FF5400] font-bold">
-          ORDER CONFIRMED & SECURED
+          {paid ? 'ORDER CONFIRMED' : 'CONFIRMING PAYMENT'}
         </span>
         <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black">
-          Thank You For Your Order
+          {paid ? 'Thank You For Your Order' : 'Almost There'}
         </h1>
         <p className="text-xs text-neutral-600 max-w-md">
-          A confirmation receipt and courier tracking details will be sent to your email.
+          {paid
+            ? 'Your payment was successful. We will pack your order and share courier tracking as soon as it ships.'
+            : 'We are waiting for Razorpay to confirm your payment. This usually takes a few seconds — this page will update automatically.'}
         </p>
       </div>
 
-      <div className="bg-white p-6 sm:p-8 border border-black/10 shadow-sm text-left space-y-6">
-        
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-black/10 gap-2">
+      <div className="bg-white p-6 border border-black/10 text-left space-y-5 shadow-sm">
+        <div className="flex flex-wrap justify-between gap-2 border-b border-black/10 pb-4">
           <div>
-            <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Order Number</span>
-            <p className="font-mono font-bold text-base text-black">{orderNumber}</p>
+            <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-mono">Order Number</p>
+            <p className="font-mono font-bold text-black">{order.orderNumber}</p>
           </div>
-          <div>
-            <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Payment Status</span>
-            <p className="text-xs font-bold uppercase tracking-wider text-green-700 flex items-center gap-1">
-              <ShieldCheck className="w-4 h-4" />
-              <span>PAID & VERIFIED</span>
-            </p>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-widest text-neutral-500 font-mono">Status</p>
+            <p className="font-bold text-black text-xs uppercase">{order.status}</p>
           </div>
         </div>
 
-        {order && (
-          <div className="space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-black">
-              Items Ordered ({order.items.length})
-            </h4>
-            <div className="divide-y divide-black/5">
-              {order.items.map((it) => (
-                <div key={it.id} className="py-2.5 flex justify-between items-center text-xs">
-                  <div>
-                    <p className="font-semibold text-black">{it.productName}</p>
-                    <p className="text-[11px] text-neutral-500 font-mono">
-                      Size: {it.size} • Qty: {it.quantity}
-                    </p>
-                  </div>
-                  <span className="font-mono font-bold text-black">
-                    RS. {(it.subtotalPaise / 100).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              ))}
+        <div className="space-y-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">Items Ordered ({order.items.length})</p>
+          {order.items.map((it) => (
+            <div key={it.id} className="flex items-center space-x-3 text-xs">
+              <div className="w-12 h-14 bg-neutral-200 overflow-hidden flex-shrink-0">
+                {it.imageUrl && <img src={it.imageUrl} alt={it.productName} className="w-full h-full object-cover" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-black truncate">{it.productName}</p>
+                <p className="text-[11px] text-neutral-500 font-mono">Size {it.size} • Qty {it.quantity}</p>
+              </div>
+              <span className="font-mono font-bold">RS. {(it.subtotalPaise / 100).toLocaleString('en-IN')}</span>
             </div>
+          ))}
+        </div>
 
-            <div className="border-t border-black/10 pt-3 flex justify-between items-center text-sm font-bold text-black">
-              <span className="uppercase tracking-wider">Total Paid</span>
-              <span className="font-mono text-base">
-                RS. {(order.totalPaise / 100).toLocaleString('en-IN')}
-              </span>
-            </div>
+        <div className="border-t border-black/10 pt-4 space-y-1.5 text-xs">
+          <div className="flex justify-between text-neutral-600"><span>Subtotal</span><span className="font-mono">RS. {(order.subtotalPaise / 100).toLocaleString('en-IN')}</span></div>
+          {order.discountPaise > 0 && (
+            <div className="flex justify-between text-green-700"><span>Discount</span><span className="font-mono">- RS. {(order.discountPaise / 100).toLocaleString('en-IN')}</span></div>
+          )}
+          <div className="flex justify-between text-neutral-600"><span>Shipping</span><span className="font-mono">{order.shippingPaise === 0 ? 'FREE' : `RS. ${(order.shippingPaise / 100).toLocaleString('en-IN')}`}</span></div>
+          <div className="flex justify-between font-bold text-black text-sm pt-1"><span>Total Paid</span><span className="font-mono">RS. {(order.totalPaise / 100).toLocaleString('en-IN')}</span></div>
+        </div>
+
+        {order.shippingAddress && (
+          <div className="border-t border-black/10 pt-4 text-xs text-neutral-700">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 mb-1">Shipping To</p>
+            <p>{order.shippingAddress}</p>
           </div>
         )}
-
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-        <Link
-          to="/collections/all-products"
-          className="w-full sm:w-auto px-8 py-3.5 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2"
-        >
-          <span>Continue Shopping</span>
-          <ArrowRight className="w-4 h-4" />
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <Link to="/collections/all-products" className="px-8 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+          Continue Shopping <ArrowRight className="w-4 h-4" />
         </Link>
-        <Link
-          to="/account/orders"
-          className="w-full sm:w-auto px-8 py-3.5 border border-black text-black text-xs font-bold uppercase tracking-widest hover:bg-black hover:text-white transition-colors"
-        >
-          View Order History
-        </Link>
+        {user && (
+          <Link to="/account/orders" className="px-8 py-3 border border-black text-black text-xs font-bold uppercase tracking-widest">My Orders</Link>
+        )}
       </div>
 
+      <p className="text-[11px] text-neutral-500 flex items-center justify-center gap-1.5">
+        <ShieldCheck className="w-3.5 h-3.5" /> Need help? Email <a className="underline" href={`mailto:${supportEmail}`}>{supportEmail}</a> with your order number.
+      </p>
     </div>
   );
 };

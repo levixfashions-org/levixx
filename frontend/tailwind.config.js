@@ -17,8 +17,9 @@ export default {
         },
       },
       fontFamily: {
-        display: ['Assistant', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
-        sans: ['Assistant', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        display: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        logo: ['"Archivo Black"', 'Inter', 'sans-serif'],
         mono: ['"SF Mono"', 'Menlo', 'monospace'],
       },
       letterSpacing: {

@@ -21,6 +21,9 @@ export interface Category {
   slug: string;
   description?: string | null;
   imageUrl?: string | null;
+  sortOrder?: number;
+  group?: string | null;
+  _count?: { products: number };
 }
 
 export interface Collection {
@@ -29,6 +32,9 @@ export interface Collection {
   slug: string;
   description?: string | null;
   bannerImageUrl?: string | null;
+  mobileBannerUrl?: string | null;
+  type?: 'collection' | 'category';
+  group?: string | null;
   _count?: { products: number };
 }
 
@@ -44,6 +50,9 @@ export interface Product {
   comparePrice?: number | null; // in paise
   isFeatured: boolean;
   isActive: boolean;
+  colorGroup?: string | null;
+  collectionIds?: string[];
+  createdAt?: string;
   category?: Category | null;
   images: ProductImage[];
   variants: ProductVariant[];
@@ -112,6 +121,12 @@ export interface Order {
   status: 'PENDING' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
   paymentStatus: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
   razorpayOrderId?: string | null;
+  couponCode?: string | null;
+  courier?: string | null;
+  trackingNumber?: string | null;
+  shippingAddress?: string;
+  adminNotes?: string | null;
+  paidAt?: string | null;
   items: OrderItem[];
   createdAt: string;
 }
@@ -123,6 +138,38 @@ export interface UserProfile {
   name?: string | null;
   phone?: string | null;
   role: 'CUSTOMER' | 'ADMIN';
+  emailVerified?: boolean;
   addresses: Address[];
   _count?: { orders: number };
+}
+
+export interface HomeSection {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  bannerImageUrl?: string | null;
+  mobileBannerUrl?: string | null;
+  layout: 'CAROUSEL' | 'GRID' | 'NONE';
+  products: Product[];
+}
+
+export interface MenuCategory {
+  id: string;
+  name: string;
+  slug: string;
+  group: string;
+  imageUrl?: string | null;
+  count: number;
+}
+
+export interface HomeData {
+  latestDrop: Product[];
+  sections: HomeSection[];
+  gallery: { id: string; name: string; slug: string; bannerImageUrl?: string | null; mobileBannerUrl?: string | null }[];
+  menu: {
+    collections: { id: string; name: string; slug: string; bannerImageUrl?: string | null }[];
+    categories: MenuCategory[];
+    colors: string[];
+  };
 }

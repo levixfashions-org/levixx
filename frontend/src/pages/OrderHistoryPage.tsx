@@ -50,7 +50,7 @@ export const OrderHistoryPage: React.FC = () => {
             Order History
           </h1>
           <p className="text-xs text-neutral-600 mt-1">
-            Track fulfillment progress, download receipts, and manage size exchanges.
+            Track your orders and courier details.
           </p>
         </div>
       </div>
@@ -88,6 +88,11 @@ export const OrderHistoryPage: React.FC = () => {
                       <p className="text-xs font-bold uppercase tracking-wider text-black">
                         {order.status}
                       </p>
+                      {order.trackingNumber && (
+                        <p className="text-[11px] text-neutral-600 font-mono mt-0.5">
+                          {order.courier ? `${order.courier}: ` : 'Tracking: '}{order.trackingNumber}
+                        </p>
+                      )}
                     </div>
 
                     <Link

@@ -1,38 +1,45 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { env } from './env.js';
-export const razorpay = new Razorpay({
-    key_id: env.RAZORPAY_KEY_ID,
-    key_secret: env.RAZORPAY_KEY_SECRET,
-});
-export function verifyPaymentSignature(orderId, paymentId, signature) {
-    try {
-        const text = `${orderId}|${paymentId}`;
-        const generatedSignature = crypto
-            .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
-            .update(text)
-            .digest('hex');
-        return generatedSignature === signature;
+let instance = null;
+export function isRazorpayConfigured() {
+    return Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
+}
+export function getRazorpay() {
+    if (!isRazorpayConfigured()) {
+        throw new Error('Razorpay keys are not configured');
     }
-    catch (err) {
-        console.error('Signature verification error:', err);
+    if (!instance) {
+        instance = new Razorpay({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET });
+    }
+    return instance;
+}
+function safeEqualHex(a, b) {
+    try {
+        const ab = Buffer.from(a, 'hex');
+        const bb = Buffer.from(b, 'hex');
+        if (ab.length === 0 || ab.length !== bb.length)
+            return false;
+        return crypto.timingSafeEqual(ab, bb);
+    }
+    catch {
         return false;
     }
 }
-export function verifyWebhookSignature(body, signature) {
-    if (!env.RAZORPAY_WEBHOOK_SECRET) {
-        console.warn('RAZORPAY_WEBHOOK_SECRET not configured, skipping HMAC verification');
-        return true;
-    }
-    try {
-        const expectedSignature = crypto
-            .createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET)
-            .update(body)
-            .digest('hex');
-        return expectedSignature === signature;
-    }
-    catch (err) {
-        console.error('Webhook signature verification error:', err);
+/** Verifies the signature returned by Razorpay Checkout after a successful payment. */
+export function verifyPaymentSignature(orderId, paymentId, signature) {
+    if (!env.RAZORPAY_KEY_SECRET)
         return false;
-    }
+    const expected = crypto
+        .createHmac('sha256', env.RAZORPAY_KEY_SECRET)
+        .update(`${orderId}|${paymentId}`)
+        .digest('hex');
+    return safeEqualHex(expected, signature);
+}
+/** Verifies the X-Razorpay-Signature header of a webhook call (uses the raw request body). */
+export function verifyWebhookSignature(rawBody, signature) {
+    if (!env.RAZORPAY_WEBHOOK_SECRET)
+        return false;
+    const expected = crypto.createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest('hex');
+    return safeEqualHex(expected, signature);
 }

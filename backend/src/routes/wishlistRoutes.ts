@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { verifyFirebaseToken } from '../middleware/verifyFirebaseToken.js';
+import { asyncHandler as h } from '../middleware/errorHandler.js';
+import { getWishlist, toggleWishlist, mergeWishlist, getProductsByIds } from '../controllers/wishlistController.js';
+
+const router = Router();
+router.get('/products', h(getProductsByIds));
+router.get('/', verifyFirebaseToken, h(getWishlist));
+router.post('/merge', verifyFirebaseToken, h(mergeWishlist));
+router.post('/:productId', verifyFirebaseToken, h(toggleWishlist));
+export default router;

@@ -1,210 +1,207 @@
-import { Request, Response, NextFunction } from 'express';
-import { prisma } from '../config/db.js';
-import { razorpay } from '../config/razorpay.js';
-import { AppError } from '../middleware/errorHandler.js';
+import { Request, Response } from 'express';
 import { z } from 'zod';
-import { OrderStatus, PaymentStatus, DiscountType } from '@prisma/client';
+import { OrderStatus, PaymentStatus, Role } from '@prisma/client';
+import { prisma } from '../config/db.js';
+import { env } from '../config/env.js';
+import { getRazorpay, isRazorpayConfigured } from '../config/razorpay.js';
+import { AppError } from '../middleware/errorHandler.js';
+import { addressSchema } from './authController.js';
+import { formatCart, getAnonymousToken, resolveCart } from './cartController.js';
+import { calculateShippingPaise, getSettings } from '../services/store.js';
+import { evaluateCoupon, formatAddress, generateAccessKey, generateOrderNumber, safeEqual } from '../services/orders.js';
 
 const createOrderSchema = z.object({
-  customerEmail: z.string().email(),
-  customerName: z.string().min(2),
-  customerPhone: z.string().min(10),
-  shippingAddress: z.object({
-    fullName: z.string().min(2),
-    line1: z.string().min(3),
-    line2: z.string().optional(),
-    city: z.string().min(2),
-    state: z.string().min(2),
-    postalCode: z.string().min(4),
-    country: z.string().default('India'),
-    phone: z.string().min(10)
-  }),
-  cartId: z.string().uuid().optional(),
-  couponCode: z.string().optional(),
-  anonymousToken: z.string().optional()
+  customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address'),
+  customerName: z.string().trim().min(2, 'Enter your full name').max(100),
+  customerPhone: addressSchema.shape.phone,
+  shippingAddress: addressSchema.omit({ isDefault: true }),
+  couponCode: z.string().trim().max(40).optional().or(z.literal('')),
+  saveAddress: z.boolean().optional()
 });
 
-export async function createOrder(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function validateCoupon(req: Request, res: Response) {
+  const { code } = z.object({ code: z.string().trim().min(1).max(40) }).parse(req.body);
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const formatted = await formatCart(cart);
+  if (formatted.items.length === 0) throw new AppError('Your bag is empty', 400);
+  const result = await evaluateCoupon(code, formatted.subtotalPaise);
+  res.json(result);
+}
+
+export async function createOrder(req: Request, res: Response) {
+  if (!isRazorpayConfigured()) {
+    throw new AppError('Online payments are temporarily unavailable. Please try again shortly.', 503);
+  }
+  const data = createOrderSchema.parse(req.body);
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const items = cart.items.filter((i) => i.variant?.product?.isActive);
+  if (items.length === 0) throw new AppError('Your bag is empty', 400);
+
+  let subtotalPaise = 0;
+  for (const item of items) {
+    if (item.quantity > item.variant.stockQuantity) {
+      throw new AppError(
+        item.variant.stockQuantity <= 0
+          ? `${item.variant.product.name} (${item.variant.size}) just sold out. Please remove it from your bag.`
+          : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${item.variant.size}). Please update your bag.`,
+        409
+      );
+    }
+    subtotalPaise += (item.variant.product.basePrice + item.variant.priceDelta) * item.quantity;
+  }
+
+  let discountPaise = 0;
+  let couponCode: string | null = null;
+  if (data.couponCode) {
+    const coupon = await evaluateCoupon(data.couponCode, subtotalPaise);
+    discountPaise = coupon.discountPaise;
+    couponCode = coupon.code;
+  }
+
+  const settings = await getSettings();
+  const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
+  const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise;
+  if (totalPaise < 100) throw new AppError('Order total must be at least Rs. 1', 400);
+
+  const orderNumber = generateOrderNumber();
+  const accessKey = generateAccessKey();
+
+  let rzpOrder: any;
   try {
-    const data = createOrderSchema.parse(req.body);
-
-    // 1. Fetch Cart Items
-    const cartWhere = req.user?.id
-      ? { userId: req.user.id }
-      : data.cartId
-      ? { id: data.cartId }
-      : data.anonymousToken
-      ? { anonymousToken: data.anonymousToken }
-      : null;
-
-    if (!cartWhere) {
-      throw new AppError('A valid cart is required to place an order', 400);
-    }
-
-    const cart = await prisma.cart.findFirst({
-      where: cartWhere,
-      include: {
-        items: {
-          include: {
-            variant: {
-              include: {
-                product: {
-                  include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } }
-                }
-              }
-            }
-          }
-        }
-      }
-    });
-
-    if (!cart || cart.items.length === 0) {
-      throw new AppError('Your cart is empty', 400);
-    }
-
-    // 2. Validate Inventory and Compute Subtotal in paise
-    let subtotalPaise = 0;
-    for (const item of cart.items) {
-      if (item.quantity > item.variant.stockQuantity) {
-        throw new AppError(`Product ${item.variant.product.name} (Size: ${item.variant.size}) only has ${item.variant.stockQuantity} in stock`, 400);
-      }
-      const unitPrice = item.variant.product.basePrice + item.variant.priceDelta;
-      subtotalPaise += unitPrice * item.quantity;
-    }
-
-    // 3. Coupon Application
-    let discountPaise = 0;
-    if (data.couponCode) {
-      const coupon = await prisma.coupon.findUnique({
-        where: { code: data.couponCode.toUpperCase() }
-      });
-      if (coupon && coupon.isActive && subtotalPaise >= coupon.minOrderPaise) {
-        if (coupon.discountType === DiscountType.PERCENTAGE) {
-          discountPaise = Math.round((subtotalPaise * coupon.discountValue) / 100);
-        } else {
-          discountPaise = coupon.discountValue;
-        }
-      }
-    }
-
-    // 4. Shipping Calculation: Free above Rs. 2,999 (299900 paise)
-    const FREE_SHIPPING_THRESHOLD_PAISE = 299900;
-    const shippingPaise = subtotalPaise >= FREE_SHIPPING_THRESHOLD_PAISE ? 0 : 15000;
-    const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise;
-
-    // 5. Generate Order Number
-    const orderNumber = `BLU-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
-
-    // 6. Create Razorpay Order
-    let razorpayOrderId: string | null = null;
-    try {
-      const rzpOrder = await razorpay.orders.create({
-        amount: totalPaise, // amount in paise
-        currency: 'INR',
-        receipt: orderNumber,
-        notes: {
-          customerEmail: data.customerEmail,
-          customerName: data.customerName
-        }
-      });
-      razorpayOrderId = rzpOrder.id;
-    } catch (rzpErr: any) {
-      console.warn('Razorpay order creation fallback (test/sandbox):', rzpErr.message);
-      razorpayOrderId = `order_mock_${Date.now()}`;
-    }
-
-    // 7. Atomic Prisma Transaction to persist Order + Items
-    const newOrder = await prisma.$transaction(async (tx) => {
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
-          userId: req.user?.id || null,
-          customerEmail: data.customerEmail,
-          customerName: data.customerName,
-          customerPhone: data.customerPhone,
-          shippingAddressSnapshot: data.shippingAddress,
-          subtotalPaise,
-          shippingPaise,
-          discountPaise,
-          totalPaise,
-          status: OrderStatus.PENDING,
-          paymentStatus: PaymentStatus.PENDING,
-          razorpayOrderId,
-          items: {
-            create: cart.items.map(item => ({
-              productId: item.variant.product.id,
-              variantId: item.variantId,
-              productName: item.variant.product.name,
-              productSlug: item.variant.product.slug,
-              size: item.variant.size,
-              unitPricePaise: item.variant.product.basePrice + item.variant.priceDelta,
-              quantity: item.quantity,
-              subtotalPaise: (item.variant.product.basePrice + item.variant.priceDelta) * item.quantity,
-              imageUrl: item.variant.product.images[0]?.url || null
-            }))
-          }
-        },
-        include: { items: true }
-      });
-
-      return order;
-    });
-
-    res.status(201).json({
-      order: newOrder,
-      razorpayOrderId,
-      amountPaise: totalPaise,
+    rzpOrder = await getRazorpay().orders.create({
+      amount: totalPaise,
       currency: 'INR',
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder'
+      receipt: orderNumber,
+      notes: { orderNumber, customerEmail: data.customerEmail }
     });
-  } catch (err) {
-    next(err);
+  } catch (err: any) {
+    console.error('Razorpay order creation failed:', err?.error || err?.message || err);
+    throw new AppError('Could not start the payment. Please try again in a moment.', 502);
   }
+
+  const order = await prisma.order.create({
+    data: {
+      orderNumber,
+      accessKey,
+      userId: req.user?.id || null,
+      cartId: cart.id,
+      customerEmail: data.customerEmail,
+      customerName: data.customerName,
+      customerPhone: data.customerPhone,
+      shippingAddressSnapshot: { ...data.shippingAddress, phone: data.shippingAddress.phone },
+      subtotalPaise,
+      shippingPaise,
+      discountPaise,
+      totalPaise,
+      couponCode,
+      status: OrderStatus.PENDING,
+      paymentStatus: PaymentStatus.PENDING,
+      razorpayOrderId: rzpOrder.id,
+      items: {
+        create: items.map((item) => {
+          const unit = item.variant.product.basePrice + item.variant.priceDelta;
+          return {
+            productId: item.variant.product.id,
+            variantId: item.variantId,
+            productName: item.variant.product.name,
+            productSlug: item.variant.product.slug,
+            size: item.variant.size,
+            unitPricePaise: unit,
+            quantity: item.quantity,
+            subtotalPaise: unit * item.quantity,
+            imageUrl: item.variant.product.images[0]?.url || null
+          };
+        })
+      }
+    },
+    include: { items: true }
+  });
+
+  // Save the address to the customer's account for faster checkout next time.
+  if (req.user && data.saveAddress) {
+    const existing = await prisma.address.findFirst({
+      where: { userId: req.user.id, line1: data.shippingAddress.line1, postalCode: data.shippingAddress.postalCode }
+    });
+    if (!existing) {
+      const count = await prisma.address.count({ where: { userId: req.user.id } });
+      if (count < 10) {
+        await prisma.address
+          .create({ data: { ...(data.shippingAddress as any), userId: req.user.id, isDefault: count === 0 } })
+          .catch(() => undefined);
+      }
+    }
+  }
+
+  res.status(201).json({
+    order: {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      totalPaise: order.totalPaise,
+      customerEmail: order.customerEmail,
+      customerName: order.customerName
+    },
+    accessKey,
+    razorpayOrderId: rzpOrder.id,
+    amountPaise: totalPaise,
+    currency: 'INR',
+    keyId: env.RAZORPAY_KEY_ID
+  });
 }
 
-export async function getUserOrders(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    if (!req.user) {
-      throw new AppError('Unauthorized', 401);
-    }
-
-    const orders = await prisma.order.findMany({
-      where: { userId: req.user.id },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        items: true,
-        payment: true
-      }
-    });
-
-    res.json({ orders });
-  } catch (err) {
-    next(err);
-  }
+export async function getUserOrders(req: Request, res: Response) {
+  if (!req.user) throw new AppError('Please sign in to continue.', 401);
+  const orders = await prisma.order.findMany({
+    where: {
+      OR: [{ userId: req.user.id }, { customerEmail: req.user.email }],
+      paymentStatus: { in: [PaymentStatus.PAID, PaymentStatus.REFUNDED] }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    include: { items: true }
+  });
+  res.set('Cache-Control', 'no-store');
+  res.json({ orders: orders.map(({ accessKey, adminNotes, cartId, ...o }) => o) });
 }
 
-export async function getOrderByNumber(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const { orderNumber } = req.params;
-    const order = await prisma.order.findUnique({
-      where: { orderNumber },
-      include: {
-        items: true,
-        payment: true
-      }
-    });
+export async function getOrderByNumber(req: Request, res: Response) {
+  const { orderNumber } = req.params;
+  const key = typeof req.query.key === 'string' ? req.query.key : undefined;
+  const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true } });
+  if (!order) throw new AppError('Order not found', 404);
 
-    if (!order) {
-      throw new AppError('Order not found', 404);
-    }
-
-    // Protect customer privacy if logged in as a different user
-    if (req.user && order.userId && order.userId !== req.user.id && req.user.role !== 'ADMIN') {
-      throw new AppError('Forbidden access to order details', 403);
-    }
-
-    res.json({ order });
-  } catch (err) {
-    next(err);
+  const isOwner =
+    req.user && (order.userId === req.user.id || order.customerEmail === req.user.email || req.user.role === Role.ADMIN);
+  if (!isOwner && !safeEqual(key, order.accessKey)) {
+    throw new AppError('Order not found', 404);
   }
+
+  const { accessKey, adminNotes, cartId, ...publicOrder } = order;
+  res.set('Cache-Control', 'no-store');
+  res.json({ order: { ...publicOrder, shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
+}
+
+/** Public order tracking: order number + checkout email. Returns status only (no address or payment details). */
+export async function trackOrder(req: Request, res: Response) {
+  const { orderNumber, email } = z
+    .object({ orderNumber: z.string().trim().min(5).max(40), email: z.string().trim().toLowerCase().email() })
+    .parse(req.body);
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: orderNumber.toUpperCase() },
+    include: { items: { select: { quantity: true } } }
+  });
+  if (!order || order.customerEmail.toLowerCase() !== email) {
+    throw new AppError('No order found with that number and email', 404);
+  }
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    order: {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      courier: order.courier,
+      trackingNumber: order.trackingNumber,
+      createdAt: order.createdAt,
+      itemCount: order.items.reduce((a, i) => a + i.quantity, 0)
+    }
+  });
 }

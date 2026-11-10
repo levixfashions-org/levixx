@@ -3,27 +3,35 @@ import path from 'path';
 
 export default defineConfig({
   esbuild: {
-    jsx: 'automatic',
+    jsx: 'automatic'
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
+      '@': path.resolve(__dirname, './src')
+    }
   },
   server: {
     host: '0.0.0.0',
     port: 5173,
-    allowedHosts: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-    },
+        target: 'http://127.0.0.1:4000',
+        changeOrigin: true
+      }
+    }
   },
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 1000,
-  },
+    target: 'es2020',
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          firebase: ['firebase/app', 'firebase/auth']
+        }
+      }
+    }
+  }
 });

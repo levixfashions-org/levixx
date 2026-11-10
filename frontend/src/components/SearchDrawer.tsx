@@ -1,150 +1,112 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, X, ArrowRight } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
+import { useHomeStore } from '../store/homeStore';
 import { apiClient } from '../services/api';
 import { Product } from '../types';
+import { CloseIcon, SearchIcon } from './Icons';
+import { formatRs } from './ProductCard';
 
 export const SearchDrawer: React.FC = () => {
   const { isSearchOpen, closeSearch } = useCartStore();
+  const { data: home, fetchHome } = useHomeStore();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    if (!query.trim()) {
+    if (isSearchOpen) {
+      fetchHome();
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isSearchOpen, fetchHome]);
+  useEffect(() => closeSearch(), [location.pathname, closeSearch]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeSearch();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [closeSearch]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
       setResults([]);
       return;
     }
-
-    const timer = setTimeout(async () => {
+    setSearching(true);
+    const t = setTimeout(async () => {
       try {
-        setLoading(true);
-        const res = await apiClient.get('/products', { search: query, limit: 6 });
+        const res = await apiClient.get('/products', { search: q, limit: 8 });
         setResults(res.data.products || []);
-      } catch (err) {
-        console.warn('Search query error:', err);
+      } catch {
+        setResults([]);
       } finally {
-        setLoading(false);
+        setSearching(false);
       }
     }, 250);
-
-    return () => clearTimeout(timer);
+    return () => clearTimeout(t);
   }, [query]);
 
   if (!isSearchOpen) return null;
-
-  const handleSelectProduct = (slug: string) => {
-    closeSearch();
-    navigate(`/products/${slug}`);
-  };
-
-  const handleViewAll = (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
-      closeSearch();
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-    }
+    if (query.trim()) navigate(`/search?q=${encodeURIComponent(query.trim())}`);
   };
+  const chips = [...(home?.menu.collections || []), ...(home?.menu.categories || [])].slice(0, 10);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
-        onClick={closeSearch}
-      />
+    <div className="fixed inset-0 z-[80]">
+      <div className="absolute inset-0 bg-black/40" onClick={closeSearch} />
+      <div className="relative bg-white rounded-b-[22px] lx-drop-in max-h-[85vh] overflow-y-auto">
+        <form onSubmit={submit} className="flex items-center gap-3 px-4 md:px-[22px] h-16 border-b border-black/5">
+          <SearchIcon className="w-[18px] h-[18px] text-neutral-500" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search LEVIX"
+            className="flex-1 text-[15px] md:text-[13px] focus:outline-none bg-transparent"
+            aria-label="Search products"
+          />
+          <button type="button" onClick={closeSearch} aria-label="Close search" className="w-[42px] h-[26px] rounded-full bg-[#E8E8E8] flex items-center justify-center">
+            <CloseIcon className="w-3.5 h-3.5" />
+          </button>
+        </form>
 
-      <div className="fixed inset-x-0 top-0 max-h-[85vh] bg-[#EFEFEF] shadow-2xl border-b border-black/15 overflow-y-auto">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6">
-          
-          {/* Search Header Bar */}
-          <div className="flex items-center justify-between pb-6 border-b border-black/10">
-            <form onSubmit={handleViewAll} className="flex-1 flex items-center space-x-3">
-              <Search className="w-5 h-5 text-black flex-shrink-0" />
-              <input
-                type="text"
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="SEARCH OVERLENGTH, WAFFLE FULL SLEEVE, ACID WASH..."
-                className="w-full bg-transparent text-base sm:text-xl font-display uppercase tracking-tight placeholder:text-neutral-400 focus:outline-none text-black"
-              />
-            </form>
-            <button
-              onClick={closeSearch}
-              className="p-2 text-black hover:opacity-60 transition-opacity ml-4"
-              aria-label="Close search"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Quick Categories Bar */}
-          <div className="py-4 flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="text-neutral-500 uppercase tracking-widest text-[10px] mr-2">Quick Searches:</span>
-            {['Overlength T-Shirts', 'Waffle Boxy Full Sleeves', 'Acid Wash T-Shirts'].map((term) => (
-              <button
-                key={term}
-                onClick={() => setQuery(term)}
-                className="px-3 py-1 bg-white border border-black/10 hover:border-black text-black uppercase text-[11px] transition-colors"
-              >
-                {term}
-              </button>
-            ))}
-          </div>
-
-          {/* Results Grid */}
-          <div className="pt-4 pb-8">
-            {loading ? (
-              <div className="py-12 text-center text-xs text-neutral-500 font-mono uppercase tracking-widest">
-                Searching catalog...
+        <div className="px-4 md:px-[22px] py-5">
+          {query.trim().length < 2 ? (
+            <>
+              <p className="text-[11px] font-semibold mb-2.5">Popular</p>
+              <div className="flex flex-wrap gap-1.5">
+                <Link to="/collections/new-in" className="px-3.5 py-1.5 rounded-full bg-[#EFEFEF] text-[11px] hover:bg-black hover:text-white">New Arrivals</Link>
+                {chips.map((c) => (
+                  <Link key={c.id} to={`/collections/${c.slug}`} className="px-3.5 py-1.5 rounded-full bg-[#EFEFEF] text-[11px] hover:bg-black hover:text-white">{c.name}</Link>
+                ))}
               </div>
-            ) : results.length > 0 ? (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-xs font-semibold text-neutral-600">
-                  <span>Found {results.length} results</span>
-                  <button
-                    onClick={handleViewAll}
-                    className="text-black hover:underline uppercase text-[11px] flex items-center gap-1 font-bold"
-                  >
-                    <span>View all matching items</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                  {results.map((prod) => (
-                    <div
-                      key={prod.id}
-                      onClick={() => handleSelectProduct(prod.slug)}
-                      className="cursor-pointer group flex flex-col space-y-2 bg-white/50 p-2 border border-black/5 hover:border-black transition-colors"
-                    >
-                      <div className="aspect-[3/4] overflow-hidden bg-neutral-200">
-                        <img
-                          src={prod.images[0]?.url}
-                          alt={prod.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold text-black line-clamp-1">{prod.name}</p>
-                        <p className="text-[11px] font-mono font-bold text-neutral-900">
-                          RS. {(prod.basePrice / 100).toLocaleString('en-IN')}
-                        </p>
-                      </div>
+            </>
+          ) : searching && !results.length ? (
+            <p className="text-[12px] text-neutral-500">Searching…</p>
+          ) : results.length === 0 ? (
+            <p className="text-[12px] text-neutral-600">No results for “{query.trim()}”.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+                {results.map((p) => (
+                  <Link key={p.id} to={`/products/${p.slug}`} className="group">
+                    <div className="aspect-[4/5] rounded-[8px] overflow-hidden bg-[#E3E3E3]">
+                      {p.images[0] && <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" />}
                     </div>
-                  ))}
-                </div>
+                    <p className="text-[10.5px] mt-1.5 truncate">{p.name}</p>
+                    <p className="text-[10.5px] text-neutral-600">{formatRs(p.basePrice)}</p>
+                  </Link>
+                ))}
               </div>
-            ) : query.trim() ? (
-              <div className="py-12 text-center text-xs text-neutral-500 uppercase tracking-widest">
-                No streetwear items matching "{query}"
-              </div>
-            ) : null}
-          </div>
-
+              <button onClick={submit} className="mt-4 text-[11px] font-semibold underline">See all results</button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -39,3 +39,9 @@ Thumbs.db
 *.sqlite
 *.sqlite-journal
 /var/backups/
+
+# Local launcher settings
+local-dev.env
+
+# Duplicate copy of the project (not part of the repo)
+/levix Final pro/

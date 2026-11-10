@@ -6,16 +6,35 @@
   body {
     background-color: #EFEFEF;
     color: #000000;
-    font-family: 'Assistant', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Assistant', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: -0.01em;
   }
 }
+
+@layer utilities {
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .snap-x-mandatory { scroll-snap-type: x mandatory; }
+  .snap-start-always { scroll-snap-align: start; scroll-snap-stop: always; }
+}
+
+/* LEVIX storefront tokens */
+.lx-panel { background: #fff; border-radius: 22px; }
+.lx-pill { border-radius: 9999px; }
+.lx-title { font-size: 12px; font-weight: 600; letter-spacing: 0; color: #000; }
+.lx-text { font-size: 11.5px; line-height: 1.4; }
+.lx-fade-in { animation: lxFade .35s ease both; }
+@keyframes lxFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.lx-drawer-in { animation: lxDrawer .32s cubic-bezier(.16,1,.3,1) both; }
+@keyframes lxDrawer { from { transform: translateX(100%); } to { transform: none; } }
+.lx-drop-in { animation: lxDrop .28s cubic-bezier(.16,1,.3,1) both; }
+@keyframes lxDrop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
 
 /* Custom Minimalist Scrollbars */
 ::-webkit-scrollbar {

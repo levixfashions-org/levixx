@@ -1,68 +1,22 @@
-// Modular Firebase Auth Client with Local Storage Fallback for Dev Preview
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence, Auth } from 'firebase/auth';
 
-export interface MockUser {
-  uid: string;
-  email: string | null;
-  displayName: string | null;
-  emailVerified: boolean;
-  getIdToken: (forceRefresh?: boolean) => Promise<string>;
-}
-
-const STORAGE_KEY = 'levix_auth_user';
-
-let currentAuthUser: MockUser | null = (() => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const userEmail = parsed.email || '';
-      return {
-        ...parsed,
-        getIdToken: async () => userEmail ? `dev-mock-token-${userEmail}-${parsed.uid}` : `dev-mock-token-${parsed.uid}`
-      };
-    }
-  } catch (e) {}
-  return null;
-})();
-
-const listeners: Array<(user: MockUser | null) => void> = [];
-
-export const auth = {
-  get currentUser() {
-    return currentAuthUser;
-  }
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-export function setCurrentUser(user: MockUser | null) {
-  currentAuthUser = user;
-  if (user) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      emailVerified: user.emailVerified
-    }));
-  } else {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-  listeners.forEach(fn => fn(user));
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error('LEVIX: Firebase web config (VITE_FIREBASE_*) is missing — sign-in will not work.');
 }
 
-export function onIdTokenChanged(authObj: any, callback: (user: MockUser | null) => void) {
-  listeners.push(callback);
-  // Initial fire
-  setTimeout(() => callback(currentAuthUser), 10);
-  return () => {
-    const idx = listeners.indexOf(callback);
-    if (idx !== -1) listeners.splice(idx, 1);
-  };
-}
+export const app: FirebaseApp = getApps()[0] ?? initializeApp(firebaseConfig);
+export const auth: Auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch(() => undefined);
 
-export const googleProvider = {
-  setCustomParameters: () => {}
-};
-
-export const app = {
-  name: '[DEFAULT]',
-  options: {}
-};
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });

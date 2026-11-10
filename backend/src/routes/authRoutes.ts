@@ -1,16 +1,15 @@
 import { Router } from 'express';
-import { getProfile, updateProfile, addAddress, deleteAddress } from '../controllers/authController.js';
-import { verifyFirebaseToken } from '../middleware/verifyFirebaseToken.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
+import { verifyFirebaseToken } from '../middleware/verifyFirebaseToken.js';
+import { asyncHandler as h } from '../middleware/errorHandler.js';
+import { getProfile, updateProfile, addAddress, deleteAddress, setDefaultAddress } from '../controllers/authController.js';
 
 const router = Router();
-
 router.use(authRateLimiter);
 router.use(verifyFirebaseToken);
-
-router.get('/profile', getProfile);
-router.put('/profile', updateProfile);
-router.post('/addresses', addAddress);
-router.delete('/addresses/:id', deleteAddress);
-
+router.get('/profile', h(getProfile));
+router.put('/profile', h(updateProfile));
+router.post('/addresses', h(addAddress));
+router.patch('/addresses/:id/default', h(setDefaultAddress));
+router.delete('/addresses/:id', h(deleteAddress));
 export default router;

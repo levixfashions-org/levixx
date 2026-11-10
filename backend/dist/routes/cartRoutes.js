@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { getCart, addToCart, updateCartItem, removeCartItem } from '../controllers/cartController.js';
 import { optionalAuth } from '../middleware/verifyFirebaseToken.js';
+import { asyncHandler as h } from '../middleware/errorHandler.js';
+import { getCart, addToCart, updateCartItem, removeCartItem } from '../controllers/cartController.js';
 const router = Router();
 router.use(optionalAuth);
-router.get('/', getCart);
-router.post('/items', addToCart);
-router.put('/items/:id', updateCartItem);
-router.delete('/items/:id', removeCartItem);
+router.get('/', h(getCart));
+router.post('/items', h(addToCart));
+router.put('/items/:id', h(updateCartItem));
+router.delete('/items/:id', h(removeCartItem));
 export default router;

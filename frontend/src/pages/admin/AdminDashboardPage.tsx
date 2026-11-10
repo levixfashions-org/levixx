@@ -10,6 +10,22 @@ export const AdminDashboardPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+
+  const downloadSubscribers = async () => {
+    try {
+      const res = await apiClient.get('/admin/subscribers', { format: 'json' });
+      const rows = ['email,subscribed_at', ...(res.data.subscribers || []).map((s: any) => `${s.email},${s.createdAt}`)];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'levix-subscribers.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
@@ -27,7 +43,8 @@ export const AdminDashboardPage: React.FC = () => {
           throw new Error('Invalid metrics response format');
         }
       } catch (err) {
-        console.warn('Admin metrics error, providing clean initial metrics:', err);
+        console.warn('Admin metrics error:', err);
+        setMetricsError((err as any)?.message || 'Could not load metrics');
         setData({
           metrics: {
             totalRevenue: 0,
@@ -167,15 +184,19 @@ export const AdminDashboardPage: React.FC = () => {
           </Link>
         </div>
 
+        {metricsError && (
+          <div className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs font-semibold">{metricsError}</div>
+        )}
+
         {/* KPI Metrics Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">
             <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">Total Revenue</span>
             <p className="font-display font-black text-3xl text-black">
-              RS. {(metrics.totalRevenueINR || 785400).toLocaleString('en-IN')}
+              RS. {(metrics.totalRevenueINR ?? 0).toLocaleString('en-IN')}
             </p>
-            <p className="text-[11px] text-green-700 font-semibold">Verified Razorpay Payments</p>
+            <p className="text-[11px] text-green-700 font-semibold">Today: RS. {(metrics.todayRevenueINR ?? 0).toLocaleString('en-IN')} ({metrics.todayOrders ?? 0} orders)</p>
           </div>
 
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">
@@ -183,7 +204,7 @@ export const AdminDashboardPage: React.FC = () => {
             <p className="font-display font-black text-3xl text-black font-mono">
               {metrics.totalOrders}
             </p>
-            <p className="text-[11px] text-neutral-600 font-medium">Customer Transactions</p>
+            <p className="text-[11px] text-neutral-600 font-medium">{metrics.ordersToFulfil ?? 0} waiting to be shipped</p>
           </div>
 
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">
@@ -191,7 +212,12 @@ export const AdminDashboardPage: React.FC = () => {
             <p className="font-display font-black text-3xl text-black font-mono">
               {metrics.totalCustomers}
             </p>
-            <p className="text-[11px] text-neutral-600 font-medium">Registered Client Accounts</p>
+            <p className="text-[11px] text-neutral-600 font-medium">
+              {metrics.subscribers ?? 0} newsletter subscribers{' '}
+              {(metrics.subscribers ?? 0) > 0 && (
+                <button type="button" onClick={downloadSubscribers} className="underline font-semibold text-black ml-1">Export CSV</button>
+              )}
+            </p>
           </div>
 
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-2">

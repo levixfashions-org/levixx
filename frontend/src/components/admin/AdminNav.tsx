@@ -7,6 +7,7 @@ import {
   ShoppingBag, 
   Tag, 
   Sliders, 
+  Layers, 
   ExternalLink, 
   LogOut, 
   Shield 
@@ -19,7 +20,8 @@ export const AdminNav: React.FC = () => {
 
   const navItems = [
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-    { name: 'Products & Drops', path: '/admin/products', icon: Package },
+    { name: 'Products', path: '/admin/products', icon: Package },
+    { name: 'Collections & Home', path: '/admin/collections', icon: Layers },
     { name: 'Customer Orders', path: '/admin/orders', icon: ShoppingBag },
     { name: 'Promo Discounts', path: '/admin/discounts', icon: Tag },
     { name: 'Store Settings', path: '/admin/settings', icon: Sliders },
@@ -31,7 +33,7 @@ export const AdminNav: React.FC = () => {
   };
 
   return (
-    <div className="bg-black text-white border-b border-white/10 sticky top-0 z-40 shadow-md">
+    <div className="bg-black text-white border-b border-white/10 sticky top-16 z-40 shadow-md">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between py-3 gap-3">
           
