@@ -37,9 +37,9 @@ picks=['02-acid-lone-wolf-red/1.jpg','06-overlength-porsche-off-white-3rd-drop/1
 
 # Desktop 2400x1200 (dark)
 W,H=2400,1200; bg=grad(W,H,(30,30,32),(10,10,11),glow=(58,58,62)); d=ImageDraw.Draw(bg)
-ctext(d,W/2,28,'LEVIX',bold(250),(245,245,245),spacing=40)
-ctext(d,W/2,318,'OVERLENGTH   ·   WAFFLE   ·   ACID WASH   —   NEW DROPS LIVE',med(30),(175,175,175),spacing=3)
-pw,gap=404,30; x0=(W-(5*pw+4*gap))//2; y0,ph=390,640
+ctext(d,W/2,95,'LEVIX',bold(215),(245,245,245),spacing=40)
+ctext(d,W/2,350,'OVERLENGTH   ·   WAFFLE   ·   ACID WASH   —   NEW DROPS LIVE',med(30),(175,175,175),spacing=3)
+pw,gap=404,30; x0=(W-(5*pw+4*gap))//2; y0,ph=430,600
 for i,p in enumerate(picks): paste(bg,p,x0+i*(pw+gap),y0+(0 if i in (0,4) else -20 if i==2 else -10),pw,ph+ (0 if i in (0,4) else 20 if i==2 else 10))
 bg.save(os.path.expanduser('~/mnt/levix Final pro/product-photos/hero-desktop.jpg'),quality=88,optimize=True,progressive=True)
 
