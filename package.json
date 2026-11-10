@@ -4,13 +4,14 @@
   "version": "2.0.0",
   "description": "LEVIX storefront + API (bundled server.js serves the API and frontend/dist)",
   "engines": {
-    "node": ">=18.18"
+    "node": ">=20"
   },
   "scripts": {
-    "postinstall": "prisma generate && (prisma db push --skip-generate || echo \"⚠️ prisma db push skipped — run 'npm run db:push' manually\")",
+    "postinstall": "prisma generate && (prisma db push --skip-generate || echo \"\u26a0\ufe0f prisma db push skipped \u2014 run 'npm run db:push' manually\")",
     "start": "node server.js",
     "db:push": "prisma db push",
-    "build": "npm --prefix backend run bundle && npm --prefix frontend run build"
+    "build": "echo \"LEVIX is prebuilt: server.js and frontend/dist are committed - nothing to build.\"",
+    "build:all": "npm --prefix backend run bundle && npm --prefix frontend run build"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
