@@ -155,6 +155,10 @@ for /l %%i in (1,1,30) do (
 
 start "" http://localhost:5173
 
+rem Keep GitHub in sync automatically while you work
+tasklist /v /fi "imagename eq cmd.exe" | findstr /i "GitHub auto-sync" >nul
+if errorlevel 1 start "LEVIX - GitHub auto-sync" /min "%~dp0AUTO-SYNC-GITHUB.bat"
+
 echo.
 echo  =====================================================
 echo     LEVIX is running:   http://localhost:5173

@@ -14,7 +14,7 @@ echo.
 echo  Pushing LEVIX to https://github.com/levixfashions-org/levixx  (branch: main)
 echo  If a GitHub sign-in window opens, sign in with the account that owns levixfashions-org.
 echo.
-git push -u levixx production-hardening:main
+git push -u levixx main:main
 if errorlevel 1 (
   echo.
   echo  [X] Push failed. Common reasons:
