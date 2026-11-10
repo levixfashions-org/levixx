@@ -2160,6 +2160,41 @@ var wishlistRoutes_default = router9;
 var app = (0, import_express10.default)();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
+var FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || "levix-8bb56"}.firebaseapp.com`;
+var readBody = (req) => new Promise((resolve, reject) => {
+  const chunks = [];
+  req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+  req.on("end", () => resolve(Buffer.concat(chunks)));
+  req.on("error", reject);
+});
+app.all(["/__/auth/*", "/__/firebase/*"], async (req, res) => {
+  try {
+    const headers = {};
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (typeof v !== "string") continue;
+      if (["host", "connection", "content-length", "accept-encoding"].includes(k)) continue;
+      headers[k] = v;
+    }
+    const hasBody = !["GET", "HEAD"].includes(req.method);
+    const body = hasBody ? await readBody(req) : void 0;
+    const upstream = await fetch(FIREBASE_AUTH_HOST + req.originalUrl, {
+      method: req.method,
+      headers,
+      body: body && body.length ? new Uint8Array(body) : void 0,
+      redirect: "manual"
+    });
+    res.status(upstream.status);
+    upstream.headers.forEach((value, key) => {
+      if (["content-encoding", "content-length", "transfer-encoding", "connection"].includes(key)) return;
+      res.setHeader(key, value);
+    });
+    res.setHeader("Cache-Control", "no-store");
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  } catch (err) {
+    console.error("Auth proxy error:", err?.message);
+    res.status(502).send("Sign-in service temporarily unavailable");
+  }
+});
 app.use(
   (0, import_helmet.default)({
     // CSP is left off because Razorpay Checkout and Firebase Auth load from many Google/Razorpay domains.
@@ -2167,7 +2202,10 @@ app.use(
     // Needed for Google sign-in popups and Razorpay checkout windows.
     crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
     crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: { policy: "cross-origin" }
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    // Keep the same browsing setup as Firebase's sign-in helper pages.
+    originAgentCluster: false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" }
   })
 );
 app.use((0, import_compression.default)());
@@ -2237,34 +2275,6 @@ app.use("/api/payments", paymentRoutes_default);
 app.use("/api/wishlist", wishlistRoutes_default);
 app.use("/api/admin", adminRoutes_default);
 app.use("/api", notFoundApi);
-var FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || "levix-8bb56"}.firebaseapp.com`;
-app.all(["/__/auth/*", "/__/firebase/*"], async (req, res) => {
-  try {
-    const headers = {};
-    for (const [k, v] of Object.entries(req.headers)) {
-      if (typeof v !== "string") continue;
-      if (["host", "connection", "content-length", "accept-encoding", "cookie"].includes(k)) continue;
-      headers[k] = v;
-    }
-    const hasBody = !["GET", "HEAD"].includes(req.method);
-    const upstream = await fetch(FIREBASE_AUTH_HOST + req.originalUrl, {
-      method: req.method,
-      headers,
-      body: hasBody ? req.rawBody ? new Uint8Array(req.rawBody) : void 0 : void 0,
-      redirect: "manual"
-    });
-    res.status(upstream.status);
-    upstream.headers.forEach((value, key) => {
-      if (["content-encoding", "content-length", "transfer-encoding", "connection", "set-cookie"].includes(key)) return;
-      res.setHeader(key, value);
-    });
-    res.removeHeader("x-frame-options");
-    res.send(Buffer.from(await upstream.arrayBuffer()));
-  } catch (err) {
-    console.error("Auth proxy error:", err?.message);
-    res.status(502).send("Sign-in service temporarily unavailable");
-  }
-});
 var currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 var possiblePaths = [
   import_path.default.resolve(process.cwd(), "frontend/dist"),

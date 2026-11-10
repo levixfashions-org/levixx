@@ -24,6 +24,52 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+// ------------------------------------------------------------------------------------------
+// Firebase Auth on our own domain: Google's sign-in screen says "continue to thelevix.shop".
+// /__/auth/* and /__/firebase/* are passed straight through to Firebase's hosted auth helper.
+// IMPORTANT: this runs BEFORE helmet — Firebase's helper pages must NOT get our
+// Cross-Origin-Opener-Policy / Referrer-Policy headers, otherwise the Google popup loses
+// contact with the page and sign-in reports "cancelled".
+// ------------------------------------------------------------------------------------------
+const FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || 'levix-8bb56'}.firebaseapp.com`;
+const readBody = (req: express.Request): Promise<Buffer> =>
+  new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+
+app.all(['/__/auth/*', '/__/firebase/*'], async (req, res) => {
+  try {
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(req.headers)) {
+      if (typeof v !== 'string') continue;
+      if (['host', 'connection', 'content-length', 'accept-encoding'].includes(k)) continue;
+      headers[k] = v;
+    }
+    const hasBody = !['GET', 'HEAD'].includes(req.method);
+    const body = hasBody ? await readBody(req) : undefined;
+    const upstream = await fetch(FIREBASE_AUTH_HOST + req.originalUrl, {
+      method: req.method,
+      headers,
+      body: body && body.length ? new Uint8Array(body) : undefined,
+      redirect: 'manual'
+    });
+    res.status(upstream.status);
+    upstream.headers.forEach((value, key) => {
+      if (['content-encoding', 'content-length', 'transfer-encoding', 'connection'].includes(key)) return;
+      res.setHeader(key, value);
+    });
+    // Never let the CDN/browser cache sign-in pages.
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(Buffer.from(await upstream.arrayBuffer()));
+  } catch (err: any) {
+    console.error('Auth proxy error:', err?.message);
+    res.status(502).send('Sign-in service temporarily unavailable');
+  }
+});
+
 app.use(
   helmet({
     // CSP is left off because Razorpay Checkout and Firebase Auth load from many Google/Razorpay domains.
@@ -31,7 +77,10 @@ app.use(
     // Needed for Google sign-in popups and Razorpay checkout windows.
     crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // Keep the same browsing setup as Firebase's sign-in helper pages.
+    originAgentCluster: false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
   })
 );
 app.use(compression());
@@ -115,41 +164,6 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', notFoundApi);
 
-
-// ------------------------------------------------------------------------------------------
-// Firebase Auth on our own domain: Google's sign-in screen then says "continue to thelevix.shop"
-// instead of "levix-8bb56.firebaseapp.com". Requests to /__/auth/* and /__/firebase/* are
-// passed through to Firebase's hosted auth helper.
-// ------------------------------------------------------------------------------------------
-const FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || 'levix-8bb56'}.firebaseapp.com`;
-app.all(['/__/auth/*', '/__/firebase/*'], async (req, res) => {
-  try {
-    const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries(req.headers)) {
-      if (typeof v !== 'string') continue;
-      if (['host', 'connection', 'content-length', 'accept-encoding', 'cookie'].includes(k)) continue;
-      headers[k] = v;
-    }
-    const hasBody = !['GET', 'HEAD'].includes(req.method);
-    const upstream = await fetch(FIREBASE_AUTH_HOST + req.originalUrl, {
-      method: req.method,
-      headers,
-      body: hasBody ? (req.rawBody ? new Uint8Array(req.rawBody) : undefined) : undefined,
-      redirect: 'manual'
-    });
-    res.status(upstream.status);
-    upstream.headers.forEach((value, key) => {
-      if (['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'set-cookie'].includes(key)) return;
-      res.setHeader(key, value);
-    });
-    // Firebase's helper pages must be frameable by our own pages.
-    res.removeHeader('x-frame-options');
-    res.send(Buffer.from(await upstream.arrayBuffer()));
-  } catch (err: any) {
-    console.error('Auth proxy error:', err?.message);
-    res.status(502).send('Sign-in service temporarily unavailable');
-  }
-});
 
 // ------------------------------------------------------------------------------------------
 // Serve the React storefront (frontend/dist) with proper caching
