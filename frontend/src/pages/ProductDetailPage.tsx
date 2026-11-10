@@ -33,6 +33,7 @@ export const ProductDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [variantId, setVariantId] = useState<string | null>(null);
+  const [color, setColor] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('details');
   const [busy, setBusy] = useState<'add' | 'buy' | null>(null);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -56,8 +57,9 @@ export const ProductDetailPage: React.FC = () => {
         }
         setProduct(p);
         setRelated(res.data.relatedProducts || []);
-        const first = p.variants.find((v) => v.stockQuantity > 0);
-        setVariantId(first?.id || null);
+        const first = p.variants.find((v) => v.stockQuantity > 0) || p.variants[0];
+        setColor(first?.color || null);
+        setVariantId(first && first.stockQuantity > 0 ? first.id : null);
         document.title = `${p.name} | LEVIX`;
       } catch {
         if (!cancelled) {
@@ -97,13 +99,32 @@ export const ProductDetailPage: React.FC = () => {
 
   const isSaved = saved.includes(product.id);
   const selected = product.variants.find((v) => v.id === variantId) || null;
-  const allSoldOut = product.variants.every((v) => v.stockQuantity <= 0);
-  const images = product.images.length ? product.images : [];
+
+  // Colours (in the order the owner added them) and the sizes/photos for the chosen colour.
+  const colours = product.variants
+    .filter((v, i, arr) => v.color && arr.findIndex((x) => x.color === v.color) === i)
+    .map((v) => ({ name: v.color as string, hex: v.colorHex || '#cccccc', inStock: product.variants.some((x) => x.color === v.color && x.stockQuantity > 0) }));
+  const activeColour = colours.length ? color || colours[0].name : null;
+  const sizeVariants = activeColour ? product.variants.filter((v) => v.color === activeColour) : product.variants;
+  const allSoldOut = sizeVariants.every((v) => v.stockQuantity <= 0);
+  const colourImages = activeColour ? product.images.filter((im) => im.color === activeColour) : [];
+  const sharedImages = product.images.filter((im) => !im.color);
+  const images = activeColour && colourImages.length ? [...colourImages, ...sharedImages] : product.images.length ? product.images : [];
   const [mainImage, ...otherImages] = images;
+
+  const chooseColour = (name: string) => {
+    setColor(name);
+    setMessage(null);
+    const first = product.variants.find((v) => v.color === name && v.stockQuantity > 0);
+    const keepSize = selected && product.variants.find((v) => v.color === name && v.size === selected.size && v.stockQuantity > 0);
+    setVariantId((keepSize || first)?.id || null);
+    setSlide(0);
+    sliderRef.current?.scrollTo({ left: 0 });
+  };
 
   const add = async (mode: 'add' | 'buy') => {
     setMessage(null);
-    if (!selected) {
+    if (!selected || (activeColour && selected.color !== activeColour)) {
       setMessage({ type: 'err', text: 'Please select a size' });
       return;
     }
@@ -147,8 +168,31 @@ export const ProductDetailPage: React.FC = () => {
           <button onClick={openSizeGuide} className="px-2.5 py-1 rounded bg-[#E9E9E9] text-[9.5px] hover:bg-[#ddd]">Size Guide</button>
         </div>
 
+        {colours.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[10.5px] text-neutral-600 mb-1.5">
+              Colour: <span className="font-semibold text-black">{activeColour}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {colours.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => chooseColour(c.name)}
+                  title={c.name + (c.inStock ? '' : ' (sold out)')}
+                  aria-label={`Colour ${c.name}`}
+                  className={`relative w-8 h-8 rounded-full border-2 transition-all ${activeColour === c.name ? 'border-black scale-105' : 'border-transparent hover:border-black/30'}`}
+                >
+                  <span className="absolute inset-[3px] rounded-full border border-black/10" style={{ background: c.hex }} />
+                  {!c.inStock && <span className="absolute inset-0 flex items-center justify-center"><span className="w-full h-[1.5px] bg-black/60 rotate-45" /></span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-5 gap-1.5 mt-3">
-          {product.variants.map((v) => {
+          {sizeVariants.map((v) => {
             const out = v.stockQuantity <= 0;
             return (
               <button
@@ -169,7 +213,7 @@ export const ProductDetailPage: React.FC = () => {
           })}
         </div>
         {selected && selected.stockQuantity > 0 && selected.stockQuantity <= 5 && (
-          <p className="text-[10px] text-[#c2410c] mt-2">Only {selected.stockQuantity} left in size {selected.size}</p>
+          <p className="text-[10px] text-[#c2410c] mt-2">Only {selected.stockQuantity} left in {selected.color ? `${selected.color} / ` : ''}size {selected.size}</p>
         )}
 
         <div className="grid grid-cols-2 gap-2 mt-3">

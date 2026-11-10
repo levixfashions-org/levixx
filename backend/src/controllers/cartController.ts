@@ -10,12 +10,21 @@ const cartInclude = {
     include: {
       variant: {
         include: {
-          product: { include: { images: { orderBy: { sortOrder: 'asc' as const }, take: 1 } } }
+          product: { include: { images: { orderBy: { sortOrder: 'asc' as const }, take: 30 } } }
         }
       }
     }
   }
 };
+
+/** Picks the first photo of the variant's colour, falling back to the product cover. */
+export function imageForColor(images: { url: string; color?: string | null }[], color?: string | null): string | null {
+  if (color) {
+    const match = images.find((i) => i.color && i.color.toLowerCase() === color.toLowerCase());
+    if (match) return match.url;
+  }
+  return images.find((i) => !i.color)?.url || images[0]?.url || null;
+}
 
 const ANON_TOKEN_RE = /^[A-Za-z0-9_-]{16,80}$/;
 
@@ -89,13 +98,15 @@ export async function formatCart(cart: Awaited<ReturnType<typeof resolveCart>>) 
         variantId: item.variantId,
         quantity: item.quantity,
         size: item.variant.size,
+        color: item.variant.color,
+        colorHex: item.variant.colorHex,
         stockQuantity: item.variant.stockQuantity,
         productId: item.variant.product.id,
         productName: item.variant.product.name,
         productSlug: item.variant.product.slug,
         unitPricePaise: unitPrice,
         totalPaise: total,
-        imageUrl: item.variant.product.images[0]?.url || null
+        imageUrl: imageForColor(item.variant.product.images, item.variant.color)
       };
     });
 
@@ -140,7 +151,7 @@ export async function addToCart(req: Request, res: Response) {
   const newQuantity = (existing?.quantity || 0) + quantity;
 
   if (variant.stockQuantity <= 0) {
-    throw new AppError(`Size ${variant.size} is sold out`, 400);
+    throw new AppError(`${variant.color ? variant.color + ' / ' : ''}Size ${variant.size} is sold out`, 400);
   }
   if (newQuantity > variant.stockQuantity) {
     throw new AppError(`Only ${variant.stockQuantity} left in size ${variant.size}`, 400);

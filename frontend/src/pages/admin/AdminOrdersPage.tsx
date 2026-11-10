@@ -383,7 +383,7 @@ export const AdminOrdersPage: React.FC = () => {
                     <div key={i} className="p-3 flex items-center justify-between">
                       <div>
                         <p className="font-bold text-black">{it.productName}</p>
-                        <p className="text-[10px] font-mono text-neutral-500">Size: <span className="font-bold text-black">{it.size}</span> | Qty: {it.quantity}</p>
+                        <p className="text-[10px] font-mono text-neutral-500">Size: <span className="font-bold text-black">{it.size}</span>{it.color ? <> | Colour: <span className="font-bold text-black">{it.color}</span></> : null} | Qty: {it.quantity}</p>
                       </div>
                       <p className="font-mono font-bold text-black">
                         RS. {(((it.subtotalPaise ?? it.unitPricePaise * it.quantity) || 0) / 100).toLocaleString('en-IN')}

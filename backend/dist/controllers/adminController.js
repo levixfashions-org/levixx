@@ -152,14 +152,29 @@ export async function deleteOrder(req, res) {
 /* ----------------------------------------------------------------------------------------------
  * Products
  * --------------------------------------------------------------------------------------------*/
+/** An image is either an uploaded file (/media/…) or a full https:// link (e.g. Hostinger). */
+const imageUrl = z
+    .string()
+    .trim()
+    .max(2000)
+    .refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), 'Each image must be uploaded or be a full https:// link');
 const imageSchema = z.object({
-    url: z.string().trim().url('Each image must be a full URL starting with https://').max(2000),
+    url: imageUrl,
     altText: z.string().max(200).optional().nullable(),
+    color: z.string().trim().max(40).optional().nullable(),
     isCover: z.boolean().optional(),
     sortOrder: z.number().int().optional()
 });
 const variantSchema = z.object({
     size: z.string().trim().min(1).max(10),
+    color: z.string().trim().max(40).optional().nullable(),
+    colorHex: z
+        .string()
+        .trim()
+        .regex(/^#[0-9a-f]{6}$/i, 'Colour code must look like #1A2B3C')
+        .optional()
+        .nullable()
+        .or(z.literal('')),
     stockQuantity: z.number().int().min(0).max(100000),
     priceDelta: z.number().int().default(0)
 });
@@ -178,8 +193,8 @@ const productSchema = z.object({
     isActive: z.boolean().default(true),
     colorGroup: z.string().trim().max(30).optional().nullable().transform((v) => (v ? v.toUpperCase() : null)),
     collectionIds: z.array(z.string().max(64)).max(50).optional(),
-    images: z.array(imageSchema).min(1, 'Add at least one product image').max(12),
-    variants: z.array(variantSchema).min(1, 'Add at least one size').max(20)
+    images: z.array(imageSchema).min(1, 'Add at least one product image').max(60),
+    variants: z.array(variantSchema).min(1, 'Add at least one size').max(200)
 });
 async function resolveCategoryId(categoryId, categoryName) {
     if (categoryId) {
@@ -202,17 +217,28 @@ function normaliseImages(images) {
     return images.map((img, idx) => ({
         url: img.url,
         altText: img.altText || null,
+        color: img.color?.trim() || null,
         sortOrder: idx,
         isCover: idx === 0
     }));
 }
-function buildSku(slug, size) {
-    return `${slug.toUpperCase()}-${size.toUpperCase()}`.slice(0, 180);
+const variantKey = (color, size) => `${(color || '').trim().toLowerCase()}|${size.trim().toUpperCase()}`;
+function buildSku(slug, size, color) {
+    const c = color ? `-${color.toUpperCase().replace(/[^A-Z0-9]+/g, '')}` : '';
+    return `${slug.toUpperCase()}${c}-${size.toUpperCase()}`.slice(0, 180);
 }
 function dedupeVariants(variants) {
     const map = new Map();
-    for (const v of variants)
-        map.set(v.size.toUpperCase(), { ...v, size: v.size.toUpperCase() });
+    for (const v of variants) {
+        const color = v.color?.trim() || null;
+        map.set(variantKey(color, v.size), {
+            size: v.size.trim().toUpperCase(),
+            color,
+            colorHex: color && v.colorHex ? v.colorHex.toUpperCase() : null,
+            stockQuantity: v.stockQuantity,
+            priceDelta: v.priceDelta ?? 0
+        });
+    }
     return [...map.values()];
 }
 async function loadAdminProduct(id) {
@@ -276,7 +302,9 @@ export async function createProduct(req, res) {
             variants: {
                 create: variants.map((v) => ({
                     size: v.size,
-                    sku: buildSku(slug, v.size),
+                    color: v.color,
+                    colorHex: v.colorHex,
+                    sku: buildSku(slug, v.size, v.color),
                     stockQuantity: v.stockQuantity,
                     priceDelta: v.priceDelta
                 }))
@@ -326,30 +354,36 @@ export async function updateProduct(req, res) {
         }
         if (data.variants) {
             const incoming = dedupeVariants(data.variants);
-            const incomingSizes = new Set(incoming.map((v) => v.size));
-            // Remove sizes that were deleted (cart lines for them are removed by cascade; past orders keep a snapshot).
-            const removed = existing.variants.filter((v) => !incomingSizes.has(v.size.toUpperCase()));
+            const keys = new Set(incoming.map((v) => variantKey(v.color, v.size)));
+            // Remove colour/size combinations that were deleted (cart lines go with them; past orders keep a snapshot).
+            const removed = existing.variants.filter((v) => !keys.has(variantKey(v.color, v.size)));
             if (removed.length) {
                 await tx.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } });
             }
+            // Temporary SKUs first so renamed colours never clash with the unique SKU index.
+            const kept = existing.variants.filter((v) => keys.has(variantKey(v.color, v.size)));
+            for (const v of kept) {
+                await tx.productVariant.update({ where: { id: v.id }, data: { sku: `TMP-${v.id}` } });
+            }
             for (const v of incoming) {
-                const match = existing.variants.find((ev) => ev.size.toUpperCase() === v.size);
-                if (match) {
-                    await tx.productVariant.update({
-                        where: { id: match.id },
-                        data: { size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
-                    });
-                }
-                else {
-                    await tx.productVariant.create({
-                        data: { productId: id, size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
-                    });
-                }
+                const match = kept.find((ev) => variantKey(ev.color, ev.size) === variantKey(v.color, v.size));
+                const data = {
+                    size: v.size,
+                    color: v.color,
+                    colorHex: v.colorHex,
+                    sku: buildSku(slug, v.size, v.color),
+                    stockQuantity: v.stockQuantity,
+                    priceDelta: v.priceDelta
+                };
+                if (match)
+                    await tx.productVariant.update({ where: { id: match.id }, data });
+                else
+                    await tx.productVariant.create({ data: { ...data, productId: id } });
             }
         }
         else if (slug !== existing.slug) {
             for (const v of existing.variants) {
-                await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size) } });
+                await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size, v.color) } });
             }
         }
     }, { timeout: 20000 });
@@ -378,7 +412,7 @@ const categorySchema = z.object({
     name: z.string().trim().min(2).max(120),
     group: z.enum(['TOP', 'BOTTOM', 'ACCESSORIES']).optional().nullable(),
     description: z.string().max(2000).optional().nullable(),
-    imageUrl: z.string().trim().url().max(2000).optional().nullable().or(z.literal('')),
+    imageUrl: imageUrl.optional().nullable().or(z.literal('')),
     sortOrder: z.number().int().optional()
 });
 export async function createCategory(req, res) {
@@ -536,8 +570,8 @@ const collectionSchema = z.object({
     name: z.string().trim().min(2).max(120),
     slug: z.string().trim().max(120).optional(),
     description: z.string().max(5000).optional().nullable(),
-    bannerImageUrl: z.string().trim().max(2000).optional().nullable(),
-    mobileBannerUrl: z.string().trim().max(2000).optional().nullable(),
+    bannerImageUrl: imageUrl.optional().nullable().or(z.literal('')),
+    mobileBannerUrl: imageUrl.optional().nullable().or(z.literal('')),
     isActive: z.boolean().default(true),
     sortOrder: z.coerce.number().int().default(0),
     homeLayout: z.enum(['NONE', 'CAROUSEL', 'GRID']).default('NONE'),

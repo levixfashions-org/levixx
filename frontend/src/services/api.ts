@@ -173,4 +173,26 @@ export const apiClient = {
   }
 };
 
+/** Uploads one image (already compressed) to the admin media library. Returns its public URL. */
+export async function uploadImage(blob: Blob, meta: { width?: number; height?: number; fileName?: string } = {}): Promise<string> {
+  const token = await authService.getToken();
+  if (!token) throw new ApiError('Please sign in again to upload images.', 401);
+  const headers: Record<string, string> = {
+    'Content-Type': blob.type || 'application/octet-stream',
+    Authorization: `Bearer ${token}`
+  };
+  if (meta.width) headers['X-Image-Width'] = String(meta.width);
+  if (meta.height) headers['X-Image-Height'] = String(meta.height);
+  if (meta.fileName) headers['X-File-Name'] = encodeURIComponent(meta.fileName.slice(0, 150));
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/admin/media`, { method: 'POST', headers, body: blob });
+  } catch {
+    throw new ApiError('Network error while uploading. Check your connection and try again.', 0);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(data.error || `Upload failed (${res.status})`, res.status, data);
+  return data.url as string;
+}
+
 export const formatINR = (paise: number) => `RS. ${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;

@@ -6,7 +6,7 @@ import { env } from '../config/env.js';
 import { getRazorpay, isRazorpayConfigured } from '../config/razorpay.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { addressSchema } from './authController.js';
-import { formatCart, getAnonymousToken, resolveCart } from './cartController.js';
+import { formatCart, getAnonymousToken, imageForColor, resolveCart } from './cartController.js';
 import { calculateShippingPaise, getSettings } from '../services/store.js';
 import { evaluateCoupon, formatAddress, generateAccessKey, generateOrderNumber, safeEqual } from '../services/orders.js';
 
@@ -42,8 +42,8 @@ export async function createOrder(req: Request, res: Response) {
     if (item.quantity > item.variant.stockQuantity) {
       throw new AppError(
         item.variant.stockQuantity <= 0
-          ? `${item.variant.product.name} (${item.variant.size}) just sold out. Please remove it from your bag.`
-          : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${item.variant.size}). Please update your bag.`,
+          ? `${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(' / ')}) just sold out. Please remove it from your bag.`
+          : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(' / ')}). Please update your bag.`,
         409
       );
     }
@@ -106,10 +106,11 @@ export async function createOrder(req: Request, res: Response) {
             productName: item.variant.product.name,
             productSlug: item.variant.product.slug,
             size: item.variant.size,
+            color: item.variant.color,
             unitPricePaise: unit,
             quantity: item.quantity,
             subtotalPaise: unit * item.quantity,
-            imageUrl: item.variant.product.images[0]?.url || null
+            imageUrl: imageForColor(item.variant.product.images, item.variant.color)
           };
         })
       }

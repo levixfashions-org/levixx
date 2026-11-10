@@ -147,6 +147,7 @@ model ProductImage {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   url       String   @db.Text
   altText   String?
+  color     String?  // which colour this photo shows (null = all colours)
   sortOrder Int      @default(0)
   isCover   Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -159,6 +160,8 @@ model ProductVariant {
   productId     String
   product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   size          String      // "S", "M", "L", "XL", "XXL", "30", "32", "34", "36"
+  color         String?     // e.g. "Black" — null when the product has a single colour
+  colorHex      String?     // e.g. "#111111" for the swatch
   sku           String      @unique
   stockQuantity Int         @default(0)
   priceDelta    Int         @default(0) // paise offset from basePrice
@@ -258,6 +261,7 @@ model OrderItem {
   productName    String
   productSlug    String
   size           String
+  color          String?
   unitPricePaise Int
   quantity       Int
   subtotalPaise  Int
@@ -316,6 +320,7 @@ model StoreSetting {
   seoText               String?  @db.Text
   shippingInfo          String?  @db.Text
   careInfo              String?  @db.Text
+  defaultsVersion       Int      @default(0)
   updatedAt             DateTime @default(now()) @updatedAt
 }
 
@@ -337,5 +342,17 @@ model Review {
 model Subscriber {
   id        String   @id @default(uuid())
   email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+/// Images uploaded from the admin panel (stored in MySQL so redeploys never lose them).
+model MediaFile {
+  id        String   @id @default(uuid())
+  mime      String
+  size      Int
+  width     Int?
+  height    Int?
+  fileName  String?
+  data      Bytes    @db.LongBlob
   createdAt DateTime @default(now())
 }

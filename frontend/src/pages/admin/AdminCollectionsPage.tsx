@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Edit2, ExternalLink, Image as ImageIcon, Layers, Pl
 import { apiClient } from '../../services/api';
 import { Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { ImageUploader } from '../../components/admin/ImageUploader';
 
 interface AdminCollection {
   id: string;
@@ -214,6 +215,12 @@ export const AdminCollectionsPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Link to={`/admin/products?new=1&collection=${c.id}`} className="px-3 py-2 bg-black text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" title="Add a new product to this collection">
+                    <Plus className="w-3.5 h-3.5" /> Add product
+                  </Link>
+                  <Link to={`/admin/products?collection=${c.id}`} className="px-3 py-2 border border-black/20 text-[10px] font-bold uppercase tracking-wider hover:bg-neutral-100" title="See products in this collection">
+                    View products
+                  </Link>
                   {c.isActive && <Link to={`/collections/${c.slug}`} target="_blank" className="p-2 hover:bg-neutral-100" title="View"><ExternalLink className="w-4 h-4" /></Link>}
                   <button onClick={() => { setError(null); setEditing({ ...c, description: c.description || '', bannerImageUrl: c.bannerImageUrl || '', mobileBannerUrl: c.mobileBannerUrl || '' }); }} className="p-2 hover:bg-neutral-100" title="Edit"><Edit2 className="w-4 h-4" /></button>
                   <button onClick={() => remove(c)} className="p-2 hover:bg-red-50 text-red-600" title="Delete"><Trash2 className="w-4 h-4" /></button>
@@ -247,18 +254,23 @@ export const AdminCollectionsPage: React.FC = () => {
                   <input value={editing.description || ''} onChange={(e) => setEditing({ ...editing, description: e.target.value })} className={input} />
                 </div>
                 <div>
-                  <label className={label}>Banner image URL (desktop)</label>
-                  <input value={editing.bannerImageUrl || ''} onChange={(e) => setEditing({ ...editing, bannerImageUrl: e.target.value })} className={`${input} font-mono text-xs`} placeholder="https://thelevix.shop/images/winter-banner.jpg" />
+                  <ImageUploader
+                    single
+                    label="Banner image (desktop, landscape)"
+                    value={editing.bannerImageUrl ? [editing.bannerImageUrl] : []}
+                    onChange={(urls) => setEditing({ ...editing, bannerImageUrl: urls[0] || '' })}
+                    hint="Used for the homepage banner slideshow & collection page. Wide photo works best."
+                  />
                 </div>
                 <div>
-                  <label className={label}>Banner image URL (mobile, optional)</label>
-                  <input value={editing.mobileBannerUrl || ''} onChange={(e) => setEditing({ ...editing, mobileBannerUrl: e.target.value })} className={`${input} font-mono text-xs`} placeholder="Portrait image for phones" />
+                  <ImageUploader
+                    single
+                    label="Banner image (mobile, optional)"
+                    value={editing.mobileBannerUrl ? [editing.mobileBannerUrl] : []}
+                    onChange={(urls) => setEditing({ ...editing, mobileBannerUrl: urls[0] || '' })}
+                    hint="Portrait photo for phones. If empty, the desktop banner is used."
+                  />
                 </div>
-                {editing.bannerImageUrl && /^https?:\/\//.test(editing.bannerImageUrl) && (
-                  <div className="sm:col-span-2 h-40 bg-neutral-100 overflow-hidden">
-                    <img src={editing.bannerImageUrl} alt="" className="w-full h-full object-cover" />
-                  </div>
-                )}
                 <div>
                   <label className={label}>Homepage layout</label>
                   <select value={editing.homeLayout} onChange={(e) => setEditing({ ...editing, homeLayout: e.target.value as any })} className={input}>

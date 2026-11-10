@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiClient, DEFAULT_STORE_SETTINGS, StoreSettings } from '../../services/api';
 import { useSettingsStore } from '../../store/settingsStore';
 import { AdminCategoriesManager } from '../../components/admin/AdminCategoriesManager';
+import { ImageUploader } from '../../components/admin/ImageUploader';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { Sliders, CheckCircle2, RotateCcw, Save, Sparkles, Megaphone, Mail, Phone, Globe, Truck } from 'lucide-react';
 
@@ -297,19 +298,23 @@ export const AdminSettingsPage: React.FC = () => {
             <h2 className="font-bold uppercase tracking-wider text-sm text-black">Homepage & Product Page</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700">Hero image — desktop (URL)</label>
-                <input value={settings.heroDesktopImage} onChange={(e) => setSettings({ ...settings, heroDesktopImage: e.target.value })} placeholder="https://thelevix.shop/images/hero-desktop.jpg" className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
-                <div className="aspect-[16/9] bg-neutral-100 overflow-hidden">
-                  <img src={settings.heroDesktopImage || '/hero_desktop.jpg'} alt="" className="w-full h-full object-cover" />
-                </div>
+              <div>
+                <ImageUploader
+                  single
+                  label="Hero image — desktop (landscape)"
+                  value={settings.heroDesktopImage ? [settings.heroDesktopImage] : []}
+                  onChange={(urls) => setSettings({ ...settings, heroDesktopImage: urls[0] || '' })}
+                  hint="Full-screen photo at the top of the homepage. 1920×1080 or larger works best."
+                />
               </div>
-              <div className="space-y-2">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700">Hero image — mobile (URL, portrait)</label>
-                <input value={settings.heroMobileImage} onChange={(e) => setSettings({ ...settings, heroMobileImage: e.target.value })} placeholder="https://thelevix.shop/images/hero-mobile.jpg" className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
-                <div className="h-[calc((100vw-3rem)*9/16)] md:h-auto md:aspect-[16/9] bg-neutral-100 overflow-hidden flex justify-center">
-                  <img src={settings.heroMobileImage || settings.heroDesktopImage || '/hero_mobile.jpg'} alt="" className="h-full aspect-[9/16] object-cover" />
-                </div>
+              <div>
+                <ImageUploader
+                  single
+                  label="Hero image — mobile (portrait)"
+                  value={settings.heroMobileImage ? [settings.heroMobileImage] : []}
+                  onChange={(urls) => setSettings({ ...settings, heroMobileImage: urls[0] || '' })}
+                  hint="Shown on phones. If empty, the desktop photo is used."
+                />
               </div>
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Hero button text</label>

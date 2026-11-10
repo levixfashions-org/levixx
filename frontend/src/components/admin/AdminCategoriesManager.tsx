@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Layers, Plus, Save, Trash2 } from 'lucide-react';
 import { apiClient } from '../../services/api';
 import { Category } from '../../types';
+import { ImageUploader } from './ImageUploader';
 
 /** Lets the owner manage categories (used as the store's collections), including their banner image URL. */
 export const AdminCategoriesManager: React.FC = () => {
@@ -97,7 +98,9 @@ export const AdminCategoriesManager: React.FC = () => {
               </div>
               <div className="md:col-span-9 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input className={input} value={d.name ?? c.name} onChange={(e) => update(c.id, { name: e.target.value })} aria-label="Category name" />
-                <input className={`${input} font-mono`} value={img} onChange={(e) => update(c.id, { imageUrl: e.target.value })} placeholder="Banner image URL (https://...)" aria-label="Banner image URL" />
+                <div className="sm:col-span-2">
+                  <ImageUploader single compact value={img ? [img] : []} onChange={(urls) => update(c.id, { imageUrl: urls[0] || '' })} hint="Banner for this product type (collection page, menu, slideshow fallback)." />
+                </div>
                 <input className={`${input} sm:col-span-2`} value={(d.description ?? c.description) || ''} onChange={(e) => update(c.id, { description: e.target.value })} placeholder="Short description" aria-label="Description" />
                 <select className={input} value={(d.group ?? c.group) || 'TOP'} onChange={(e) => update(c.id, { group: e.target.value })} aria-label="Menu group">
                   <option value="TOP">Menu group: Top</option>

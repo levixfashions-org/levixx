@@ -115,9 +115,31 @@ export function calculateShippingPaise(subtotalPaise: number, settings: PublicSt
 }
 
 /** Creates the default categories and settings row if they don't exist yet. Safe to run on every boot. */
+export const DEFAULT_DROPS = [
+  { slug: 'first-drop', name: '1st Drop', sortOrder: 0 },
+  { slug: 'second-drop', name: '2nd Drop', sortOrder: 1 },
+  { slug: 'third-drop', name: '3rd Drop', sortOrder: 2 }
+];
+
 export async function ensureStoreDefaults(): Promise<void> {
   for (const c of DEFAULT_CATEGORIES) {
     await prisma.category.upsert({ where: { slug: c.slug }, update: {}, create: c });
   }
   await getSettings();
+
+  // One-time setup (version 1): the 1st / 2nd / 3rd Drop collections.
+  // Runs only once, so if the owner later renames or deletes a drop it is never re-created.
+  const row = await prisma.storeSetting.findUnique({ where: { id: 'default' }, select: { defaultsVersion: true } });
+  if ((row?.defaultsVersion ?? 0) < 1) {
+    for (const d of DEFAULT_DROPS) {
+      const exists = await prisma.collection.findUnique({ where: { slug: d.slug } });
+      if (!exists) {
+        await prisma.collection.create({
+          data: { ...d, homeLayout: 'CAROUSEL', showInMenu: true, showInGallery: false, isActive: true }
+        });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 1 } });
+    console.log('✓ Created default drop collections (1st, 2nd, 3rd Drop).');
+  }
 }

@@ -1,28 +1,83 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, ArrowUp, ArrowDown, Eye, EyeOff, Star
-} from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, Eye, EyeOff, Star, Palette } from 'lucide-react';
 import { apiClient, COLOR_GROUPS, COLOR_SWATCHES } from '../../services/api';
 import { Category, Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { ImageUploader } from '../../components/admin/ImageUploader';
 
-const DEFAULT_SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
+const SIZE_PRESETS: { label: string; sizes: string[] }[] = [
+  { label: 'S – XXL', sizes: ['S', 'M', 'L', 'XL', 'XXL'] },
+  { label: 'XS – XXL', sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] },
+  { label: 'Waist 28 – 36', sizes: ['28', '30', '32', '34', '36'] },
+  { label: 'Free size', sizes: ['OS'] }
+];
 
-interface SizeRow {
-  size: string;
-  stock: string;
+const QUICK_COLOURS: { name: string; hex: string }[] = [
+  { name: 'Black', hex: '#111111' },
+  { name: 'White', hex: '#F5F5F5' },
+  { name: 'Grey', hex: '#8A8A8A' },
+  { name: 'Navy', hex: '#1B2A4A' },
+  { name: 'Brown', hex: '#6B4226' },
+  { name: 'Olive', hex: '#5B6331' },
+  { name: 'Beige', hex: '#D8C8A8' },
+  { name: 'Red', hex: '#B3121F' }
+];
+
+interface ColourRow {
+  key: string;
+  name: string;
+  hex: string;
+  images: string[];
+  stock: Record<string, string>;
 }
 
-const emptySizes = (): SizeRow[] => DEFAULT_SIZES.map((size) => ({ size, stock: '0' }));
+const newKey = () => Math.random().toString(36).slice(2);
+const blankColour = (sizes: string[], name = '', hex = '#111111'): ColourRow => ({
+  key: newKey(),
+  name,
+  hex,
+  images: [],
+  stock: Object.fromEntries(sizes.map((s) => [s, '0']))
+});
 
 function slugify(v: string) {
   return v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+/** Turns a saved product back into editor state (sizes + colour rows with their photos and stock). */
+function toEditor(p: Product): { sizes: string[]; colours: ColourRow[] } {
+  const sizes: string[] = [];
+  const colourOrder: string[] = [];
+  const hexByColour: Record<string, string> = {};
+  for (const v of p.variants) {
+    if (!sizes.includes(v.size)) sizes.push(v.size);
+    const c = v.color || '';
+    if (!colourOrder.includes(c)) colourOrder.push(c);
+    if (v.colorHex) hexByColour[c] = v.colorHex;
+  }
+  if (!colourOrder.length) colourOrder.push('');
+  const colours = colourOrder.map((c, idx) => {
+    const imgs = p.images
+      .filter((im) => (im.color || '') === c || (!im.color && idx === 0 && c !== ''))
+      .map((im) => im.url);
+    const stock: Record<string, string> = {};
+    sizes.forEach((s) => {
+      const v = p.variants.find((x) => (x.color || '') === c && x.size === s);
+      stock[s] = v ? String(v.stockQuantity) : '0';
+    });
+    return { key: newKey(), name: c, hex: hexByColour[c] || '#111111', images: imgs, stock };
+  });
+  // Single-colour product: all photos belong to it.
+  if (colours.length === 1) colours[0].images = p.images.map((im) => im.url);
+  return { sizes: sizes.length ? sizes : ['S', 'M', 'L', 'XL', 'XXL'], colours };
+}
+
 export const AdminProductsPage: React.FC = () => {
+  const [params, setParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allCollections, setAllCollections] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -32,6 +87,7 @@ export const AdminProductsPage: React.FC = () => {
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [collectionFilter, setCollectionFilter] = useState(params.get('collection') || 'ALL');
   const [legacyProducts, setLegacyProducts] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
 
@@ -47,17 +103,19 @@ export const AdminProductsPage: React.FC = () => {
   const [details, setDetails] = useState('');
   const [fabricCare, setFabricCare] = useState('');
   const [fitGuide, setFitGuide] = useState('');
-  const [images, setImages] = useState<string[]>(['']);
-  const [sizes, setSizes] = useState<SizeRow[]>(emptySizes());
+  const [sizes, setSizes] = useState<string[]>(['S', 'M', 'L', 'XL', 'XXL']);
+  const [newSize, setNewSize] = useState('');
+  const [colours, setColours] = useState<ColourRow[]>([blankColour(['S', 'M', 'L', 'XL', 'XXL'])]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [colorGroup, setColorGroup] = useState('');
   const [collectionIds, setCollectionIds] = useState<string[]>([]);
-  const [allCollections, setAllCollections] = useState<{ id: string; name: string }[]>([]);
+
+  const multiColour = colours.length > 1;
 
   const flash = (msg: string) => {
     setActionMsg(msg);
-    setTimeout(() => setActionMsg(null), 5000);
+    setTimeout(() => setActionMsg(null), 6000);
   };
 
   const loadAll = async () => {
@@ -72,15 +130,28 @@ export const AdminProductsPage: React.FC = () => {
       setProducts(prodRes.data.products || []);
       setCategories(catRes.data.categories || []);
       setAllCollections((colRes.data.collections || []).map((c: any) => ({ id: c.id, name: c.name })));
+      return catRes.data.categories || [];
     } catch (err: any) {
       setLoadError(err.message || 'Failed to load products');
+      return [];
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAll();
+    loadAll().then((cats) => {
+      // Opened from "Collections → Add product": start a new product already in that collection.
+      if (params.get('new') === '1') {
+        resetForm(cats);
+        const col = params.get('collection');
+        if (col) setCollectionIds([col]);
+        setShowModal(true);
+        const next = new URLSearchParams(params);
+        next.delete('new');
+        setParams(next, { replace: true });
+      }
+    });
     try {
       const raw = localStorage.getItem('levix_custom_products');
       const parsed = raw ? JSON.parse(raw) : [];
@@ -88,6 +159,7 @@ export const AdminProductsPage: React.FC = () => {
     } catch {
       /* ignore */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // One-time import of products that the old admin panel saved only in this browser.
@@ -105,7 +177,7 @@ export const AdminProductsPage: React.FC = () => {
         await apiClient.post('/admin/products', {
           name: lp.name,
           slug: lp.slug || slugify(lp.name || ''),
-          description: (lp.description && lp.description.length >= 5 ? lp.description : `${lp.name} by LEVIX.`),
+          description: lp.description && lp.description.length >= 5 ? lp.description : `${lp.name} by LEVIX.`,
           details: lp.details || null,
           fabricCare: lp.fabricCare || null,
           fitGuide: lp.fitGuide || null,
@@ -115,7 +187,7 @@ export const AdminProductsPage: React.FC = () => {
           isActive: lp.isActive !== false,
           categoryName: lp.category?.name || null,
           images: imgs.map((url: string) => ({ url })),
-          variants: variants.length ? variants : DEFAULT_SIZES.map((size) => ({ size, stockQuantity: 0, priceDelta: 0 }))
+          variants: variants.length ? variants : ['S', 'M', 'L', 'XL', 'XXL'].map((size) => ({ size, stockQuantity: 0, priceDelta: 0 }))
         });
         ok++;
       } catch (err: any) {
@@ -136,12 +208,13 @@ export const AdminProductsPage: React.FC = () => {
     await loadAll();
   };
 
-  const resetForm = () => {
+  const resetForm = (cats: Category[] = categories) => {
+    const defaultSizes = ['S', 'M', 'L', 'XL', 'XXL'];
     setEditingProduct(null);
     setName('');
     setSlug('');
     setSlugTouched(false);
-    setCategoryId(categories[0]?.id || '');
+    setCategoryId(cats[0]?.id || '');
     setNewCategoryName('');
     setPriceINR('');
     setComparePriceINR('');
@@ -149,16 +222,18 @@ export const AdminProductsPage: React.FC = () => {
     setDetails('');
     setFabricCare('100% cotton. Cold gentle wash inside out. Do not tumble dry.');
     setFitGuide('Oversized fit. Choose your usual size for a relaxed drape, or size down for a closer fit.');
-    setImages(['']);
-    setSizes(emptySizes());
+    setSizes(defaultSizes);
+    setNewSize('');
+    setColours([blankColour(defaultSizes)]);
     setIsFeatured(false);
     setIsActive(true);
     setColorGroup('');
-    setCollectionIds([]);
+    setCollectionIds(collectionFilter !== 'ALL' ? [collectionFilter] : []);
     setFormError(null);
   };
 
   const fillForm = (p: Product, asCopy = false) => {
+    const ed = toEditor(p);
     setEditingProduct(asCopy ? null : p);
     setName(asCopy ? `${p.name} (Copy)` : p.name);
     setSlug(asCopy ? `${p.slug}-copy` : p.slug);
@@ -171,8 +246,9 @@ export const AdminProductsPage: React.FC = () => {
     setDetails(p.details || '');
     setFabricCare(p.fabricCare || '');
     setFitGuide(p.fitGuide || '');
-    setImages(p.images.length ? p.images.map((i) => i.url) : ['']);
-    setSizes(p.variants.length ? p.variants.map((v) => ({ size: v.size, stock: String(v.stockQuantity) })) : emptySizes());
+    setSizes(ed.sizes);
+    setNewSize('');
+    setColours(ed.colours);
     setIsFeatured(Boolean(p.isFeatured));
     setIsActive(asCopy ? true : p.isActive);
     setColorGroup(p.colorGroup || '');
@@ -186,23 +262,58 @@ export const AdminProductsPage: React.FC = () => {
     setShowModal(true);
   };
 
+  /* ---------- sizes & colours helpers ---------- */
+  const applySizes = (next: string[]) => {
+    const clean = [...new Set(next.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+    setSizes(clean);
+    setColours((cur) => cur.map((c) => ({ ...c, stock: Object.fromEntries(clean.map((s) => [s, c.stock[s] ?? '0'])) })));
+  };
+  const addSize = () => {
+    if (newSize.trim()) applySizes([...sizes, newSize]);
+    setNewSize('');
+  };
+  const updateColour = (key: string, patch: Partial<ColourRow>) => setColours((cur) => cur.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+  const addColour = (preset?: { name: string; hex: string }) => {
+    // When a second colour is added, the first colour's name box appears so it can be named too.
+    setColours((cur) => [...cur, blankColour(sizes, preset?.name || '', preset?.hex || '#8A8A8A')]);
+  };
+  const removeColour = (key: string) =>
+    setColours((cur) => {
+      const next = cur.filter((c) => c.key !== key);
+      return next.length ? next : [blankColour(sizes)];
+    });
+
+  const totalStockOf = (c: ColourRow) => sizes.reduce((a, s) => a + (parseInt(c.stock[s], 10) || 0), 0);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    const cleanImages = images.map((u) => u.trim()).filter(Boolean);
-    if (cleanImages.length === 0) return setFormError('Add at least one product image URL.');
-    const badUrl = cleanImages.find((u) => !/^https?:\/\//i.test(u));
-    if (badUrl) return setFormError(`Image URL must start with https:// — "${badUrl.slice(0, 60)}"`);
-
-    const cleanSizes = sizes
-      .map((s) => ({ size: s.size.trim().toUpperCase(), stockQuantity: Math.max(0, parseInt(s.stock, 10) || 0), priceDelta: 0 }))
-      .filter((s) => s.size);
-    if (cleanSizes.length === 0) return setFormError('Add at least one size.');
+    if (!sizes.length) return setFormError('Add at least one size.');
+    if (multiColour) {
+      const names = colours.map((c) => c.name.trim());
+      if (names.some((n) => !n)) return setFormError('Give every colour a name (e.g. Black, Off-White).');
+      if (new Set(names.map((n) => n.toLowerCase())).size !== names.length) return setFormError('Two colours have the same name.');
+      const noPhotos = colours.find((c) => c.images.length === 0);
+      if (noPhotos) return setFormError(`Add at least one photo for the colour "${noPhotos.name}".`);
+    } else if (colours[0].images.length === 0) {
+      return setFormError('Add at least one product photo.');
+    }
 
     const basePaise = Math.round(parseFloat(priceINR || '0') * 100);
     if (!basePaise || basePaise <= 0) return setFormError('Enter a valid price.');
     const comparePaise = comparePriceINR ? Math.round(parseFloat(comparePriceINR) * 100) : null;
+
+    const images = colours.flatMap((c) => c.images.map((url) => ({ url, color: multiColour || c.name.trim() ? c.name.trim() || null : null })));
+    const variants = colours.flatMap((c) =>
+      sizes.map((size) => ({
+        size,
+        color: multiColour || c.name.trim() ? c.name.trim() || null : null,
+        colorHex: multiColour || c.name.trim() ? c.hex : null,
+        stockQuantity: Math.max(0, parseInt(c.stock[size], 10) || 0),
+        priceDelta: 0
+      }))
+    );
 
     const payload: any = {
       name: name.trim(),
@@ -217,11 +328,11 @@ export const AdminProductsPage: React.FC = () => {
       isActive,
       colorGroup: colorGroup || null,
       collectionIds,
-      images: cleanImages.map((url) => ({ url })),
-      variants: cleanSizes
+      images,
+      variants
     };
     if (categoryId === '__new__') {
-      if (!newCategoryName.trim()) return setFormError('Enter the new category name.');
+      if (!newCategoryName.trim()) return setFormError('Enter the new product type name.');
       payload.categoryName = newCategoryName.trim();
     } else {
       payload.categoryId = categoryId || null;
@@ -266,25 +377,21 @@ export const AdminProductsPage: React.FC = () => {
     }
   };
 
-  const moveImage = (idx: number, dir: -1 | 1) => {
-    const next = [...images];
-    const target = idx + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[idx], next[target]] = [next[target], next[idx]];
-    setImages(next);
-  };
-
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return products.filter((p) => {
       const matchesQ = !q || p.name.toLowerCase().includes(q) || p.slug.includes(q);
       const matchesCat = categoryFilter === 'ALL' || p.category?.id === categoryFilter;
-      return matchesQ && matchesCat;
+      const matchesCol = collectionFilter === 'ALL' || (p.collectionIds || []).includes(collectionFilter);
+      return matchesQ && matchesCat && matchesCol;
     });
-  }, [products, searchTerm, categoryFilter]);
+  }, [products, searchTerm, categoryFilter, collectionFilter]);
+
+  const colourNamesOf = (p: Product) => [...new Set(p.variants.map((v) => v.color).filter(Boolean))] as string[];
 
   const inputClass = 'w-full bg-white border border-black/20 p-2.5 text-sm focus:border-black focus:outline-none';
   const labelClass = 'block text-[11px] font-bold uppercase tracking-wider text-neutral-600 mb-1';
+  const sectionTitle = 'text-[12px] font-black uppercase tracking-wider text-black flex items-center gap-2';
 
   return (
     <div className="min-h-screen bg-[#EFEFEF] pb-24">
@@ -299,10 +406,7 @@ export const AdminProductsPage: React.FC = () => {
             <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black mt-1">Products</h1>
             <p className="text-xs text-neutral-600 mt-1">{products.length} products • changes go live instantly for every customer.</p>
           </div>
-          <button
-            onClick={openAddModal}
-            className="px-5 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 flex items-center gap-2 shadow-md"
-          >
+          <button onClick={openAddModal} className="px-5 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 flex items-center gap-2 shadow-md">
             <Plus className="w-4 h-4" /> Add Product
           </button>
         </div>
@@ -321,35 +425,32 @@ export const AdminProductsPage: React.FC = () => {
         {loadError && (
           <div className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs font-semibold flex items-center justify-between">
             <span>{loadError}</span>
-            <button onClick={loadAll} className="underline">Retry</button>
+            <button onClick={() => loadAll()} className="underline">Retry</button>
           </div>
         )}
 
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search products..."
-              className="w-full bg-white border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-black"
-            />
+            <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search products..." className="w-full bg-white border border-black/15 pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-black" />
           </div>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-white border border-black/15 px-3 py-2.5 text-sm">
-            <option value="ALL">All categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
+            <option value="ALL">All product types</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <select value={collectionFilter} onChange={(e) => setCollectionFilter(e.target.value)} className="bg-white border border-black/15 px-3 py-2.5 text-sm">
+            <option value="ALL">All collections</option>
+            {allCollections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
 
         <div className="bg-white border border-black/10 shadow-sm overflow-x-auto">
-          <table className="w-full text-xs min-w-[760px]">
+          <table className="w-full text-xs min-w-[820px]">
             <thead className="bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500 font-mono">
               <tr>
                 <th className="py-3 px-4 text-left">Image</th>
                 <th className="py-3 px-4 text-left">Product</th>
-                <th className="py-3 px-4 text-left">Category</th>
+                <th className="py-3 px-4 text-left">Type / Collections</th>
                 <th className="py-3 px-4 text-left">Price</th>
                 <th className="py-3 px-4 text-left">Stock</th>
                 <th className="py-3 px-4 text-left">Status</th>
@@ -362,12 +463,14 @@ export const AdminProductsPage: React.FC = () => {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-16 text-center text-neutral-500">
-                    {products.length === 0 ? 'No products yet. Click "Add Product" to publish your first drop.' : 'No products match your search.'}
+                    {products.length === 0 ? 'No products yet. Click "Add Product" to publish your first drop.' : 'No products match these filters.'}
                   </td>
                 </tr>
               ) : (
                 filtered.map((p) => {
                   const totalStock = p.variants.reduce((a, v) => a + v.stockQuantity, 0);
+                  const cols = colourNamesOf(p);
+                  const colNames = (p.collectionIds || []).map((id) => allCollections.find((c) => c.id === id)?.name).filter(Boolean);
                   return (
                     <tr key={p.id} className={`hover:bg-neutral-50/60 ${!p.isActive ? 'opacity-60' : ''}`}>
                       <td className="py-3 px-4">
@@ -378,20 +481,29 @@ export const AdminProductsPage: React.FC = () => {
                       <td className="py-3 px-4">
                         <p className="font-semibold text-black">{p.name}</p>
                         <p className="text-[11px] text-neutral-500 font-mono">/{p.slug}</p>
+                        {cols.length > 0 && (
+                          <div className="flex items-center gap-1 mt-1">
+                            {p.variants.filter((v, i, arr) => v.color && arr.findIndex((x) => x.color === v.color) === i).map((v) => (
+                              <span key={v.color!} title={v.color!} className="w-3 h-3 rounded-full border border-black/15" style={{ background: v.colorHex || '#ccc' }} />
+                            ))}
+                            <span className="text-[10px] text-neutral-500 ml-1">{cols.length} colour{cols.length > 1 ? 's' : ''}</span>
+                          </div>
+                        )}
                       </td>
-                      <td className="py-3 px-4 text-neutral-700">{p.category?.name || '—'}</td>
+                      <td className="py-3 px-4 text-neutral-700">
+                        <p>{p.category?.name || '—'}</p>
+                        {colNames.length > 0 && <p className="text-[10px] text-neutral-500 mt-0.5">{colNames.join(', ')}</p>}
+                      </td>
                       <td className="py-3 px-4 font-mono">
                         <span className="font-bold">RS. {(p.basePrice / 100).toLocaleString('en-IN')}</span>
                         {p.comparePrice ? <span className="block text-[11px] text-neutral-400 line-through">RS. {(p.comparePrice / 100).toLocaleString('en-IN')}</span> : null}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`font-bold ${totalStock === 0 ? 'text-red-600' : totalStock <= 10 ? 'text-yellow-700' : 'text-black'}`}>{totalStock}</span>
-                        <span className="block text-[10px] text-neutral-500 font-mono">{p.variants.map((v) => `${v.size}:${v.stockQuantity}`).join(' ')}</span>
+                        <span className="block text-[10px] text-neutral-500">{p.variants.length} variant{p.variants.length === 1 ? '' : 's'}</span>
                       </td>
                       <td className="py-3 px-4 space-y-1">
-                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-neutral-200 text-neutral-700'}`}>
-                          {p.isActive ? 'Live' : 'Hidden'}
-                        </span>
+                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-neutral-200 text-neutral-700'}`}>{p.isActive ? 'Live' : 'Hidden'}</span>
                         {p.isFeatured && <span className="flex items-center gap-1 text-[10px] text-[#FF5400] font-bold uppercase"><Star className="w-3 h-3" /> Featured</span>}
                       </td>
                       <td className="py-3 px-4">
@@ -401,9 +513,7 @@ export const AdminProductsPage: React.FC = () => {
                           <button onClick={() => handleToggleActive(p)} title={p.isActive ? 'Hide from store' : 'Show in store'} className="p-2 hover:bg-neutral-100">
                             {p.isActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
-                          {p.isActive && (
-                            <Link to={`/products/${p.slug}`} target="_blank" title="View in store" className="p-2 hover:bg-neutral-100"><ExternalLink className="w-3.5 h-3.5" /></Link>
-                          )}
+                          {p.isActive && <Link to={`/products/${p.slug}`} target="_blank" title="View in store" className="p-2 hover:bg-neutral-100"><ExternalLink className="w-3.5 h-3.5" /></Link>}
                           <button onClick={() => handleDelete(p)} title="Delete" className="p-2 hover:bg-red-50 text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
@@ -417,177 +527,193 @@ export const AdminProductsPage: React.FC = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[60] bg-black/60 flex items-start justify-center p-3 sm:p-6 overflow-y-auto" onMouseDown={(e) => e.target === e.currentTarget && !saving && setShowModal(false)}>
-          <form onSubmit={handleSave} className="bg-white w-full max-w-3xl my-4 shadow-2xl border border-black/10">
+        <div className="fixed inset-0 z-[90] bg-black/60 flex items-start justify-center p-2 sm:p-6 overflow-y-auto">
+          <form onSubmit={handleSave} className="bg-white w-full max-w-4xl my-2 sm:my-4 shadow-2xl border border-black/10">
             <div className="flex items-center justify-between p-5 border-b border-black/10 sticky top-0 bg-white z-10">
               <h2 className="font-display font-black text-xl uppercase tracking-tight">{editingProduct ? 'Edit Product' : 'Add Product'}</h2>
-              <button type="button" onClick={() => setShowModal(false)} className="p-1.5 hover:bg-neutral-100" aria-label="Close"><X className="w-5 h-5" /></button>
+              <button type="button" onClick={() => !saving && setShowModal(false)} className="p-1.5 hover:bg-neutral-100" aria-label="Close"><X className="w-5 h-5" /></button>
             </div>
 
-            <div className="p-5 space-y-6">
+            <div className="p-5 space-y-8">
               {formError && <div role="alert" className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs font-semibold">{formError}</div>}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className={labelClass}>Product Name *</label>
-                  <input required value={name} onChange={(e) => { setName(e.target.value); if (!slugTouched) setSlug(slugify(e.target.value)); }} className={inputClass} placeholder="e.g. Signature Overlength Heavyweight Tee" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className={labelClass}>URL Handle</label>
-                  <div className="flex items-center border border-black/20 bg-neutral-50">
-                    <span className="px-2 text-[11px] text-neutral-500 font-mono whitespace-nowrap">/products/</span>
-                    <input value={slug} onChange={(e) => { setSlug(slugify(e.target.value)); setSlugTouched(true); }} className="flex-1 bg-white p-2.5 text-sm font-mono focus:outline-none" placeholder="auto-generated" />
+              {/* 1. Basics */}
+              <section className="space-y-4">
+                <p className={sectionTitle}>1. Basics</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className={labelClass}>Product name *</label>
+                    <input required value={name} onChange={(e) => { setName(e.target.value); if (!slugTouched) setSlug(slugify(e.target.value)); }} className={inputClass} placeholder="e.g. Signature Overlength Heavyweight Tee" />
                   </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Category</label>
-                  <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
-                    <option value="">No category</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                    <option value="__new__">+ New category…</option>
-                  </select>
-                  {categoryId === '__new__' && (
-                    <input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className={`${inputClass} mt-2`} placeholder="New category name" />
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={labelClass}>Web address</label>
+                    <div className="flex items-center border border-black/20 bg-neutral-50">
+                      <span className="px-2 text-[11px] text-neutral-500 font-mono whitespace-nowrap">thelevix.shop/products/</span>
+                      <input value={slug} onChange={(e) => { setSlug(slugify(e.target.value)); setSlugTouched(true); }} className="flex-1 min-w-0 bg-white p-2.5 text-sm font-mono focus:outline-none" placeholder="auto-generated" />
+                    </div>
+                  </div>
                   <div>
                     <label className={labelClass}>Price (₹) *</label>
                     <input required type="number" min="1" step="1" value={priceINR} onChange={(e) => setPriceINR(e.target.value)} className={`${inputClass} font-mono`} placeholder="2999" />
                   </div>
                   <div>
-                    <label className={labelClass}>MRP / Compare (₹)</label>
-                    <input type="number" min="0" step="1" value={comparePriceINR} onChange={(e) => setComparePriceINR(e.target.value)} className={`${inputClass} font-mono`} placeholder="optional" />
+                    <label className={labelClass}>MRP / original price (₹)</label>
+                    <input type="number" min="0" step="1" value={comparePriceINR} onChange={(e) => setComparePriceINR(e.target.value)} className={`${inputClass} font-mono`} placeholder="optional — shows a SALE badge" />
                   </div>
                 </div>
-              </div>
+              </section>
 
-              {/* Images */}
-              <div className="space-y-2">
-                <label className={labelClass}>Product Images (URLs) *</label>
-                <p className="text-[11px] text-neutral-500">
-                  Paste the full link of each image hosted on Hostinger (e.g. https://thelevix.shop/images/tee-front.jpg). The first image is the cover; the second shows on hover.
-                </p>
-                <div className="space-y-2">
-                  {images.map((url, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className="w-12 h-14 bg-neutral-100 border border-black/10 flex-shrink-0 overflow-hidden flex items-center justify-center">
-                        {/^https?:\/\//.test(url.trim()) ? <img src={url.trim()} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-neutral-400" />}
+              {/* 2. Where it appears */}
+              <section className="space-y-4">
+                <p className={sectionTitle}>2. Where it appears</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Product type</label>
+                    <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+                      <option value="">None</option>
+                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option value="__new__">+ New product type…</option>
+                    </select>
+                    {categoryId === '__new__' && <input value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} className={`${inputClass} mt-2`} placeholder="e.g. Hoodies" />}
+                    <p className="text-[10.5px] text-neutral-500 mt-1">Overlength, Waffle, Acid Wash… shown as filter chips & in the menu.</p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Collections / drops</label>
+                    {allCollections.length === 0 ? (
+                      <p className="text-[11px] text-neutral-500">No collections yet — create them in "Collections & Home".</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {allCollections.map((c) => {
+                          const on = collectionIds.includes(c.id);
+                          return (
+                            <button key={c.id} type="button" onClick={() => setCollectionIds(on ? collectionIds.filter((x) => x !== c.id) : [...collectionIds, c.id])} className={`px-3 py-1.5 rounded-full border text-[11px] ${on ? 'border-black bg-black text-white' : 'border-black/15 hover:border-black'}`}>
+                              {on ? '✓ ' : '+ '}{c.name}
+                            </button>
+                          );
+                        })}
                       </div>
-                      <input
-                        value={url}
-                        onChange={(e) => setImages(images.map((u, i) => (i === idx ? e.target.value : u)))}
-                        className={`${inputClass} font-mono text-xs`}
-                        placeholder={idx === 0 ? 'Cover image URL (https://...)' : 'Additional image URL'}
-                      />
-                      <div className="flex flex-col">
-                        <button type="button" onClick={() => moveImage(idx, -1)} disabled={idx === 0} className="p-1 disabled:opacity-20" aria-label="Move up"><ArrowUp className="w-3 h-3" /></button>
-                        <button type="button" onClick={() => moveImage(idx, 1)} disabled={idx === images.length - 1} className="p-1 disabled:opacity-20" aria-label="Move down"><ArrowDown className="w-3 h-3" /></button>
+                    )}
+                    <p className="text-[10.5px] text-neutral-500 mt-1">Pick 1st / 2nd / 3rd Drop etc. A product can be in several.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-6 pt-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer"><input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="accent-black w-4 h-4" /> Visible in store</label>
+                  <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer"><input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="accent-black w-4 h-4" /> Show first in "Latest drop"</label>
+                </div>
+              </section>
+
+              {/* 3. Sizes */}
+              <section className="space-y-3">
+                <p className={sectionTitle}>3. Sizes</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {sizes.map((s) => (
+                    <span key={s} className="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-full bg-black text-white text-[11px] font-bold">
+                      {s}
+                      <button type="button" onClick={() => applySizes(sizes.filter((x) => x !== s))} className="w-4 h-4 rounded-full hover:bg-white/20 flex items-center justify-center" aria-label={`Remove size ${s}`}><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                  <input value={newSize} onChange={(e) => setNewSize(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSize(); } }} placeholder="Add size" className="w-24 border border-black/20 px-2 py-1 text-[11px] uppercase rounded-full focus:outline-none focus:border-black" />
+                  <button type="button" onClick={addSize} className="text-[11px] font-bold underline">Add</button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 text-[10.5px]">
+                  <span className="text-neutral-500 py-1">Quick sets:</span>
+                  {SIZE_PRESETS.map((p) => <button key={p.label} type="button" onClick={() => applySizes(p.sizes)} className="px-2.5 py-1 rounded-full border border-black/15 hover:border-black">{p.label}</button>)}
+                </div>
+              </section>
+
+              {/* 4. Colours, photos & stock */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className={sectionTitle}><Palette className="w-4 h-4" /> 4. {multiColour ? 'Colours, photos & stock' : 'Photos & stock'}</p>
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[10.5px] text-neutral-500">Add colour:</span>
+                    {QUICK_COLOURS.filter((q) => !colours.some((c) => c.name.toLowerCase() === q.name.toLowerCase())).slice(0, 6).map((q) => (
+                      <button key={q.name} type="button" onClick={() => addColour(q)} className="flex items-center gap-1 px-2 py-1 rounded-full border border-black/15 text-[10.5px] hover:border-black">
+                        <span className="w-3 h-3 rounded-full border border-black/15" style={{ background: q.hex }} />{q.name}
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => addColour()} className="px-2.5 py-1 rounded-full bg-black text-white text-[10.5px] font-bold">+ Other</button>
+                  </div>
+                </div>
+                {!multiColour && <p className="text-[11px] text-neutral-500 -mt-2">Only one colour? Just add photos and stock below. Selling it in more colours? Click a colour above — each colour gets its own photos and stock.</p>}
+
+                {colours.map((c, idx) => (
+                  <div key={c.key} className="border border-black/15 p-4 space-y-4 bg-neutral-50/50">
+                    {(multiColour || c.name) && (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input type="color" value={c.hex} onChange={(e) => updateColour(c.key, { hex: e.target.value })} className="w-10 h-10 border border-black/20 p-0.5 bg-white cursor-pointer" aria-label="Colour swatch" />
+                        <input value={c.name} onChange={(e) => updateColour(c.key, { name: e.target.value })} placeholder={`Colour ${idx + 1} name (e.g. Black)`} className={`${inputClass} max-w-xs`} />
+                        <span className="text-[11px] text-neutral-500">{totalStockOf(c)} in stock</span>
+                        <button type="button" onClick={() => removeColour(c.key)} className="ml-auto text-[11px] text-red-600 font-semibold flex items-center gap-1 hover:underline"><Trash2 className="w-3.5 h-3.5" /> Remove colour</button>
                       </div>
-                      <button type="button" onClick={() => setImages(images.length > 1 ? images.filter((_, i) => i !== idx) : [''])} className="p-2 text-red-600 hover:bg-red-50" aria-label="Remove image"><X className="w-3.5 h-3.5" /></button>
-                    </div>
-                  ))}
-                </div>
-                {images.length < 10 && (
-                  <button type="button" onClick={() => setImages([...images, ''])} className="text-[11px] font-bold uppercase tracking-wider underline">+ Add another image</button>
-                )}
-              </div>
+                    )}
 
-              {/* Sizes */}
-              <div className="space-y-2">
-                <label className={labelClass}>Sizes & Stock *</label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {sizes.map((row, idx) => (
-                    <div key={idx} className="border border-black/15 p-2 space-y-1 relative">
-                      <input
-                        value={row.size}
-                        onChange={(e) => setSizes(sizes.map((r, i) => (i === idx ? { ...r, size: e.target.value.toUpperCase() } : r)))}
-                        className="w-full text-center font-bold text-sm uppercase bg-neutral-50 p-1 focus:outline-none"
-                        maxLength={6}
-                        aria-label="Size"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={row.stock}
-                        onChange={(e) => setSizes(sizes.map((r, i) => (i === idx ? { ...r, stock: e.target.value } : r)))}
-                        className="w-full text-center font-mono text-sm border border-black/10 p-1 focus:outline-none focus:border-black"
-                        aria-label={`Stock for ${row.size}`}
-                      />
-                      <button type="button" onClick={() => setSizes(sizes.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 bg-white border border-black/20 rounded-full p-0.5" aria-label="Remove size"><X className="w-3 h-3" /></button>
-                    </div>
-                  ))}
-                </div>
-                <button type="button" onClick={() => setSizes([...sizes, { size: '', stock: '0' }])} className="text-[11px] font-bold uppercase tracking-wider underline">+ Add size</button>
-              </div>
+                    <ImageUploader
+                      value={c.images}
+                      onChange={(urls) => updateColour(c.key, { images: urls })}
+                      max={12}
+                      label={multiColour ? `Photos of ${c.name || 'this colour'} *` : 'Product photos *'}
+                      compact={multiColour}
+                    />
 
-              <div className="space-y-4">
+                    <div>
+                      <p className="block text-[11px] font-bold uppercase tracking-wider text-neutral-600 mb-1">Stock per size{multiColour && c.name ? ` — ${c.name}` : ''}</p>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        {sizes.map((s) => (
+                          <label key={s} className="border border-black/15 bg-white p-1.5 text-center">
+                            <span className="block text-[11px] font-bold">{s}</span>
+                            <input type="number" min="0" inputMode="numeric" value={c.stock[s] ?? '0'} onChange={(e) => updateColour(c.key, { stock: { ...c.stock, [s]: e.target.value } })} className="w-full text-center font-mono text-sm border-t border-black/10 mt-1 pt-1 focus:outline-none" aria-label={`Stock for ${c.name || ''} ${s}`} />
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex gap-3 mt-1.5 text-[10.5px]">
+                        <button type="button" onClick={() => { const v = window.prompt('Set the same stock for every size:', '10'); if (v !== null) updateColour(c.key, { stock: Object.fromEntries(sizes.map((s) => [s, String(Math.max(0, parseInt(v, 10) || 0))])) }); }} className="underline">Same stock for all sizes</button>
+                        <button type="button" onClick={() => updateColour(c.key, { stock: Object.fromEntries(sizes.map((s) => [s, '0'])) })} className="underline text-neutral-500">Mark all sold out</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <div>
+                  <label className={labelClass}>Colour family (for "Shop by colour")</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => setColorGroup('')} className={`px-3 py-1 rounded-full border text-[11px] ${!colorGroup ? 'border-black bg-black text-white' : 'border-black/15'}`}>None</button>
+                    {COLOR_GROUPS.map((cg) => (
+                      <button key={cg} type="button" onClick={() => setColorGroup(cg)} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] ${colorGroup === cg ? 'border-black ring-1 ring-black' : 'border-black/15'}`}>
+                        <span className="w-3 h-3 rounded-full border border-black/10" style={{ background: COLOR_SWATCHES[cg] }} />
+                        {cg.charAt(0) + cg.slice(1).toLowerCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* 5. Description */}
+              <section className="space-y-4">
+                <p className={sectionTitle}>5. Description</p>
                 <div>
                   <label className={labelClass}>Description *</label>
                   <textarea required rows={4} value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} placeholder="What makes this piece special..." />
                 </div>
                 <div>
-                  <label className={labelClass}>Product Details</label>
-                  <textarea rows={2} value={details} onChange={(e) => setDetails(e.target.value)} className={inputClass} placeholder="GSM, print type, neck, finishing..." />
+                  <label className={labelClass}>Product details (one per line)</label>
+                  <textarea rows={3} value={details} onChange={(e) => setDetails(e.target.value)} className={inputClass} placeholder={'280 GSM combed cotton\nPuff print on back\nRibbed neck'} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Fabric & Care</label>
+                    <label className={labelClass}>Fabric & care</label>
                     <textarea rows={3} value={fabricCare} onChange={(e) => setFabricCare(e.target.value)} className={inputClass} />
                   </div>
                   <div>
-                    <label className={labelClass}>Fit Guide</label>
+                    <label className={labelClass}>Fit guide</label>
                     <textarea rows={3} value={fitGuide} onChange={(e) => setFitGuide(e.target.value)} className={inputClass} />
                   </div>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>Colour (for "Shop by colour")</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button type="button" onClick={() => setColorGroup('')} className={`px-3 py-1 rounded-full border text-[11px] ${!colorGroup ? 'border-black bg-black text-white' : 'border-black/15'}`}>None</button>
-                    {COLOR_GROUPS.map((c) => (
-                      <button key={c} type="button" onClick={() => setColorGroup(c)} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] ${colorGroup === c ? 'border-black ring-1 ring-black' : 'border-black/15'}`}>
-                        <span className="w-3 h-3 rounded-full border border-black/10" style={{ background: COLOR_SWATCHES[c] }} />
-                        {c.charAt(0) + c.slice(1).toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Collections</label>
-                  {allCollections.length === 0 ? (
-                    <p className="text-[11px] text-neutral-500">No collections yet — create them in "Collections & Home".</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {allCollections.map((c) => {
-                        const on = collectionIds.includes(c.id);
-                        return (
-                          <button key={c.id} type="button" onClick={() => setCollectionIds(on ? collectionIds.filter((x) => x !== c.id) : [...collectionIds, c.id])} className={`px-3 py-1 rounded-full border text-[11px] ${on ? 'border-black bg-black text-white' : 'border-black/15'}`}>
-                            {on ? '✓ ' : '+ '}{c.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-6">
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                  <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="accent-black w-4 h-4" /> Visible in store
-                </label>
-                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
-                  <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="accent-black w-4 h-4" /> Feature on homepage
-                </label>
-              </div>
+              </section>
             </div>
 
-            <div className="p-5 border-t border-black/10 flex justify-end gap-3 sticky bottom-0 bg-white">
-              <button type="button" onClick={() => setShowModal(false)} className="px-5 py-3 border border-black/20 text-xs font-bold uppercase tracking-wider">Cancel</button>
+            <div className="p-4 sm:p-5 border-t border-black/10 flex justify-end gap-3 sticky bottom-0 bg-white">
+              <button type="button" onClick={() => setShowModal(false)} disabled={saving} className="px-5 py-3 border border-black/20 text-xs font-bold uppercase tracking-wider">Cancel</button>
               <button type="submit" disabled={saving} className="px-6 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest disabled:opacity-50">
                 {saving ? 'Saving...' : editingProduct ? 'Save Changes' : 'Publish Product'}
               </button>

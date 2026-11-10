@@ -58,13 +58,15 @@ export async function getHome(_req, res) {
     const body = {
         settings,
         latestDrop: latest.map(serializeProduct),
-        sections: collections.filter((c) => c.homeLayout === 'CAROUSEL' || c.homeLayout === 'GRID').map(toSection),
+        sections: collections
+            .filter((c) => (c.homeLayout === 'CAROUSEL' || c.homeLayout === 'GRID') && c.products.length > 0)
+            .map(toSection),
         gallery: collections
             .filter((c) => c.showInGallery && c.bannerImageUrl)
             .map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl, mobileBannerUrl: c.mobileBannerUrl })),
         menu: {
             collections: collections
-                .filter((c) => c.showInMenu)
+                .filter((c) => c.showInMenu && c.products.length > 0)
                 .map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl })),
             categories: categories.map((c) => ({
                 id: c.id,

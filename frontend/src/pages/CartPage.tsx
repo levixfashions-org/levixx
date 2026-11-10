@@ -63,7 +63,7 @@ export const CartPage: React.FC = () => {
                     {item.productName}
                   </Link>
                   <p className="text-[11px] font-mono text-neutral-500">
-                    Size: <span className="font-bold uppercase text-black">{item.size}</span>
+                    Size: <span className="font-bold uppercase text-black">{item.size}</span>{item.color ? <> · Colour: <span className="font-bold text-black">{item.color}</span></> : null}
                   </p>
                   <p className="text-xs font-mono font-bold text-black">
                     RS. {(item.unitPricePaise / 100).toLocaleString('en-IN')}

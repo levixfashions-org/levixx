@@ -2,6 +2,7 @@ export interface ProductImage {
   id: string;
   url: string;
   altText?: string | null;
+  color?: string | null;
   sortOrder: number;
   isCover: boolean;
 }
@@ -10,6 +11,8 @@ export interface ProductVariant {
   id: string;
   productId: string;
   size: string;
+  color?: string | null;
+  colorHex?: string | null;
   sku: string;
   stockQuantity: number;
   priceDelta: number;
@@ -63,6 +66,8 @@ export interface CartItem {
   variantId: string;
   quantity: number;
   size: string;
+  color?: string | null;
+  colorHex?: string | null;
   stockQuantity: number;
   productId: string;
   productName: string;
@@ -101,6 +106,7 @@ export interface OrderItem {
   productName: string;
   productSlug: string;
   size: string;
+  color?: string | null;
   unitPricePaise: number;
   quantity: number;
   subtotalPaise: number;

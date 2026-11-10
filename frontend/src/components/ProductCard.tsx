@@ -30,6 +30,12 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
 
   const soldOut = product.variants.length > 0 && product.variants.every((v) => v.stockQuantity <= 0);
   const href = `/products/${product.slug}`;
+  const colours = product.variants
+    .filter((v, i, arr) => v.color && arr.findIndex((x) => x.color === v.color) === i)
+    .map((v) => ({ name: v.color as string, hex: v.colorHex || '#cccccc' }));
+  const [qColour, setQColour] = useState<string | null>(null);
+  const pickColour = qColour || colours.find((c) => product.variants.some((v) => v.color === c.name && v.stockQuantity > 0))?.name || colours[0]?.name || null;
+  const quickVariants = pickColour ? product.variants.filter((v) => v.color === pickColour) : product.variants;
 
   const onScroll = () => {
     const el = scroller.current;
@@ -112,11 +118,25 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
         {quickOpen && (
           <div className="absolute inset-x-2 bottom-2 rounded-[10px] bg-white/95 backdrop-blur p-2.5 lx-fade-in">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10.5px] font-semibold">Select size</span>
+              <span className="text-[10.5px] font-semibold">{colours.length > 1 ? `Select size · ${pickColour}` : 'Select size'}</span>
               <button onClick={() => setQuickOpen(false)} aria-label="Close sizes"><CloseIcon className="w-3 h-3" /></button>
             </div>
+            {colours.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {colours.map((c) => (
+                  <button
+                    key={c.name}
+                    onClick={() => setQColour(c.name)}
+                    aria-label={c.name}
+                    title={c.name}
+                    className={`w-5 h-5 rounded-full border ${pickColour === c.name ? 'ring-2 ring-black ring-offset-1 border-black/20' : 'border-black/20'}`}
+                    style={{ background: c.hex }}
+                  />
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
-              {product.variants.map((v) => (
+              {quickVariants.map((v) => (
                 <button
                   key={v.id}
                   disabled={v.stockQuantity <= 0 || Boolean(adding)}
@@ -141,6 +161,14 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
               <span className="ml-1.5 line-through text-neutral-400">{formatRs(product.comparePrice)}</span>
             )}
           </p>
+          {colours.length > 1 && (
+            <div className="flex items-center gap-1 mt-1">
+              {colours.slice(0, 6).map((c) => (
+                <span key={c.name} title={c.name} className="w-2.5 h-2.5 rounded-full border border-black/15" style={{ background: c.hex }} />
+              ))}
+              {colours.length > 6 && <span className="text-[9.5px] text-neutral-500">+{colours.length - 6}</span>}
+            </div>
+          )}
         </Link>
         {!soldOut && product.variants.length > 0 && (
           <button onClick={() => setQuickOpen((v) => !v)} aria-label="Quick add" className="p-1 text-neutral-500 hover:text-black">

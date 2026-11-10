@@ -16,6 +16,8 @@ import orderRoutes from './routes/orderRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import storeRoutes from './routes/storeRoutes.js';
+import { serveMedia } from './controllers/mediaController.js';
+import { asyncHandler } from './middleware/errorHandler.js';
 import wishlistRoutes from './routes/wishlistRoutes.js';
 
 const app = express();
@@ -164,6 +166,9 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', notFoundApi);
 
+
+// Uploaded images (stored in MySQL)
+app.get('/media/:file', asyncHandler(serveMedia));
 
 // ------------------------------------------------------------------------------------------
 // Serve the React storefront (frontend/dist) with proper caching

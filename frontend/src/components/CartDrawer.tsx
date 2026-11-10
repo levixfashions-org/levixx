@@ -133,7 +133,7 @@ export const CartDrawer: React.FC = () => {
                       <Link to={`/products/${it.productSlug}`} className="text-[11.5px] font-semibold leading-snug line-clamp-2">{it.productName}</Link>
                       <button onClick={() => change(it.id, 0)} aria-label="Remove" className="text-neutral-400 hover:text-black shrink-0"><CloseIcon className="w-3.5 h-3.5" /></button>
                     </div>
-                    <p className="text-[10.5px] text-neutral-500 mt-0.5">Size: {it.size}</p>
+                    <p className="text-[10.5px] text-neutral-500 mt-0.5">Size: {it.size}{it.color ? ` · ${it.color}` : ''}</p>
                     {it.quantity > it.stockQuantity && (
                       <p className="text-[10px] text-red-600">Only {it.stockQuantity} left — please reduce</p>
                     )}

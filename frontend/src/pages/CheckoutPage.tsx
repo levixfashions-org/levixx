@@ -330,7 +330,7 @@ export const CheckoutPage: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-black truncate">{item.productName}</p>
-                  <p className="text-[11px] text-neutral-500 font-mono">Size: {item.size} • Qty: {item.quantity}</p>
+                  <p className="text-[11px] text-neutral-500 font-mono">Size: {item.size}{item.color ? ` • ${item.color}` : ''} • Qty: {item.quantity}</p>
                 </div>
                 <span className="font-bold font-mono text-black">RS. {inr(item.totalPaise)}</span>
               </div>

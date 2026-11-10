@@ -105,7 +105,7 @@ export const OrderSuccessPage: React.FC = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-black truncate">{it.productName}</p>
-                <p className="text-[11px] text-neutral-500 font-mono">Size {it.size} • Qty {it.quantity}</p>
+                <p className="text-[11px] text-neutral-500 font-mono">Size {it.size}{it.color ? ` • ${it.color}` : ''} • Qty {it.quantity}</p>
               </div>
               <span className="font-mono font-bold">RS. {(it.subtotalPaise / 100).toLocaleString('en-IN')}</span>
             </div>

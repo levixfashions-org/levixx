@@ -418,7 +418,14 @@ function sizeRank(size) {
   return Number.isFinite(n) ? 100 + n : 1e3;
 }
 function sortVariants(variants = []) {
-  return [...variants].sort((a, b) => sizeRank(a.size) - sizeRank(b.size));
+  const colorOrder = /* @__PURE__ */ new Map();
+  [...variants].sort((a, b) => a.createdAt && b.createdAt ? +a.createdAt - +b.createdAt : 0).forEach((v) => {
+    const k = (v.color || "").toLowerCase();
+    if (!colorOrder.has(k)) colorOrder.set(k, colorOrder.size);
+  });
+  return [...variants].sort(
+    (a, b) => (colorOrder.get((a.color || "").toLowerCase()) ?? 0) - (colorOrder.get((b.color || "").toLowerCase()) ?? 0) || sizeRank(a.size) - sizeRank(b.size)
+  );
 }
 function serializeProduct(p) {
   if (!p) return p;
@@ -433,8 +440,10 @@ function slugify(value) {
 }
 var productListInclude = {
   category: { select: { id: true, name: true, slug: true } },
-  images: { orderBy: { sortOrder: "asc" }, take: 2 },
-  variants: { select: { id: true, productId: true, size: true, sku: true, stockQuantity: true, priceDelta: true } }
+  images: { orderBy: { sortOrder: "asc" }, take: 8 },
+  variants: {
+    select: { id: true, productId: true, size: true, color: true, colorHex: true, sku: true, stockQuantity: true, priceDelta: true, createdAt: true }
+  }
 };
 var productFullInclude = {
   category: true,
@@ -769,11 +778,29 @@ function calculateShippingPaise(subtotalPaise, settings) {
   if (threshold === 0 || subtotalPaise >= threshold) return 0;
   return Math.max(0, settings.shippingFee) * 100;
 }
+var DEFAULT_DROPS = [
+  { slug: "first-drop", name: "1st Drop", sortOrder: 0 },
+  { slug: "second-drop", name: "2nd Drop", sortOrder: 1 },
+  { slug: "third-drop", name: "3rd Drop", sortOrder: 2 }
+];
 async function ensureStoreDefaults() {
   for (const c of DEFAULT_CATEGORIES) {
     await prisma.category.upsert({ where: { slug: c.slug }, update: {}, create: c });
   }
   await getSettings();
+  const row = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { defaultsVersion: true } });
+  if ((row?.defaultsVersion ?? 0) < 1) {
+    for (const d of DEFAULT_DROPS) {
+      const exists = await prisma.collection.findUnique({ where: { slug: d.slug } });
+      if (!exists) {
+        await prisma.collection.create({
+          data: { ...d, homeLayout: "CAROUSEL", showInMenu: true, showInGallery: false, isActive: true }
+        });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 1 } });
+    console.log("\u2713 Created default drop collections (1st, 2nd, 3rd Drop).");
+  }
 }
 
 // src/controllers/cartController.ts
@@ -783,12 +810,19 @@ var cartInclude = {
     include: {
       variant: {
         include: {
-          product: { include: { images: { orderBy: { sortOrder: "asc" }, take: 1 } } }
+          product: { include: { images: { orderBy: { sortOrder: "asc" }, take: 30 } } }
         }
       }
     }
   }
 };
+function imageForColor(images, color) {
+  if (color) {
+    const match = images.find((i) => i.color && i.color.toLowerCase() === color.toLowerCase());
+    if (match) return match.url;
+  }
+  return images.find((i) => !i.color)?.url || images[0]?.url || null;
+}
 var ANON_TOKEN_RE = /^[A-Za-z0-9_-]{16,80}$/;
 function getAnonymousToken(req) {
   const raw = req.headers["x-anonymous-token"] || (req.body && typeof req.body.anonymousToken === "string" ? req.body.anonymousToken : void 0) || (typeof req.query.anonymousToken === "string" ? req.query.anonymousToken : void 0);
@@ -845,13 +879,15 @@ async function formatCart(cart) {
       variantId: item.variantId,
       quantity: item.quantity,
       size: item.variant.size,
+      color: item.variant.color,
+      colorHex: item.variant.colorHex,
       stockQuantity: item.variant.stockQuantity,
       productId: item.variant.product.id,
       productName: item.variant.product.name,
       productSlug: item.variant.product.slug,
       unitPricePaise: unitPrice,
       totalPaise: total,
-      imageUrl: item.variant.product.images[0]?.url || null
+      imageUrl: imageForColor(item.variant.product.images, item.variant.color)
     };
   });
   const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
@@ -889,7 +925,7 @@ async function addToCart(req, res) {
   const existing = cart.items.find((i) => i.variantId === variantId);
   const newQuantity = (existing?.quantity || 0) + quantity;
   if (variant.stockQuantity <= 0) {
-    throw new AppError(`Size ${variant.size} is sold out`, 400);
+    throw new AppError(`${variant.color ? variant.color + " / " : ""}Size ${variant.size} is sold out`, 400);
   }
   if (newQuantity > variant.stockQuantity) {
     throw new AppError(`Only ${variant.stockQuantity} left in size ${variant.size}`, 400);
@@ -1068,7 +1104,7 @@ async function markOrderPaid(orderId, info) {
         });
         if (dec.count === 0) {
           await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: 0 } });
-          oversold.push(`${item.productName} (${item.size}) x${item.quantity}`);
+          oversold.push(`${item.productName} (${[item.color, item.size].filter(Boolean).join(" / ")}) x${item.quantity}`);
         }
       }
       if (oversold.length) {
@@ -1125,7 +1161,7 @@ async function createOrder(req, res) {
   for (const item of items) {
     if (item.quantity > item.variant.stockQuantity) {
       throw new AppError(
-        item.variant.stockQuantity <= 0 ? `${item.variant.product.name} (${item.variant.size}) just sold out. Please remove it from your bag.` : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${item.variant.size}). Please update your bag.`,
+        item.variant.stockQuantity <= 0 ? `${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(" / ")}) just sold out. Please remove it from your bag.` : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(" / ")}). Please update your bag.`,
         409
       );
     }
@@ -1183,10 +1219,11 @@ async function createOrder(req, res) {
             productName: item.variant.product.name,
             productSlug: item.variant.product.slug,
             size: item.variant.size,
+            color: item.variant.color,
             unitPricePaise: unit,
             quantity: item.quantity,
             subtotalPaise: unit * item.quantity,
-            imageUrl: item.variant.product.images[0]?.url || null
+            imageUrl: imageForColor(item.variant.product.images, item.variant.color)
           };
         })
       }
@@ -1387,7 +1424,7 @@ router6.post("/webhook", asyncHandler(handleWebhook));
 var paymentRoutes_default = router6;
 
 // src/routes/adminRoutes.ts
-var import_express7 = require("express");
+var import_express7 = __toESM(require("express"), 1);
 
 // src/controllers/adminController.ts
 var import_zod7 = require("zod");
@@ -1525,14 +1562,18 @@ async function deleteOrder(req, res) {
   await prisma.order.delete({ where: { id: order.id } });
   res.json({ success: true });
 }
+var imageUrl = import_zod7.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), "Each image must be uploaded or be a full https:// link");
 var imageSchema = import_zod7.z.object({
-  url: import_zod7.z.string().trim().url("Each image must be a full URL starting with https://").max(2e3),
+  url: imageUrl,
   altText: import_zod7.z.string().max(200).optional().nullable(),
+  color: import_zod7.z.string().trim().max(40).optional().nullable(),
   isCover: import_zod7.z.boolean().optional(),
   sortOrder: import_zod7.z.number().int().optional()
 });
 var variantSchema = import_zod7.z.object({
   size: import_zod7.z.string().trim().min(1).max(10),
+  color: import_zod7.z.string().trim().max(40).optional().nullable(),
+  colorHex: import_zod7.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod7.z.literal("")),
   stockQuantity: import_zod7.z.number().int().min(0).max(1e5),
   priceDelta: import_zod7.z.number().int().default(0)
 });
@@ -1551,8 +1592,8 @@ var productSchema = import_zod7.z.object({
   isActive: import_zod7.z.boolean().default(true),
   colorGroup: import_zod7.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
   collectionIds: import_zod7.z.array(import_zod7.z.string().max(64)).max(50).optional(),
-  images: import_zod7.z.array(imageSchema).min(1, "Add at least one product image").max(12),
-  variants: import_zod7.z.array(variantSchema).min(1, "Add at least one size").max(20)
+  images: import_zod7.z.array(imageSchema).min(1, "Add at least one product image").max(60),
+  variants: import_zod7.z.array(variantSchema).min(1, "Add at least one size").max(200)
 });
 async function resolveCategoryId(categoryId, categoryName) {
   if (categoryId) {
@@ -1574,16 +1615,28 @@ function normaliseImages(images) {
   return images.map((img, idx) => ({
     url: img.url,
     altText: img.altText || null,
+    color: img.color?.trim() || null,
     sortOrder: idx,
     isCover: idx === 0
   }));
 }
-function buildSku(slug, size) {
-  return `${slug.toUpperCase()}-${size.toUpperCase()}`.slice(0, 180);
+var variantKey = (color, size) => `${(color || "").trim().toLowerCase()}|${size.trim().toUpperCase()}`;
+function buildSku(slug, size, color) {
+  const c = color ? `-${color.toUpperCase().replace(/[^A-Z0-9]+/g, "")}` : "";
+  return `${slug.toUpperCase()}${c}-${size.toUpperCase()}`.slice(0, 180);
 }
 function dedupeVariants(variants) {
   const map = /* @__PURE__ */ new Map();
-  for (const v of variants) map.set(v.size.toUpperCase(), { ...v, size: v.size.toUpperCase() });
+  for (const v of variants) {
+    const color = v.color?.trim() || null;
+    map.set(variantKey(color, v.size), {
+      size: v.size.trim().toUpperCase(),
+      color,
+      colorHex: color && v.colorHex ? v.colorHex.toUpperCase() : null,
+      stockQuantity: v.stockQuantity,
+      priceDelta: v.priceDelta ?? 0
+    });
+  }
   return [...map.values()];
 }
 async function loadAdminProduct(id) {
@@ -1644,7 +1697,9 @@ async function createProduct(req, res) {
       variants: {
         create: variants.map((v) => ({
           size: v.size,
-          sku: buildSku(slug, v.size),
+          color: v.color,
+          colorHex: v.colorHex,
+          sku: buildSku(slug, v.size, v.color),
           stockQuantity: v.stockQuantity,
           priceDelta: v.priceDelta
         }))
@@ -1690,27 +1745,31 @@ async function updateProduct(req, res) {
       }
       if (data2.variants) {
         const incoming = dedupeVariants(data2.variants);
-        const incomingSizes = new Set(incoming.map((v) => v.size));
-        const removed = existing.variants.filter((v) => !incomingSizes.has(v.size.toUpperCase()));
+        const keys = new Set(incoming.map((v) => variantKey(v.color, v.size)));
+        const removed = existing.variants.filter((v) => !keys.has(variantKey(v.color, v.size)));
         if (removed.length) {
           await tx.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } });
         }
+        const kept = existing.variants.filter((v) => keys.has(variantKey(v.color, v.size)));
+        for (const v of kept) {
+          await tx.productVariant.update({ where: { id: v.id }, data: { sku: `TMP-${v.id}` } });
+        }
         for (const v of incoming) {
-          const match = existing.variants.find((ev) => ev.size.toUpperCase() === v.size);
-          if (match) {
-            await tx.productVariant.update({
-              where: { id: match.id },
-              data: { size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
-            });
-          } else {
-            await tx.productVariant.create({
-              data: { productId: id, size: v.size, sku: buildSku(slug, v.size), stockQuantity: v.stockQuantity, priceDelta: v.priceDelta }
-            });
-          }
+          const match = kept.find((ev) => variantKey(ev.color, ev.size) === variantKey(v.color, v.size));
+          const data3 = {
+            size: v.size,
+            color: v.color,
+            colorHex: v.colorHex,
+            sku: buildSku(slug, v.size, v.color),
+            stockQuantity: v.stockQuantity,
+            priceDelta: v.priceDelta
+          };
+          if (match) await tx.productVariant.update({ where: { id: match.id }, data: data3 });
+          else await tx.productVariant.create({ data: { ...data3, productId: id } });
         }
       } else if (slug !== existing.slug) {
         for (const v of existing.variants) {
-          await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size) } });
+          await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size, v.color) } });
         }
       }
     },
@@ -1735,7 +1794,7 @@ var categorySchema = import_zod7.z.object({
   name: import_zod7.z.string().trim().min(2).max(120),
   group: import_zod7.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
   description: import_zod7.z.string().max(2e3).optional().nullable(),
-  imageUrl: import_zod7.z.string().trim().url().max(2e3).optional().nullable().or(import_zod7.z.literal("")),
+  imageUrl: imageUrl.optional().nullable().or(import_zod7.z.literal("")),
   sortOrder: import_zod7.z.number().int().optional()
 });
 async function createCategory(req, res) {
@@ -1871,8 +1930,8 @@ var collectionSchema = import_zod7.z.object({
   name: import_zod7.z.string().trim().min(2).max(120),
   slug: import_zod7.z.string().trim().max(120).optional(),
   description: import_zod7.z.string().max(5e3).optional().nullable(),
-  bannerImageUrl: import_zod7.z.string().trim().max(2e3).optional().nullable(),
-  mobileBannerUrl: import_zod7.z.string().trim().max(2e3).optional().nullable(),
+  bannerImageUrl: imageUrl.optional().nullable().or(import_zod7.z.literal("")),
+  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod7.z.literal("")),
   isActive: import_zod7.z.boolean().default(true),
   sortOrder: import_zod7.z.coerce.number().int().default(0),
   homeLayout: import_zod7.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
@@ -2006,10 +2065,10 @@ async function getHome(_req, res) {
   const body = {
     settings,
     latestDrop: latest.map(serializeProduct),
-    sections: collections.filter((c) => c.homeLayout === "CAROUSEL" || c.homeLayout === "GRID").map(toSection),
+    sections: collections.filter((c) => (c.homeLayout === "CAROUSEL" || c.homeLayout === "GRID") && c.products.length > 0).map(toSection),
     gallery: collections.filter((c) => c.showInGallery && c.bannerImageUrl).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl, mobileBannerUrl: c.mobileBannerUrl })),
     menu: {
-      collections: collections.filter((c) => c.showInMenu).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl })),
+      collections: collections.filter((c) => c.showInMenu && c.products.length > 0).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl })),
       categories: categories.map((c) => ({
         id: c.id,
         name: c.name,
@@ -2026,6 +2085,54 @@ async function getHome(_req, res) {
   res.json(body);
 }
 
+// src/controllers/mediaController.ts
+var MAX_BYTES = 8 * 1024 * 1024;
+function sniff(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 255 && buf[1] === 216 && buf[2] === 255) return { mime: "image/jpeg", ext: "jpg" };
+  if (buf.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { mime: "image/png", ext: "png" };
+  if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return { mime: "image/webp", ext: "webp" };
+  if (buf.subarray(0, 6).toString("ascii") === "GIF87a" || buf.subarray(0, 6).toString("ascii") === "GIF89a") return { mime: "image/gif", ext: "gif" };
+  if (buf.subarray(4, 12).toString("ascii").startsWith("ftypavif")) return { mime: "image/avif", ext: "avif" };
+  return null;
+}
+async function uploadMedia(req, res) {
+  const body = req.body;
+  if (!Buffer.isBuffer(body) || body.length === 0) throw new AppError("No image received", 400);
+  if (body.length > MAX_BYTES) throw new AppError("Image is too large (max 8 MB)", 413);
+  const kind = sniff(body);
+  if (!kind) throw new AppError("Only JPG, PNG, WEBP, GIF or AVIF images can be uploaded", 415);
+  const width = Number(req.headers["x-image-width"]) || null;
+  const height = Number(req.headers["x-image-height"]) || null;
+  const fileName = String(req.headers["x-file-name"] || "").slice(0, 180) || null;
+  const file = await prisma.mediaFile.create({
+    data: { mime: kind.mime, size: body.length, width, height, fileName: fileName ? decodeURIComponent(fileName) : null, data: body },
+    select: { id: true }
+  });
+  res.status(201).json({ id: file.id, url: `/media/${file.id}.${kind.ext}`, size: body.length, width, height });
+}
+async function serveMedia(req, res) {
+  const id = String(req.params.file || "").split(".")[0];
+  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+    res.status(404).end();
+    return;
+  }
+  if (req.headers["if-none-match"] === `"${id}"`) {
+    res.status(304).end();
+    return;
+  }
+  const file = await prisma.mediaFile.findUnique({ where: { id }, select: { mime: true, data: true } });
+  if (!file) {
+    res.status(404).end();
+    return;
+  }
+  res.setHeader("Content-Type", file.mime);
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.setHeader("ETag", `"${id}"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.end(Buffer.from(file.data));
+}
+
 // src/routes/adminRoutes.ts
 var router7 = (0, import_express7.Router)();
 router7.use(verifyFirebaseToken);
@@ -2035,6 +2142,7 @@ router7.use((req, res, next) => {
   next();
 });
 router7.get("/metrics", asyncHandler(getDashboardMetrics));
+router7.post("/media", import_express7.default.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }), asyncHandler(uploadMedia));
 router7.get("/orders", asyncHandler(getAllOrders));
 router7.patch("/orders/:id", asyncHandler(updateOrder));
 router7.patch("/orders/:id/status", asyncHandler(updateOrder));
@@ -2275,6 +2383,7 @@ app.use("/api/payments", paymentRoutes_default);
 app.use("/api/wishlist", wishlistRoutes_default);
 app.use("/api/admin", adminRoutes_default);
 app.use("/api", notFoundApi);
+app.get("/media/:file", asyncHandler(serveMedia));
 var currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 var possiblePaths = [
   import_path.default.resolve(process.cwd(), "frontend/dist"),

@@ -117,7 +117,7 @@ export const OrderHistoryPage: React.FC = () => {
                         <div>
                           <p className="font-semibold text-black">{it.productName}</p>
                           <p className="text-[11px] font-mono text-neutral-500">
-                            Size: {it.size} • Qty: {it.quantity}
+                            Size: {it.size}{it.color ? ` • ${it.color}` : ''} • Qty: {it.quantity}
                           </p>
                         </div>
                       </div>

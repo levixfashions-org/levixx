@@ -101,7 +101,7 @@ export async function markOrderPaid(orderId, info) {
             });
             if (dec.count === 0) {
                 await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: 0 } });
-                oversold.push(`${item.productName} (${item.size}) x${item.quantity}`);
+                oversold.push(`${item.productName} (${[item.color, item.size].filter(Boolean).join(' / ')}) x${item.quantity}`);
             }
         }
         if (oversold.length) {
