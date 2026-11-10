@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useHomeStore } from '../store/homeStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -9,10 +9,51 @@ import { GallerySlider, Slide } from '../components/GallerySlider';
 import { StoriesBar } from '../components/StoriesBar';
 import { HomeSection } from '../types';
 
+const useMedia = (query: string) => {
+  const get = () => typeof window !== 'undefined' && window.matchMedia(query).matches;
+  const [match, setMatch] = useState(get);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setMatch(m.matches);
+    on();
+    m.addEventListener?.('change', on);
+    return () => m.removeEventListener?.('change', on);
+  }, [query]);
+  return match;
+};
+
 const Hero: React.FC = () => {
   const s = useSettingsStore((st) => st.settings);
+  const isMobile = useMedia('(max-width: 767px)');
+  const reduceMotion = useMedia('(prefers-reduced-motion: reduce)');
   const desktop = s.heroDesktopImage || '/hero_desktop.jpg';
   const mobile = s.heroMobileImage || (s.heroDesktopImage ? s.heroDesktopImage : '/hero_mobile.jpg');
+  const video = reduceMotion ? '' : isMobile ? s.heroMobileVideo || s.heroDesktopVideo : s.heroDesktopVideo;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [muted, setMuted] = useState(true);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    // iOS only autoplays when the muted attribute is really on the element.
+    v.muted = true;
+    v.setAttribute('muted', '');
+    setMuted(true);
+    setPlaying(false);
+    v.play().catch(() => undefined);
+  }, [video]);
+
+  const toggleSound = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+    if (v.paused) v.play().catch(() => undefined);
+  };
+
   return (
     <section className="relative w-full h-[100svh] min-h-[560px] max-h-[1000px] overflow-hidden bg-neutral-300">
       <Link to={s.heroLink || '/collections/all-products'} aria-label={s.heroCtaText || 'Shop now'} className="absolute inset-0">
@@ -20,11 +61,40 @@ const Hero: React.FC = () => {
           <source media="(max-width: 767px)" srcSet={mobile} />
           <img src={desktop} alt="LEVIX campaign" className="w-full h-full object-cover object-center" loading="eager" fetchPriority="high" />
         </picture>
+        {video && (
+          <video
+            ref={videoRef}
+            key={video}
+            src={video}
+            poster={isMobile ? mobile : desktop}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            onPlaying={() => setPlaying(true)}
+            className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 ${playing ? 'opacity-100' : 'opacity-0'}`}
+          />
+        )}
       </Link>
+      {video && playing && (
+        <button
+          onClick={toggleSound}
+          aria-label={muted ? 'Turn sound on' : 'Turn sound off'}
+          className="absolute right-4 bottom-[7%] md:right-[22px] z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/45 backdrop-blur text-white text-[10.5px] font-medium hover:bg-black/60 transition-colors"
+        >
+          {muted ? (
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="m23 9-6 6M17 9l6 6" /></svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" /></svg>
+          )}
+          {muted ? 'Sound on' : 'Sound off'}
+        </button>
+      )}
       <div className="absolute bottom-[7%] inset-x-0 flex justify-center pointer-events-none">
         <Link
           to={s.heroLink || '/collections/all-products'}
-          className="pointer-events-auto text-[12px] font-medium text-black md:text-white border-b border-current pb-0.5 hover:opacity-70 transition-opacity"
+          className={`pointer-events-auto text-[12px] font-medium border-b border-current pb-0.5 hover:opacity-70 transition-opacity ${video && playing ? 'text-white' : 'text-black md:text-white'}`}
         >
           {s.heroCtaText || 'Shop now'}
         </Link>

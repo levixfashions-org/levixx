@@ -12,6 +12,8 @@ export interface PublicStoreSettings {
   announcementEnabled: boolean;
   heroDesktopImage: string;
   heroMobileImage: string;
+  heroDesktopVideo: string;
+  heroMobileVideo: string;
   heroLink: string;
   heroCtaText: string;
   latestDropTitle: string;
@@ -34,6 +36,8 @@ export const DEFAULT_SETTINGS: PublicStoreSettings = {
   announcementEnabled: false,
   heroDesktopImage: '',
   heroMobileImage: '',
+  heroDesktopVideo: '',
+  heroMobileVideo: '',
   heroLink: '/collections/all-products',
   heroCtaText: 'Shop now',
   latestDropTitle: 'Latest drop',

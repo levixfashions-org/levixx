@@ -5,6 +5,7 @@ import { apiClient, DEFAULT_STORE_SETTINGS, StoreSettings } from '../../services
 import { useSettingsStore } from '../../store/settingsStore';
 import { AdminCategoriesManager } from '../../components/admin/AdminCategoriesManager';
 import { ImageUploader } from '../../components/admin/ImageUploader';
+import { VideoUploader } from '../../components/admin/VideoUploader';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { Sliders, CheckCircle2, RotateCcw, Save, Sparkles, Megaphone, Mail, Phone, Globe, Truck } from 'lucide-react';
 
@@ -314,6 +315,29 @@ export const AdminSettingsPage: React.FC = () => {
                   value={settings.heroMobileImage ? [settings.heroMobileImage] : []}
                   onChange={(urls) => setSettings({ ...settings, heroMobileImage: urls[0] || '' })}
                   hint="Shown on phones. If empty, the desktop photo is used."
+                />
+              </div>
+              <div className="md:col-span-2 border-t border-black/10 pt-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-black">Hero video (optional)</p>
+                <p className="text-[11px] text-neutral-500 mt-0.5">
+                  Add a video and it plays on loop instead of the photo (muted, with a sound button for visitors). The photo above shows while the video loads and for visitors who turn off motion.
+                </p>
+              </div>
+              <div>
+                <VideoUploader
+                  label="Hero video — desktop (landscape 16:9)"
+                  value={settings.heroDesktopVideo}
+                  onChange={(url) => setSettings({ ...settings, heroDesktopVideo: url })}
+                  hint="Best: 1920×1080 MP4, 10–20 seconds, under 15 MB."
+                />
+              </div>
+              <div>
+                <VideoUploader
+                  shape="portrait"
+                  label="Hero video — mobile (portrait 9:16)"
+                  value={settings.heroMobileVideo}
+                  onChange={(url) => setSettings({ ...settings, heroMobileVideo: url })}
+                  hint="Best: 1080×1920 MP4 (a Reel), under 15 MB. If empty, phones show the desktop video."
                 />
               </div>
               <div>

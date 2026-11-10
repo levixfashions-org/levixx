@@ -3,7 +3,7 @@ import { verifyFirebaseToken, requireAdmin } from '../middleware/verifyFirebaseT
 import { asyncHandler as h } from '../middleware/errorHandler.js';
 import * as admin from '../controllers/adminController.js';
 import { invalidateHomeCache } from '../controllers/homeController.js';
-import { uploadMedia } from '../controllers/mediaController.js';
+import { uploadMedia, uploadVideoChunk } from '../controllers/mediaController.js';
 
 const router = Router();
 router.use(verifyFirebaseToken);
@@ -18,6 +18,7 @@ router.get('/metrics', h(admin.getDashboardMetrics));
 
 // Image uploads (raw image body, compressed in the browser first)
 router.post('/media', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '8mb' }), h(uploadMedia));
+router.post('/media/video', express.raw({ type: ['video/*', 'application/octet-stream'], limit: '5mb' }), h(uploadVideoChunk));
 
 router.get('/orders', h(admin.getAllOrders));
 router.patch('/orders/:id', h(admin.updateOrder));

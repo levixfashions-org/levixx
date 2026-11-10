@@ -732,6 +732,8 @@ var DEFAULT_SETTINGS = {
   announcementEnabled: false,
   heroDesktopImage: "",
   heroMobileImage: "",
+  heroDesktopVideo: "",
+  heroMobileVideo: "",
   heroLink: "/collections/all-products",
   heroCtaText: "Shop now",
   latestDropTitle: "Latest drop",
@@ -1869,6 +1871,8 @@ var settingsSchema = import_zod7.z.object({
   announcementEnabled: import_zod7.z.boolean(),
   heroDesktopImage: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
   heroMobileImage: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroDesktopVideo: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroMobileVideo: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
   heroLink: import_zod7.z.string().trim().max(500),
   heroCtaText: import_zod7.z.string().trim().max(60),
   latestDropTitle: import_zod7.z.string().trim().max(100),
@@ -2169,26 +2173,137 @@ async function uploadMedia(req, res) {
   });
   res.status(201).json({ id: file.id, url: `/media/${file.id}.${kind.ext}`, size: body.length, width, height });
 }
+var VIDEO_CHUNK = 4 * 1024 * 1024;
+var MAX_VIDEO_BYTES = 60 * 1024 * 1024;
+function sniffVideo(buf) {
+  if (buf.length < 12) return null;
+  if (buf.subarray(4, 8).toString("ascii") === "ftyp") {
+    const brand = buf.subarray(8, 12).toString("ascii");
+    return brand.startsWith("qt") ? { mime: "video/quicktime", ext: "mov" } : { mime: "video/mp4", ext: "mp4" };
+  }
+  if (buf[0] === 26 && buf[1] === 69 && buf[2] === 223 && buf[3] === 163) return { mime: "video/webm", ext: "webm" };
+  return null;
+}
+var extFor = (mime) => mime === "video/webm" ? "webm" : mime === "video/quicktime" ? "mov" : "mp4";
+async function uploadVideoChunk(req, res) {
+  const body = req.body;
+  const id = String(req.headers["x-upload-id"] || "");
+  const idx = Number(req.headers["x-chunk-index"]);
+  const total = Number(req.headers["x-chunk-total"]);
+  const totalSize = Number(req.headers["x-total-size"]);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new AppError("Invalid upload id", 400);
+  if (!Buffer.isBuffer(body) || body.length === 0) throw new AppError("No video data received", 400);
+  if (!Number.isInteger(idx) || !Number.isInteger(total) || total < 1 || idx < 0 || idx >= total) throw new AppError("Invalid video piece", 400);
+  if (!Number.isFinite(totalSize) || totalSize <= 0 || totalSize > MAX_VIDEO_BYTES) throw new AppError("Video is too large (max 60 MB)", 413);
+  if (total !== Math.ceil(totalSize / VIDEO_CHUNK)) throw new AppError("Video piece count does not match its size", 400);
+  const expected = idx < total - 1 ? VIDEO_CHUNK : totalSize - VIDEO_CHUNK * (total - 1);
+  if (body.length !== expected) throw new AppError("Video piece has the wrong size \u2014 please try the upload again", 400);
+  if (idx === 0) {
+    const kind = sniffVideo(body);
+    if (!kind) throw new AppError("Only MP4, MOV or WEBM videos can be uploaded", 415);
+    const existing = await prisma.mediaFile.findUnique({ where: { id }, select: { complete: true } });
+    if (existing?.complete) throw new AppError("This upload is already finished", 409);
+    const fileName = String(req.headers["x-file-name"] || "").slice(0, 180);
+    await prisma.mediaFile.upsert({
+      where: { id },
+      update: { mime: kind.mime, size: totalSize, chunkCount: total, complete: false },
+      create: {
+        id,
+        mime: kind.mime,
+        size: totalSize,
+        fileName: fileName ? decodeURIComponent(fileName) : null,
+        data: Buffer.alloc(0),
+        chunkCount: total,
+        complete: false
+      }
+    });
+  } else {
+    const file2 = await prisma.mediaFile.findUnique({ where: { id }, select: { complete: true, chunkCount: true, size: true } });
+    if (!file2 || file2.complete || file2.chunkCount !== total || file2.size !== totalSize) throw new AppError("Upload not found \u2014 please start again", 404);
+  }
+  await prisma.mediaChunk.upsert({
+    where: { mediaId_idx: { mediaId: id, idx } },
+    update: { data: body },
+    create: { mediaId: id, idx, data: body }
+  });
+  if (idx < total - 1) {
+    res.json({ ok: true, received: idx + 1, total });
+    return;
+  }
+  const count = await prisma.mediaChunk.count({ where: { mediaId: id } });
+  if (count !== total) throw new AppError("Some video pieces are missing \u2014 please upload again", 400);
+  const file = await prisma.mediaFile.update({ where: { id }, data: { complete: true }, select: { mime: true } });
+  res.status(201).json({ id, url: `/media/${id}.${extFor(file.mime)}`, size: totalSize });
+}
 async function serveMedia(req, res) {
   const id = String(req.params.file || "").split(".")[0];
   if (!/^[0-9a-f-]{36}$/i.test(id)) {
     res.status(404).end();
     return;
   }
-  if (req.headers["if-none-match"] === `"${id}"`) {
+  if (req.headers["if-none-match"] === `"${id}"` && !req.headers.range) {
     res.status(304).end();
     return;
   }
-  const file = await prisma.mediaFile.findUnique({ where: { id }, select: { mime: true, data: true } });
-  if (!file) {
+  const meta = await prisma.mediaFile.findUnique({ where: { id }, select: { mime: true, size: true, chunkCount: true, complete: true } });
+  if (!meta || !meta.complete) {
     res.status(404).end();
     return;
   }
-  res.setHeader("Content-Type", file.mime);
+  res.setHeader("Content-Type", meta.mime);
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   res.setHeader("ETag", `"${id}"`);
   res.setHeader("X-Content-Type-Options", "nosniff");
+  if (meta.chunkCount > 0) {
+    await streamVideo(req, res, id, meta.size, meta.chunkCount);
+    return;
+  }
+  const file = await prisma.mediaFile.findUnique({ where: { id }, select: { data: true } });
   res.end(Buffer.from(file.data));
+}
+async function streamVideo(req, res, id, size, chunkCount) {
+  res.setHeader("Accept-Ranges", "bytes");
+  let start = 0;
+  let end = size - 1;
+  const range = req.headers.range;
+  if (range) {
+    const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    if (!m || m[1] === "" && m[2] === "") {
+      res.status(416).setHeader("Content-Range", `bytes */${size}`).end();
+      return;
+    }
+    if (m[1] === "") {
+      start = Math.max(0, size - Number(m[2]));
+    } else {
+      start = Number(m[1]);
+      if (m[2] !== "") end = Math.min(size - 1, Number(m[2]));
+    }
+    if (start > end || start >= size) {
+      res.status(416).setHeader("Content-Range", `bytes */${size}`).end();
+      return;
+    }
+    if (m[2] === "") end = Math.min(end, start + 2 * VIDEO_CHUNK - 1);
+    res.status(206).setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
+  }
+  res.setHeader("Content-Length", String(end - start + 1));
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  let closed = false;
+  req.on("close", () => closed = true);
+  const first = Math.floor(start / VIDEO_CHUNK);
+  const last = Math.min(chunkCount - 1, Math.floor(end / VIDEO_CHUNK));
+  for (let i = first; i <= last && !closed; i++) {
+    const chunk = await prisma.mediaChunk.findUnique({ where: { mediaId_idx: { mediaId: id, idx: i } }, select: { data: true } });
+    if (!chunk) break;
+    const buf = Buffer.from(chunk.data);
+    const base = i * VIDEO_CHUNK;
+    const from = Math.max(0, start - base);
+    const to = Math.min(buf.length, end - base + 1);
+    if (!res.write(buf.subarray(from, to))) await new Promise((r) => res.once("drain", r));
+  }
+  res.end();
 }
 
 // src/routes/adminRoutes.ts
@@ -2201,6 +2316,7 @@ router7.use((req, res, next) => {
 });
 router7.get("/metrics", asyncHandler(getDashboardMetrics));
 router7.post("/media", import_express7.default.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }), asyncHandler(uploadMedia));
+router7.post("/media/video", import_express7.default.raw({ type: ["video/*", "application/octet-stream"], limit: "5mb" }), asyncHandler(uploadVideoChunk));
 router7.get("/orders", asyncHandler(getAllOrders));
 router7.patch("/orders/:id", asyncHandler(updateOrder));
 router7.patch("/orders/:id/status", asyncHandler(updateOrder));

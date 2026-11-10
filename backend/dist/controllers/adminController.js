@@ -466,6 +466,8 @@ const settingsSchema = z.object({
     announcementEnabled: z.boolean(),
     heroDesktopImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),
     heroMobileImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),
+    heroDesktopVideo: z.string().trim().max(2000).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), 'Hero video must be an uploaded video'),
+    heroMobileVideo: z.string().trim().max(2000).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), 'Hero video must be an uploaded video'),
     heroLink: z.string().trim().max(500),
     heroCtaText: z.string().trim().max(60),
     latestDropTitle: z.string().trim().max(100),

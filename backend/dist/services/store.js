@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = {
     announcementEnabled: false,
     heroDesktopImage: '',
     heroMobileImage: '',
+    heroDesktopVideo: '',
+    heroMobileVideo: '',
     heroLink: '/collections/all-products',
     heroCtaText: 'Shop now',
     latestDropTitle: 'Latest drop',

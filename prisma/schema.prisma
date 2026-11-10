@@ -315,6 +315,8 @@ model StoreSetting {
   announcementEnabled   Boolean  @default(false)
   heroDesktopImage      String?  @db.Text
   heroMobileImage       String?  @db.Text
+  heroDesktopVideo      String?  @db.Text
+  heroMobileVideo       String?  @db.Text
   heroLink              String   @default("/collections/all-products")
   heroCtaText           String   @default("Shop now")
   latestDropTitle       String   @default("Latest drop")
@@ -356,5 +358,16 @@ model MediaFile {
   height    Int?
   fileName  String?
   data      Bytes    @db.LongBlob
+  // Videos are stored in 4 MB pieces (MediaChunk) so big files never hit MySQL's packet limit.
+  chunkCount Int     @default(0)
+  complete   Boolean @default(true)
   createdAt DateTime @default(now())
+}
+
+model MediaChunk {
+  mediaId String
+  idx     Int
+  data    Bytes  @db.LongBlob
+
+  @@id([mediaId, idx])
 }

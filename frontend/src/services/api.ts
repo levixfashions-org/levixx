@@ -42,6 +42,8 @@ export interface StoreSettings {
   announcementEnabled: boolean;
   heroDesktopImage: string;
   heroMobileImage: string;
+  heroDesktopVideo: string;
+  heroMobileVideo: string;
   heroLink: string;
   heroCtaText: string;
   latestDropTitle: string;
@@ -63,6 +65,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   announcementEnabled: false,
   heroDesktopImage: '',
   heroMobileImage: '',
+  heroDesktopVideo: '',
+  heroMobileVideo: '',
   heroLink: '/collections/all-products',
   heroCtaText: 'Shop now',
   latestDropTitle: 'Latest drop',
@@ -193,6 +197,62 @@ export async function uploadImage(blob: Blob, meta: { width?: number; height?: n
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error || `Upload failed (${res.status})`, res.status, data);
   return data.url as string;
+}
+
+const VIDEO_CHUNK = 4 * 1024 * 1024;
+export const MAX_VIDEO_MB = 60;
+
+/** Uploads a video in 4 MB pieces (so big files work on any connection). Returns its /media URL. */
+export async function uploadVideo(file: File, onProgress?: (fraction: number) => void): Promise<string> {
+  if (file.size > MAX_VIDEO_MB * 1024 * 1024) throw new ApiError(`Video is too large — please keep it under ${MAX_VIDEO_MB} MB.`, 413);
+  const id =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+  const total = Math.max(1, Math.ceil(file.size / VIDEO_CHUNK));
+  let url = '';
+  for (let i = 0; i < total; i++) {
+    const piece = file.slice(i * VIDEO_CHUNK, Math.min(file.size, (i + 1) * VIDEO_CHUNK));
+    let attempt = 0;
+    for (;;) {
+      const token = await authService.getToken();
+      if (!token) throw new ApiError('Please sign in again to upload videos.', 401);
+      let res: Response | null = null;
+      try {
+        res = await fetch(`${BASE_URL}/admin/media/video`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            Authorization: `Bearer ${token}`,
+            'X-Upload-Id': id,
+            'X-Chunk-Index': String(i),
+            'X-Chunk-Total': String(total),
+            'X-Total-Size': String(file.size),
+            'X-File-Name': encodeURIComponent(file.name.slice(0, 150))
+          },
+          body: piece
+        });
+      } catch {
+        res = null;
+      }
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.url) url = data.url;
+        break;
+      }
+      const data = res ? await res.json().catch(() => ({})) : {};
+      // Retry network hiccups and server errors a couple of times; stop on clear client errors.
+      if (res && res.status < 500 && res.status !== 429) throw new ApiError(data.error || `Upload failed (${res.status})`, res.status, data);
+      if (++attempt >= 3) throw new ApiError(data.error || 'Network error while uploading the video. Check your connection and try again.', res?.status || 0);
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+    onProgress?.((i + 1) / total);
+  }
+  if (!url) throw new ApiError('Upload did not finish — please try again.', 500);
+  return url;
 }
 
 export const formatINR = (paise: number) => `RS. ${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;
