@@ -45,10 +45,10 @@ bg.save(os.path.expanduser('~/mnt/levix Final pro/product-photos/hero-desktop.jp
 
 # Mobile 1080x1920 (light)
 W,H=1080,1920; bg=grad(W,H,(240,238,234),(214,210,203)); d=ImageDraw.Draw(bg)
-ctext(d,W/2,110,'LEVIX',bold(220),(17,17,17),spacing=24)
-ctext(d,W/2,370,'NEW DROPS LIVE',med(34),(90,90,90),spacing=10)
+ctext(d,W/2,230,'LEVIX',bold(190),(17,17,17),spacing=24)
+ctext(d,W/2,455,'NEW DROPS LIVE',med(34),(90,90,90),spacing=10)
 mp=['08-overlength-hare-krishna-navy-2nd-drop/4.jpg','02-acid-lone-wolf-red/1.jpg','09-overlength-levix-peacock-white/2.jpg','12-overlength-doom-black/1.jpg']
-pw,gap=474,36; x0=(W-(2*pw+gap))//2; ph=600
-for i,p in enumerate(mp): paste(bg,p,x0+(i%2)*(pw+gap),460+(i//2)*(ph+gap)+(0 if i%2==0 else 40),pw,ph,r=30)
+pw,gap=474,36; x0=(W-(2*pw+gap))//2; ph=560
+for i,p in enumerate(mp): paste(bg,p,x0+(i%2)*(pw+gap),540+(i//2)*(ph+gap)+(0 if i%2==0 else 40),pw,ph,r=30)
 bg.save(os.path.expanduser('~/mnt/levix Final pro/product-photos/hero-mobile.jpg'),quality=88,optimize=True,progressive=True)
 print('ok')
