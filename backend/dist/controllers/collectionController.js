@@ -1,6 +1,6 @@
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { productListInclude, serializeProduct } from '../utils/serialize.js';
+import { productListInclude, serializeProduct, genderFilter } from '../utils/serialize.js';
 function orderByFor(sort) {
     switch (sort) {
         case 'price-asc':
@@ -55,6 +55,8 @@ export async function getCollections(_req, res) {
 export async function getCollectionBySlug(req, res) {
     const { slug } = req.params;
     const sort = String(req.query.sort || 'featured');
+    const g = genderFilter(req.query.gender);
+    const matchesGender = (p) => !g || g.gender.in.includes(p.gender || 'UNISEX');
     const collection = await prisma.collection.findUnique({
         where: { slug },
         include: {
@@ -65,7 +67,7 @@ export async function getCollectionBySlug(req, res) {
         }
     });
     if (collection && collection.isActive) {
-        let products = collection.products.map((cp) => cp.product).filter((p) => p.isActive);
+        let products = collection.products.map((cp) => cp.product).filter((p) => p.isActive && matchesGender(p));
         if (sort === 'price-asc')
             products = products.sort((a, b) => a.basePrice - b.basePrice);
         else if (sort === 'price-desc')
@@ -87,10 +89,25 @@ export async function getCollectionBySlug(req, res) {
         return;
     }
     const category = await prisma.category.findUnique({ where: { slug } });
+    if (!category && (slug === 'men' || slug === 'women')) {
+        // Department pages: /collections/men and /collections/women
+        const dept = genderFilter(slug);
+        const products = await prisma.product.findMany({
+            where: { isActive: true, ...dept },
+            orderBy: orderByFor(sort),
+            take: 300,
+            include: productListInclude
+        });
+        res.json({
+            collection: { id: slug, type: 'department', name: slug === 'men' ? 'Men' : 'Women', slug, description: null, bannerImageUrl: null },
+            products: products.map(serializeProduct)
+        });
+        return;
+    }
     if (!category)
         throw new AppError('Collection not found', 404);
     const products = await prisma.product.findMany({
-        where: { isActive: true, categoryId: category.id },
+        where: { isActive: true, categoryId: category.id, ...(g || {}) },
         orderBy: orderByFor(sort),
         take: 200,
         include: productListInclude

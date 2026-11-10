@@ -115,6 +115,7 @@ model Product {
   isFeatured   Boolean             @default(false)
   isActive     Boolean             @default(true)
   colorGroup   String?             // e.g. BLACKS, BLUES — powers "Shop by colour"
+  gender       String              @default("UNISEX") @db.VarChar(10) // MEN | WOMEN | UNISEX
   categoryId   String?
   category     Category?           @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   images       ProductImage[]
@@ -128,6 +129,7 @@ model Product {
 
   @@index([slug])
   @@index([categoryId])
+  @@index([gender])
 }
 
 model CollectionProduct {

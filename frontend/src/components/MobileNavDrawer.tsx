@@ -63,6 +63,13 @@ export const MobileNavDrawer: React.FC = () => {
       </div>
 
       <div className="px-5 pt-8 pb-10">
+        <div className="grid grid-cols-2 gap-2 mb-6">
+          {(['men', 'women'] as const).map((k) => (
+            <Link key={k} to={`/collections/${k}`} className="py-3 rounded-full bg-black text-white text-center text-[13px] font-semibold uppercase tracking-wide">
+              {k === 'men' ? 'Men' : 'Women'}
+            </Link>
+          ))}
+        </div>
         <nav className="space-y-2.5">
           <Link to="/collections/all-products" className="block text-[15px] font-semibold">All Products</Link>
           <Link to="/collections/new-in" className="block text-[15px] font-semibold">New Arrivals</Link>
@@ -72,6 +79,13 @@ export const MobileNavDrawer: React.FC = () => {
         </nav>
 
         <div className="mt-10">
+          {(data?.menu.departments || []).filter((d) => d.count > 0).map((d) => (
+            <Accordion key={d.key} title={d.name}>
+              <MChip to={`/collections/${d.key}`}>All {d.name.toLowerCase()}</MChip>
+              {d.categories.map((c) => <MChip key={c.id} to={`/collections/${c.slug}?gender=${d.key}`}>{c.name}</MChip>)}
+              {d.collections.map((c) => <MChip key={c.id} to={`/collections/${c.slug}?gender=${d.key}`}>{c.name}</MChip>)}
+            </Accordion>
+          ))}
           {groups.map((g) => {
             const items = cats.filter((c) => (c.group || 'TOP') === g.key);
             if (!items.length) return null;

@@ -15,7 +15,7 @@ export async function getHome(_req, res) {
         res.json(cache.body);
         return;
     }
-    const [settings, latest, collections, categories, colors] = await Promise.all([
+    const [settings, latest, collections, categories, colors, genderRows] = await Promise.all([
         getSettings(),
         prisma.product.findMany({
             where: { isActive: true },
@@ -43,8 +43,43 @@ export async function getHome(_req, res) {
             where: { isActive: true, colorGroup: { not: null } },
             distinct: ['colorGroup'],
             select: { colorGroup: true }
+        }),
+        prisma.product.findMany({
+            where: { isActive: true },
+            select: {
+                gender: true,
+                categoryId: true,
+                collections: { select: { collectionId: true } },
+                images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } }
+            },
+            orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+            take: 2000
         })
     ]);
+    // Men / Women departments: which categories & collections have products for each.
+    const departments = ['men', 'women'].map((key) => {
+        const want = key === 'men' ? 'MEN' : 'WOMEN';
+        const rows = genderRows.filter((r) => r.gender === want || r.gender === 'UNISEX');
+        const catCount = new Map();
+        const colIds = new Set();
+        rows.forEach((r) => {
+            if (r.categoryId)
+                catCount.set(r.categoryId, (catCount.get(r.categoryId) || 0) + 1);
+            r.collections.forEach((c) => colIds.add(c.collectionId));
+        });
+        return {
+            key,
+            name: key === 'men' ? 'Men' : 'Women',
+            count: rows.length,
+            coverImage: rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+            categories: categories
+                .filter((c) => catCount.has(c.id))
+                .map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || 'TOP', count: catCount.get(c.id) || 0 })),
+            collections: collections
+                .filter((c) => c.showInMenu && colIds.has(c.id))
+                .map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
+        };
+    });
     const toSection = (c) => ({
         id: c.id,
         name: c.name,
@@ -76,7 +111,8 @@ export async function getHome(_req, res) {
                 imageUrl: c.imageUrl,
                 count: c._count.products
             })),
-            colors: colors.map((c) => c.colorGroup).filter(Boolean)
+            colors: colors.map((c) => c.colorGroup).filter(Boolean),
+            departments
         }
     };
     cache = { body, expires: Date.now() + 20 * 1000 };

@@ -192,6 +192,7 @@ const productSchema = z.object({
     isFeatured: z.boolean().default(false),
     isActive: z.boolean().default(true),
     colorGroup: z.string().trim().max(30).optional().nullable().transform((v) => (v ? v.toUpperCase() : null)),
+    gender: z.enum(['MEN', 'WOMEN', 'UNISEX']).default('UNISEX'),
     collectionIds: z.array(z.string().max(64)).max(50).optional(),
     images: z.array(imageSchema).min(1, 'Add at least one product image').max(60),
     variants: z.array(variantSchema).min(1, 'Add at least one size').max(200)
@@ -297,6 +298,7 @@ export async function createProduct(req, res) {
             isFeatured: data.isFeatured,
             isActive: data.isActive,
             colorGroup: data.colorGroup || null,
+            gender: data.gender,
             categoryId,
             images: { create: normaliseImages(data.images) },
             variants: {
@@ -345,7 +347,8 @@ export async function updateProduct(req, res) {
                 categoryId,
                 ...(data.isFeatured !== undefined ? { isFeatured: data.isFeatured } : {}),
                 ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-                ...(data.colorGroup !== undefined ? { colorGroup: data.colorGroup || null } : {})
+                ...(data.colorGroup !== undefined ? { colorGroup: data.colorGroup || null } : {}),
+                ...(req.body.gender !== undefined && data.gender ? { gender: data.gender } : {})
             }
         });
         if (data.images) {

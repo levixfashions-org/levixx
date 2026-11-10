@@ -30,6 +30,7 @@ export const MegaMenu: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const collections = data?.menu.collections || [];
   const categories = data?.menu.categories || [];
   const colors = data?.menu.colors || [];
+  const departments = (data?.menu.departments || []).filter((d) => d.count > 0);
 
   return (
     <div className="lx-drop-in absolute left-0 right-0 top-16 bg-white rounded-b-[22px] shadow-[0_20px_40px_rgba(0,0,0,0.08)] px-[22px] pt-4 pb-8">
@@ -44,7 +45,22 @@ export const MegaMenu: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           ))}
         </div>
 
-        {GROUPS.map((g) => {
+        {departments.map((d) => (
+          <div key={d.key} className="col-span-2">
+            <Link to={`/collections/${d.key}`} onClick={onClose} className="block text-[11px] font-semibold mb-2.5 hover:opacity-60">{d.name}</Link>
+            <div className="flex flex-wrap gap-1.5">
+              <Chip to={`/collections/${d.key}`} onClick={onClose}>All {d.name.toLowerCase()}</Chip>
+              {d.categories.map((c) => (
+                <Chip key={c.id} to={`/collections/${c.slug}?gender=${d.key}`} onClick={onClose}>{c.name}</Chip>
+              ))}
+              {d.collections.map((c) => (
+                <Chip key={c.id} to={`/collections/${c.slug}?gender=${d.key}`} onClick={onClose}>{c.name}</Chip>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {departments.length < 2 && GROUPS.map((g) => {
           const items = categories.filter((c) => (c.group || 'TOP') === g.key);
           if (!items.length) return null;
           return (

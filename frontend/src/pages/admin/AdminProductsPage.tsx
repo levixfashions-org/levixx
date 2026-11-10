@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, Eye, EyeOff, Star, Palette } from 'lucide-react';
 import { apiClient, COLOR_GROUPS, COLOR_SWATCHES } from '../../services/api';
-import { Category, Product } from '../../types';
+import { Category, Gender, Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { ImageUploader } from '../../components/admin/ImageUploader';
 
@@ -31,6 +31,14 @@ interface ColourRow {
   images: string[];
   stock: Record<string, string>;
 }
+
+const GENDERS: { value: Gender; label: string; hint: string }[] = [
+  { value: 'MEN', label: 'Men', hint: 'Shows in the Men section' },
+  { value: 'WOMEN', label: 'Women', hint: 'Shows in the Women section' },
+  { value: 'UNISEX', label: 'Unisex', hint: 'Shows in both Men & Women' }
+];
+const genderLabel = (g?: string | null) => (g === 'MEN' ? 'Men' : g === 'WOMEN' ? 'Women' : 'Unisex');
+const asGender = (v: string | null): Gender | null => (v === 'MEN' || v === 'WOMEN' || v === 'UNISEX' ? v : null);
 
 const newKey = () => Math.random().toString(36).slice(2);
 const blankColour = (sizes: string[], name = '', hex = '#111111'): ColourRow => ({
@@ -87,6 +95,8 @@ export const AdminProductsPage: React.FC = () => {
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [genderFilter, setGenderFilter] = useState<'ALL' | Gender>(asGender((params.get('gender') || '').toUpperCase()) || 'ALL');
+  const [gender, setGender] = useState<Gender>('UNISEX');
   const [collectionFilter, setCollectionFilter] = useState(params.get('collection') || 'ALL');
   const [legacyProducts, setLegacyProducts] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -146,6 +156,8 @@ export const AdminProductsPage: React.FC = () => {
         resetForm(cats);
         const col = params.get('collection');
         if (col) setCollectionIds([col]);
+        const g = asGender((params.get('gender') || '').toUpperCase());
+        if (g) setGender(g);
         setShowModal(true);
         const next = new URLSearchParams(params);
         next.delete('new');
@@ -228,6 +240,7 @@ export const AdminProductsPage: React.FC = () => {
     setIsFeatured(false);
     setIsActive(true);
     setColorGroup('');
+    setGender(genderFilter !== 'ALL' ? genderFilter : 'UNISEX');
     setCollectionIds(collectionFilter !== 'ALL' ? [collectionFilter] : []);
     setFormError(null);
   };
@@ -252,6 +265,7 @@ export const AdminProductsPage: React.FC = () => {
     setIsFeatured(Boolean(p.isFeatured));
     setIsActive(asCopy ? true : p.isActive);
     setColorGroup(p.colorGroup || '');
+    setGender(asGender(p.gender || null) || 'UNISEX');
     setCollectionIds(p.collectionIds || []);
     setFormError(null);
     setShowModal(true);
@@ -327,6 +341,7 @@ export const AdminProductsPage: React.FC = () => {
       isFeatured,
       isActive,
       colorGroup: colorGroup || null,
+      gender,
       collectionIds,
       images,
       variants
@@ -383,9 +398,11 @@ export const AdminProductsPage: React.FC = () => {
       const matchesQ = !q || p.name.toLowerCase().includes(q) || p.slug.includes(q);
       const matchesCat = categoryFilter === 'ALL' || p.category?.id === categoryFilter;
       const matchesCol = collectionFilter === 'ALL' || (p.collectionIds || []).includes(collectionFilter);
-      return matchesQ && matchesCat && matchesCol;
+      const matchesGender = genderFilter === 'ALL' || (p.gender || 'UNISEX') === genderFilter;
+      return matchesQ && matchesCat && matchesCol && matchesGender;
     });
-  }, [products, searchTerm, categoryFilter, collectionFilter]);
+  }, [products, searchTerm, categoryFilter, collectionFilter, genderFilter]);
+  const genderCount = (g: Gender) => products.filter((p) => (p.gender || 'UNISEX') === g).length;
 
   const colourNamesOf = (p: Product) => [...new Set(p.variants.map((v) => v.color).filter(Boolean))] as string[];
 
@@ -428,6 +445,18 @@ export const AdminProductsPage: React.FC = () => {
             <button onClick={() => loadAll()} className="underline">Retry</button>
           </div>
         )}
+
+        <div className="flex flex-wrap gap-1.5">
+          {(['ALL', 'MEN', 'WOMEN', 'UNISEX'] as const).map((g) => (
+            <button
+              key={g}
+              onClick={() => setGenderFilter(g)}
+              className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider border ${genderFilter === g ? 'bg-black text-white border-black' : 'bg-white border-black/15 hover:border-black'}`}
+            >
+              {g === 'ALL' ? `All (${products.length})` : `${genderLabel(g)} (${genderCount(g)})`}
+            </button>
+          ))}
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -491,6 +520,7 @@ export const AdminProductsPage: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-neutral-700">
+                        <span className={`inline-block mb-1 px-2 py-0.5 text-[9.5px] font-bold uppercase ${p.gender === 'MEN' ? 'bg-blue-100 text-blue-800' : p.gender === 'WOMEN' ? 'bg-pink-100 text-pink-800' : 'bg-neutral-200 text-neutral-700'}`}>{genderLabel(p.gender)}</span>
                         <p>{p.category?.name || '—'}</p>
                         {colNames.length > 0 && <p className="text-[10px] text-neutral-500 mt-0.5">{colNames.join(', ')}</p>}
                       </td>
@@ -566,6 +596,22 @@ export const AdminProductsPage: React.FC = () => {
               {/* 2. Where it appears */}
               <section className="space-y-4">
                 <p className={sectionTitle}>2. Where it appears</p>
+                <div>
+                  <label className={labelClass}>Who is it for?</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {GENDERS.map((g) => (
+                      <button
+                        key={g.value}
+                        type="button"
+                        onClick={() => setGender(g.value)}
+                        className={`py-3 px-2 border text-center transition-colors ${gender === g.value ? 'border-black bg-black text-white' : 'border-black/15 bg-white hover:border-black'}`}
+                      >
+                        <span className="block text-sm font-bold uppercase tracking-wider">{g.label}</span>
+                        <span className={`block text-[10px] mt-0.5 ${gender === g.value ? 'text-white/70' : 'text-neutral-500'}`}>{g.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Product type</label>

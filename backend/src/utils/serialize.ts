@@ -23,6 +23,14 @@ export function sortVariants<T extends { size: string; color?: string | null; cr
   );
 }
 
+/** 'men' -> MEN + UNISEX products, 'women' -> WOMEN + UNISEX. Anything else -> no filter. */
+export function genderFilter(value?: unknown): { gender: { in: string[] } } | null {
+  const v = String(value || '').toLowerCase();
+  if (v === 'men') return { gender: { in: ['MEN', 'UNISEX'] } };
+  if (v === 'women') return { gender: { in: ['WOMEN', 'UNISEX'] } };
+  return null;
+}
+
 export function serializeProduct(p: any) {
   if (!p) return p;
   return {

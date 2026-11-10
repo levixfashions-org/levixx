@@ -215,8 +215,11 @@ export const AdminCollectionsPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Link to={`/admin/products?new=1&collection=${c.id}`} className="px-3 py-2 bg-black text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" title="Add a new product to this collection">
-                    <Plus className="w-3.5 h-3.5" /> Add product
+                  <Link to={`/admin/products?new=1&collection=${c.id}&gender=MEN`} className="px-3 py-2 bg-black text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" title="Add a men's product to this collection">
+                    <Plus className="w-3.5 h-3.5" /> Men
+                  </Link>
+                  <Link to={`/admin/products?new=1&collection=${c.id}&gender=WOMEN`} className="px-3 py-2 bg-black text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1" title="Add a women's product to this collection">
+                    <Plus className="w-3.5 h-3.5" /> Women
                   </Link>
                   <Link to={`/admin/products?collection=${c.id}`} className="px-3 py-2 border border-black/20 text-[10px] font-bold uppercase tracking-wider hover:bg-neutral-100" title="See products in this collection">
                     View products

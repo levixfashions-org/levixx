@@ -31,6 +31,11 @@ export const CollectionDetailPage: React.FC = () => {
   const inStock = params.get('instock') === '1';
   const minPrice = Number(params.get('min') || 0);
   const maxPrice = Number(params.get('max') || 0);
+  const isDept = handle === 'men' || handle === 'women';
+  const genderParam = params.get('gender');
+  const gender = isDept ? handle : genderParam === 'men' || genderParam === 'women' ? genderParam : null;
+  const deptName = gender === 'men' ? 'Men' : gender === 'women' ? 'Women' : '';
+  const withGender = (path: string) => (gender && !isDept ? `${path}?gender=${gender}` : path);
 
   useEffect(() => {
     fetchHome();
@@ -43,15 +48,16 @@ export const CollectionDetailPage: React.FC = () => {
       setNotFound(false);
       try {
         if (handle === 'all-products' || handle === 'new-in') {
-          const res = await apiClient.get('/products', { sort, limit: 100 });
+          const res = await apiClient.get('/products', { sort, limit: 100, ...(gender ? { gender } : {}) });
           if (cancelled) return;
-          setTitle(handle === 'new-in' ? 'New Arrivals' : 'All Products');
+          setTitle(`${deptName ? `${deptName} · ` : ''}${handle === 'new-in' ? 'New Arrivals' : 'All Products'}`);
           setDescription(null);
           setProducts(res.data.products || []);
         } else {
-          const res = await apiClient.get(`/collections/${handle}`, { sort });
+          const res = await apiClient.get(`/collections/${handle}`, { sort, ...(gender && !isDept ? { gender } : {}) });
           if (cancelled) return;
-          setTitle(res.data.collection?.name || '');
+          const name = res.data.collection?.name || '';
+          setTitle(gender && !isDept ? `${deptName} · ${name}` : name);
           setDescription(res.data.collection?.description || null);
           setProducts(res.data.products || []);
         }
@@ -68,7 +74,7 @@ export const CollectionDetailPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [handle, sort]);
+  }, [handle, sort, gender]);
 
   useEffect(() => {
     if (title) document.title = `${title} | LEVIX`;
@@ -104,7 +110,14 @@ export const CollectionDetailPage: React.FC = () => {
     update(key, (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]).join(',') || null);
   const activeCount = sizes.length + colors.length + (inStock ? 1 : 0) + (minPrice ? 1 : 0) + (maxPrice ? 1 : 0);
 
-  const chips = home?.menu.categories || [];
+  const dept = gender ? (home?.menu.departments || []).find((d) => d.key === gender) : null;
+  const chips = dept ? dept.categories : home?.menu.categories || [];
+  const setGender = (g: 'men' | 'women' | null) => {
+    const next = new URLSearchParams(params);
+    if (g) next.set('gender', g);
+    else next.delete('gender');
+    setParams(next, { replace: true });
+  };
 
   return (
     <div className="pb-10">
@@ -117,19 +130,36 @@ export const CollectionDetailPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Men / Women switch */}
+          <div className="flex gap-1.5 mt-3">
+            {isDept ? (
+              (['men', 'women'] as const).map((k) => (
+                <Link key={k} to={`/collections/${k}`} className={`px-5 py-1.5 rounded-full text-[10.5px] font-semibold border ${handle === k ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}>
+                  {k === 'men' ? 'Men' : 'Women'}
+                </Link>
+              ))
+            ) : (
+              ([null, 'men', 'women'] as const).map((k) => (
+                <button key={k || 'all'} onClick={() => setGender(k)} className={`px-5 py-1.5 rounded-full text-[10.5px] font-semibold border ${gender === k ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}>
+                  {k === 'men' ? 'Men' : k === 'women' ? 'Women' : 'Everyone'}
+                </button>
+              ))
+            )}
+          </div>
+
           {/* Category chips + filters (sticky) */}
           <div className="sticky top-[60px] md:top-16 z-30 -mx-3 md:-mx-[22px] px-3 md:px-[22px] py-3 bg-[#EFEFEF]/95 backdrop-blur flex items-center gap-3">
             <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
               <Link
-                to="/collections/all-products"
-                className={`shrink-0 px-5 py-1.5 rounded-full text-[10.5px] border ${handle === 'all-products' ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}
+                to={isDept ? `/collections/${handle}` : withGender('/collections/all-products')}
+                className={`shrink-0 px-5 py-1.5 rounded-full text-[10.5px] border ${handle === 'all-products' || isDept ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}
               >
                 View all
               </Link>
               {chips.map((c) => (
                 <Link
                   key={c.id}
-                  to={`/collections/${c.slug}`}
+                  to={gender ? `/collections/${c.slug}?gender=${gender}` : `/collections/${c.slug}`}
                   className={`shrink-0 px-4 py-1.5 rounded-full text-[10.5px] border ${handle === c.slug ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}
                 >
                   {c.name}

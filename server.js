@@ -427,6 +427,12 @@ function sortVariants(variants = []) {
     (a, b) => (colorOrder.get((a.color || "").toLowerCase()) ?? 0) - (colorOrder.get((b.color || "").toLowerCase()) ?? 0) || sizeRank(a.size) - sizeRank(b.size)
   );
 }
+function genderFilter(value) {
+  const v = String(value || "").toLowerCase();
+  if (v === "men") return { gender: { in: ["MEN", "UNISEX"] } };
+  if (v === "women") return { gender: { in: ["WOMEN", "UNISEX"] } };
+  return null;
+}
 function serializeProduct(p) {
   if (!p) return p;
   return {
@@ -468,13 +474,15 @@ function buildOrderBy(sort) {
   }
 }
 async function getProducts(req, res) {
-  const { category, collection, search, sort, featured } = req.query;
+  const { category, collection, search, sort, featured, gender } = req.query;
   const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
   const take = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "24"), 10) || 24));
   const skip = (page - 1) * take;
   const where = { isActive: true };
   const catSlug = category || collection;
-  if (catSlug && !["all", "all-products", "new-in"].includes(catSlug)) {
+  const g = genderFilter(gender || (catSlug === "men" || catSlug === "women" ? catSlug : ""));
+  if (g) Object.assign(where, g);
+  if (catSlug && !["all", "all-products", "new-in", "men", "women"].includes(catSlug)) {
     where.OR = [
       { category: { slug: catSlug } },
       { collections: { some: { collection: { slug: catSlug, isActive: true } } } }
@@ -537,7 +545,8 @@ async function getProductBySlug(req, res) {
     where: {
       id: { not: product.id },
       isActive: true,
-      ...product.categoryId ? { categoryId: product.categoryId } : {}
+      ...product.categoryId ? { categoryId: product.categoryId } : {},
+      ...product.gender === "MEN" ? genderFilter("men") : product.gender === "WOMEN" ? genderFilter("women") : {}
     },
     orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
     take: 4,
@@ -632,6 +641,8 @@ async function getCollections(_req, res) {
 async function getCollectionBySlug(req, res) {
   const { slug } = req.params;
   const sort = String(req.query.sort || "featured");
+  const g = genderFilter(req.query.gender);
+  const matchesGender = (p) => !g || g.gender.in.includes(p.gender || "UNISEX");
   const collection = await prisma.collection.findUnique({
     where: { slug },
     include: {
@@ -642,7 +653,7 @@ async function getCollectionBySlug(req, res) {
     }
   });
   if (collection && collection.isActive) {
-    let products2 = collection.products.map((cp) => cp.product).filter((p) => p.isActive);
+    let products2 = collection.products.map((cp) => cp.product).filter((p) => p.isActive && matchesGender(p));
     if (sort === "price-asc") products2 = products2.sort((a, b) => a.basePrice - b.basePrice);
     else if (sort === "price-desc") products2 = products2.sort((a, b) => b.basePrice - a.basePrice);
     else if (sort === "newest") products2 = products2.sort((a, b) => +b.createdAt - +a.createdAt);
@@ -661,9 +672,23 @@ async function getCollectionBySlug(req, res) {
     return;
   }
   const category = await prisma.category.findUnique({ where: { slug } });
+  if (!category && (slug === "men" || slug === "women")) {
+    const dept = genderFilter(slug);
+    const products2 = await prisma.product.findMany({
+      where: { isActive: true, ...dept },
+      orderBy: orderByFor(sort),
+      take: 300,
+      include: productListInclude
+    });
+    res.json({
+      collection: { id: slug, type: "department", name: slug === "men" ? "Men" : "Women", slug, description: null, bannerImageUrl: null },
+      products: products2.map(serializeProduct)
+    });
+    return;
+  }
   if (!category) throw new AppError("Collection not found", 404);
   const products = await prisma.product.findMany({
-    where: { isActive: true, categoryId: category.id },
+    where: { isActive: true, categoryId: category.id, ...g || {} },
     orderBy: orderByFor(sort),
     take: 200,
     include: productListInclude
@@ -1591,6 +1616,7 @@ var productSchema = import_zod7.z.object({
   isFeatured: import_zod7.z.boolean().default(false),
   isActive: import_zod7.z.boolean().default(true),
   colorGroup: import_zod7.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
+  gender: import_zod7.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
   collectionIds: import_zod7.z.array(import_zod7.z.string().max(64)).max(50).optional(),
   images: import_zod7.z.array(imageSchema).min(1, "Add at least one product image").max(60),
   variants: import_zod7.z.array(variantSchema).min(1, "Add at least one size").max(200)
@@ -1692,6 +1718,7 @@ async function createProduct(req, res) {
       isFeatured: data2.isFeatured,
       isActive: data2.isActive,
       colorGroup: data2.colorGroup || null,
+      gender: data2.gender,
       categoryId,
       images: { create: normaliseImages(data2.images) },
       variants: {
@@ -1736,7 +1763,8 @@ async function updateProduct(req, res) {
           categoryId,
           ...data2.isFeatured !== void 0 ? { isFeatured: data2.isFeatured } : {},
           ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
-          ...data2.colorGroup !== void 0 ? { colorGroup: data2.colorGroup || null } : {}
+          ...data2.colorGroup !== void 0 ? { colorGroup: data2.colorGroup || null } : {},
+          ...req.body.gender !== void 0 && data2.gender ? { gender: data2.gender } : {}
         }
       });
       if (data2.images) {
@@ -2022,7 +2050,7 @@ async function getHome(_req, res) {
     res.json(cache2.body);
     return;
   }
-  const [settings, latest, collections, categories, colors] = await Promise.all([
+  const [settings, latest, collections, categories, colors, genderRows] = await Promise.all([
     getSettings(),
     prisma.product.findMany({
       where: { isActive: true },
@@ -2050,8 +2078,37 @@ async function getHome(_req, res) {
       where: { isActive: true, colorGroup: { not: null } },
       distinct: ["colorGroup"],
       select: { colorGroup: true }
+    }),
+    prisma.product.findMany({
+      where: { isActive: true },
+      select: {
+        gender: true,
+        categoryId: true,
+        collections: { select: { collectionId: true } },
+        images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } }
+      },
+      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+      take: 2e3
     })
   ]);
+  const departments = ["men", "women"].map((key) => {
+    const want = key === "men" ? "MEN" : "WOMEN";
+    const rows = genderRows.filter((r) => r.gender === want || r.gender === "UNISEX");
+    const catCount = /* @__PURE__ */ new Map();
+    const colIds = /* @__PURE__ */ new Set();
+    rows.forEach((r) => {
+      if (r.categoryId) catCount.set(r.categoryId, (catCount.get(r.categoryId) || 0) + 1);
+      r.collections.forEach((c) => colIds.add(c.collectionId));
+    });
+    return {
+      key,
+      name: key === "men" ? "Men" : "Women",
+      count: rows.length,
+      coverImage: rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+      categories: categories.filter((c) => catCount.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || "TOP", count: catCount.get(c.id) || 0 })),
+      collections: collections.filter((c) => c.showInMenu && colIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
+    };
+  });
   const toSection = (c) => ({
     id: c.id,
     name: c.name,
@@ -2077,7 +2134,8 @@ async function getHome(_req, res) {
         imageUrl: c.imageUrl,
         count: c._count.products
       })),
-      colors: colors.map((c) => c.colorGroup).filter(Boolean)
+      colors: colors.map((c) => c.colorGroup).filter(Boolean),
+      departments
     }
   };
   cache2 = { body, expires: Date.now() + 20 * 1e3 };

@@ -54,6 +54,7 @@ export interface Product {
   isFeatured: boolean;
   isActive: boolean;
   colorGroup?: string | null;
+  gender?: Gender;
   collectionIds?: string[];
   createdAt?: string;
   category?: Category | null;
@@ -160,6 +161,17 @@ export interface HomeSection {
   products: Product[];
 }
 
+export type Gender = 'MEN' | 'WOMEN' | 'UNISEX';
+
+export interface Department {
+  key: 'men' | 'women';
+  name: string;
+  count: number;
+  coverImage?: string | null;
+  categories: { id: string; name: string; slug: string; group: string; count: number }[];
+  collections: { id: string; name: string; slug: string }[];
+}
+
 export interface MenuCategory {
   id: string;
   name: string;
@@ -177,5 +189,6 @@ export interface HomeData {
     collections: { id: string; name: string; slug: string; bannerImageUrl?: string | null }[];
     categories: MenuCategory[];
     colors: string[];
+    departments?: Department[];
   };
 }

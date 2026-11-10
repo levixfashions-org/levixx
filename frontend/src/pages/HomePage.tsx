@@ -74,8 +74,10 @@ export const HomePage: React.FC = () => {
           .map((c) => ({ id: c.id, name: c.name, href: `/collections/${c.slug}`, image: c.imageUrl! }))
     : [];
 
+  const departments = (data?.menu.departments || []).filter((d) => d.count > 0);
   const stories = data
     ? [
+        ...departments.map((d) => ({ id: `dept-${d.key}`, name: d.name, href: `/collections/${d.key}`, image: d.coverImage })),
         ...data.menu.collections.map((c) => ({ id: c.id, name: c.name, href: `/collections/${c.slug}`, image: c.bannerImageUrl })),
         ...data.menu.categories.map((c) => ({ id: c.id, name: c.name, href: `/collections/${c.slug}`, image: c.imageUrl }))
       ].slice(0, 10)
@@ -120,6 +122,30 @@ export const HomePage: React.FC = () => {
               href="/collections/new-in"
               variant="plain"
             />
+            {departments.length > 0 && (
+              <section className="px-2 md:px-[10px]">
+                <div className="flex items-center justify-between px-1 pb-2.5">
+                  <h2 className="lx-title">Shop by department</h2>
+                </div>
+                <div className={`grid gap-[6px] ${departments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                  {departments.map((d) => (
+                    <Link key={d.key} to={`/collections/${d.key}`} className="group relative block aspect-[4/5] md:aspect-[16/11] rounded-[12px] overflow-hidden bg-[#DADADA]">
+                      {d.coverImage && (
+                        <img src={d.coverImage} alt={d.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+                      <div className="absolute left-3 right-3 bottom-3 md:left-5 md:bottom-5 flex items-end justify-between text-white">
+                        <div>
+                          <p className="text-[22px] md:text-[34px] font-black uppercase leading-none tracking-tight">{d.name}</p>
+                          <p className="text-[10.5px] mt-1 opacity-90">{d.count} {d.count === 1 ? 'piece' : 'pieces'}</p>
+                        </div>
+                        <span className="px-3.5 py-1.5 rounded-full bg-white text-black text-[10.5px] font-semibold">Shop {d.name}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
             {first && renderSection(first)}
             <GallerySlider slides={slides} />
             {rest.map(renderSection)}

@@ -1,6 +1,6 @@
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { productListInclude, productFullInclude, serializeProduct } from '../utils/serialize.js';
+import { productListInclude, productFullInclude, serializeProduct, genderFilter } from '../utils/serialize.js';
 function buildOrderBy(sort) {
     switch (sort) {
         case 'price-asc':
@@ -17,13 +17,16 @@ function buildOrderBy(sort) {
     }
 }
 export async function getProducts(req, res) {
-    const { category, collection, search, sort, featured } = req.query;
+    const { category, collection, search, sort, featured, gender } = req.query;
     const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
     const take = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '24'), 10) || 24));
     const skip = (page - 1) * take;
     const where = { isActive: true };
     const catSlug = category || collection;
-    if (catSlug && !['all', 'all-products', 'new-in'].includes(catSlug)) {
+    const g = genderFilter(gender || (catSlug === 'men' || catSlug === 'women' ? catSlug : ''));
+    if (g)
+        Object.assign(where, g);
+    if (catSlug && !['all', 'all-products', 'new-in', 'men', 'women'].includes(catSlug)) {
         where.OR = [
             { category: { slug: catSlug } },
             { collections: { some: { collection: { slug: catSlug, isActive: true } } } }
@@ -93,7 +96,8 @@ export async function getProductBySlug(req, res) {
         where: {
             id: { not: product.id },
             isActive: true,
-            ...(product.categoryId ? { categoryId: product.categoryId } : {})
+            ...(product.categoryId ? { categoryId: product.categoryId } : {}),
+            ...(product.gender === 'MEN' ? genderFilter('men') : product.gender === 'WOMEN' ? genderFilter('women') : {})
         },
         orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
         take: 4,

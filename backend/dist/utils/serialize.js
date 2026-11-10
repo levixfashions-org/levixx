@@ -19,6 +19,15 @@ export function sortVariants(variants = []) {
     return [...variants].sort((a, b) => (colorOrder.get((a.color || '').toLowerCase()) ?? 0) - (colorOrder.get((b.color || '').toLowerCase()) ?? 0) ||
         sizeRank(a.size) - sizeRank(b.size));
 }
+/** 'men' -> MEN + UNISEX products, 'women' -> WOMEN + UNISEX. Anything else -> no filter. */
+export function genderFilter(value) {
+    const v = String(value || '').toLowerCase();
+    if (v === 'men')
+        return { gender: { in: ['MEN', 'UNISEX'] } };
+    if (v === 'women')
+        return { gender: { in: ['WOMEN', 'UNISEX'] } };
+    return null;
+}
 export function serializeProduct(p) {
     if (!p)
         return p;

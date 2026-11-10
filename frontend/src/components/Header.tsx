@@ -50,6 +50,8 @@ export const Header: React.FC = () => {
         <div className="h-16 px-6 lg:px-[22px] grid grid-cols-3 items-center text-black">
           <nav className="flex items-center gap-8 text-[11.5px]">
             <Link to="/collections/new-in" className="hover:opacity-60 transition-opacity">New in</Link>
+            <Link to="/collections/men" className="hover:opacity-60 transition-opacity">Men</Link>
+            <Link to="/collections/women" className="hover:opacity-60 transition-opacity">Women</Link>
             <button onClick={() => setMegaOpen((v) => !v)} className="hover:opacity-60 transition-opacity">
               Collections
             </button>
