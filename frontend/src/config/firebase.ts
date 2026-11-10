@@ -1,9 +1,17 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, browserLocalPersistence, setPersistence, Auth } from 'firebase/auth';
 
+// On the live site, sign-in runs through our own domain (the server proxies /__/auth/* to Firebase),
+// so Google shows "continue to thelevix.shop". Everywhere else (localhost etc.) the default Firebase domain is used.
+const SITE_AUTH_DOMAINS = ['thelevix.shop', 'www.thelevix.shop'];
+const authDomain =
+  typeof window !== 'undefined' && SITE_AUTH_DOMAINS.includes(window.location.hostname)
+    ? window.location.hostname
+    : import.meta.env.VITE_FIREBASE_AUTH_DOMAIN;
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  authDomain,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,

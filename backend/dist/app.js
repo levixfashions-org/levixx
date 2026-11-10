@@ -100,6 +100,44 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', notFoundApi);
 // ------------------------------------------------------------------------------------------
+// Firebase Auth on our own domain: Google's sign-in screen then says "continue to thelevix.shop"
+// instead of "levix-8bb56.firebaseapp.com". Requests to /__/auth/* and /__/firebase/* are
+// passed through to Firebase's hosted auth helper.
+// ------------------------------------------------------------------------------------------
+const FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || 'levix-8bb56'}.firebaseapp.com`;
+app.all(['/__/auth/*', '/__/firebase/*'], async (req, res) => {
+    try {
+        const headers = {};
+        for (const [k, v] of Object.entries(req.headers)) {
+            if (typeof v !== 'string')
+                continue;
+            if (['host', 'connection', 'content-length', 'accept-encoding', 'cookie'].includes(k))
+                continue;
+            headers[k] = v;
+        }
+        const hasBody = !['GET', 'HEAD'].includes(req.method);
+        const upstream = await fetch(FIREBASE_AUTH_HOST + req.originalUrl, {
+            method: req.method,
+            headers,
+            body: hasBody ? (req.rawBody ? new Uint8Array(req.rawBody) : undefined) : undefined,
+            redirect: 'manual'
+        });
+        res.status(upstream.status);
+        upstream.headers.forEach((value, key) => {
+            if (['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'set-cookie'].includes(key))
+                return;
+            res.setHeader(key, value);
+        });
+        // Firebase's helper pages must be frameable by our own pages.
+        res.removeHeader('x-frame-options');
+        res.send(Buffer.from(await upstream.arrayBuffer()));
+    }
+    catch (err) {
+        console.error('Auth proxy error:', err?.message);
+        res.status(502).send('Sign-in service temporarily unavailable');
+    }
+});
+// ------------------------------------------------------------------------------------------
 // Serve the React storefront (frontend/dist) with proper caching
 // ------------------------------------------------------------------------------------------
 const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
