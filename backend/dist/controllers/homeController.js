@@ -11,7 +11,7 @@ export function invalidateHomeCache() {
  */
 export async function getHome(_req, res) {
     if (cache && cache.expires > Date.now()) {
-        res.set('Cache-Control', 'public, max-age=20');
+        res.set('Cache-Control', 'no-cache');
         res.json(cache.body);
         return;
     }
@@ -116,6 +116,6 @@ export async function getHome(_req, res) {
         }
     };
     cache = { body, expires: Date.now() + 20 * 1000 };
-    res.set('Cache-Control', 'public, max-age=20');
+    res.set('Cache-Control', 'no-cache');
     res.json(body);
 }

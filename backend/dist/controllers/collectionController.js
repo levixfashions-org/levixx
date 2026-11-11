@@ -49,7 +49,7 @@ export async function getCollections(_req, res) {
         group: c.group,
         _count: { products: c._count.products }
     }));
-    res.set('Cache-Control', 'public, max-age=60');
+    res.set('Cache-Control', 'no-cache');
     res.json({ collections: [...curated, ...cats] });
 }
 export async function getCollectionBySlug(req, res) {

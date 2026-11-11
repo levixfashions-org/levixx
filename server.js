@@ -121,6 +121,73 @@ var checkoutRateLimiter = (0, import_express_rate_limit.default)({
   message: { error: "Too many checkout attempts. Please wait a few minutes." }
 });
 
+// src/services/live.ts
+var clients = /* @__PURE__ */ new Set();
+var MAX_CLIENTS = 5e3;
+var nextId = 1;
+var version = Date.now();
+var pending = null;
+var pendingScopes = /* @__PURE__ */ new Set();
+function send(res, event, data2) {
+  res.write(`event: ${event}
+data: ${JSON.stringify(data2)}
+
+`);
+  res.flush?.();
+}
+function liveStream(req, res) {
+  if (clients.size >= MAX_CLIENTS) {
+    res.status(503).json({ error: "busy" });
+    return;
+  }
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+  req.socket.setTimeout(0);
+  req.socket.setNoDelay(true);
+  req.socket.setKeepAlive(true);
+  res.write("retry: 3000\n\n");
+  const client = { res, id: nextId++ };
+  clients.add(client);
+  send(res, "hello", { v: version });
+  const ping = setInterval(() => {
+    res.write(`: ping ${Date.now()}
+
+`);
+    res.flush?.();
+  }, 2e4);
+  const close = () => {
+    clearInterval(ping);
+    clients.delete(client);
+  };
+  req.on("close", close);
+  res.on("error", close);
+}
+function liveVersion(_req, res) {
+  res.set("Cache-Control", "no-store");
+  res.json({ v: version });
+}
+function broadcastChange(scope = "all") {
+  version = Date.now();
+  pendingScopes.add(scope);
+  if (pending) return;
+  pending = setTimeout(() => {
+    const scopes = [...pendingScopes];
+    pendingScopes = /* @__PURE__ */ new Set();
+    pending = null;
+    for (const c of clients) {
+      try {
+        send(c.res, "change", { v: version, scopes });
+      } catch {
+        clients.delete(c);
+      }
+    }
+  }, 60);
+}
+
 // src/middleware/errorHandler.ts
 var import_zod2 = require("zod");
 var import_client2 = require("@prisma/client");
@@ -523,7 +590,7 @@ async function getProducts(req, res) {
     prisma.product.count({ where }),
     prisma.product.findMany({ where, orderBy: buildOrderBy(sort), skip, take, include: productListInclude })
   ]);
-  res.set("Cache-Control", "public, max-age=30");
+  res.set("Cache-Control", "no-cache");
   res.json({
     products: products.map(serializeProduct),
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
@@ -552,7 +619,7 @@ async function getProductBySlug(req, res) {
     take: 4,
     include: productListInclude
   });
-  res.set("Cache-Control", "public, max-age=30");
+  res.set("Cache-Control", "no-cache");
   res.json({ product: serializeProduct(product), relatedProducts: relatedProducts.map(serializeProduct) });
 }
 async function getCategories(_req, res) {
@@ -560,7 +627,7 @@ async function getCategories(_req, res) {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: { _count: { select: { products: { where: { isActive: true } } } } }
   });
-  res.set("Cache-Control", "public, max-age=60");
+  res.set("Cache-Control", "no-cache");
   res.json({ categories });
 }
 async function getFilterOptions(_req, res) {
@@ -570,7 +637,7 @@ async function getFilterOptions(_req, res) {
     prisma.product.aggregate({ where: { isActive: true }, _min: { basePrice: true }, _max: { basePrice: true } })
   ]);
   const order = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL"];
-  res.set("Cache-Control", "public, max-age=60");
+  res.set("Cache-Control", "no-cache");
   res.json({
     sizes: variants.map((v) => v.size).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)),
     colors: colors.map((c) => c.colorGroup).filter(Boolean),
@@ -635,7 +702,7 @@ async function getCollections(_req, res) {
     group: c.group,
     _count: { products: c._count.products }
   }));
-  res.set("Cache-Control", "public, max-age=60");
+  res.set("Cache-Control", "no-cache");
   res.json({ collections: [...curated, ...cats] });
 }
 async function getCollectionBySlug(req, res) {
@@ -785,6 +852,9 @@ function toPublic(row) {
     out[key] = v === null || v === void 0 ? DEFAULT_SETTINGS[key] : v;
   }
   return out;
+}
+function invalidateSettingsCache() {
+  cache = null;
 }
 async function getSettings() {
   if (cache && cache.expires > Date.now()) return cache.value;
@@ -2152,7 +2222,7 @@ function invalidateHomeCache() {
 }
 async function getHome(_req, res) {
   if (cache2 && cache2.expires > Date.now()) {
-    res.set("Cache-Control", "public, max-age=20");
+    res.set("Cache-Control", "no-cache");
     res.json(cache2.body);
     return;
   }
@@ -2245,7 +2315,7 @@ async function getHome(_req, res) {
     }
   };
   cache2 = { body, expires: Date.now() + 20 * 1e3 };
-  res.set("Cache-Control", "public, max-age=20");
+  res.set("Cache-Control", "no-cache");
   res.json(body);
 }
 
@@ -2455,7 +2525,15 @@ var router7 = (0, import_express7.Router)();
 router7.use(verifyFirebaseToken);
 router7.use(requireAdmin);
 router7.use((req, res, next) => {
-  if (req.method !== "GET") res.on("finish", invalidateHomeCache);
+  if (req.method !== "GET") {
+    res.on("finish", () => {
+      if (res.statusCode >= 400) return;
+      invalidateHomeCache();
+      invalidateSettingsCache();
+      const scope = req.path.split("/")[1] || "all";
+      broadcastChange(scope);
+    });
+  }
   next();
 });
 router7.get("/metrics", asyncHandler(getDashboardMetrics));
@@ -2493,7 +2571,7 @@ var router8 = (0, import_express8.Router)();
 router8.get(
   "/settings",
   asyncHandler(async (_req, res) => {
-    res.set("Cache-Control", "public, max-age=30");
+    res.set("Cache-Control", "no-cache");
     res.json({ settings: await getSettings() });
   })
 );
@@ -2518,7 +2596,7 @@ var import_zod9 = require("zod");
 async function getOrCreateWishlist(userId) {
   return prisma.wishlist.upsert({ where: { userId }, update: {}, create: { userId } });
 }
-async function send(res, userId) {
+async function send2(res, userId) {
   const wl = await prisma.wishlist.findUnique({
     where: { userId },
     include: {
@@ -2534,7 +2612,7 @@ async function send(res, userId) {
 }
 async function getWishlist(req, res) {
   if (!req.user) throw new AppError("Please sign in", 401);
-  await send(res, req.user.id);
+  await send2(res, req.user.id);
 }
 async function toggleWishlist(req, res) {
   if (!req.user) throw new AppError("Please sign in", 401);
@@ -2545,7 +2623,7 @@ async function toggleWishlist(req, res) {
   const existing = await prisma.wishlistItem.findUnique({ where: { wishlistId_productId: { wishlistId: wl.id, productId } } });
   if (existing) await prisma.wishlistItem.delete({ where: { id: existing.id } });
   else await prisma.wishlistItem.create({ data: { wishlistId: wl.id, productId } });
-  await send(res, req.user.id);
+  await send2(res, req.user.id);
 }
 async function mergeWishlist(req, res) {
   if (!req.user) throw new AppError("Please sign in", 401);
@@ -2561,7 +2639,7 @@ async function mergeWishlist(req, res) {
       }).catch(() => void 0);
     }
   }
-  await send(res, req.user.id);
+  await send2(res, req.user.id);
 }
 async function getProductsByIds(req, res) {
   const ids = String(req.query.ids || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
@@ -2634,7 +2712,7 @@ app.use(
     referrerPolicy: { policy: "strict-origin-when-cross-origin" }
   })
 );
-app.use((0, import_compression.default)());
+app.use((0, import_compression.default)({ filter: (req, res) => !req.path.startsWith("/api/live") && import_compression.default.filter(req, res) }));
 var allowedOrigins = new Set(
   [env.FRONTEND_URL, "https://thelevix.shop", "https://www.thelevix.shop", "http://localhost:5173", "http://localhost:4173"].filter(
     Boolean
@@ -2690,12 +2768,18 @@ app.get("/api/health", async (_req, res) => {
     uptime: Math.round(process.uptime())
   });
 });
+app.get("/api/live", liveStream);
+app.get("/api/live/version", liveVersion);
 app.use("/api", apiRateLimiter);
 app.use("/api/store", storeRoutes_default);
 app.use("/api/auth", authRoutes_default);
 app.use("/api/products", productRoutes_default);
 app.use("/api/collections", collectionRoutes_default);
 app.use("/api/cart", cartRoutes_default);
+app.use(["/api/orders", "/api/payments"], (req, res, next) => {
+  if (req.method === "POST") res.on("finish", () => res.statusCode < 400 && broadcastChange("stock"));
+  next();
+});
 app.use("/api/orders", orderRoutes_default);
 app.use("/api/payments", paymentRoutes_default);
 app.use("/api/wishlist", wishlistRoutes_default);

@@ -65,6 +65,9 @@ function toPublic(row) {
     }
     return out;
 }
+export function invalidateSettingsCache() {
+    cache = null;
+}
 export async function getSettings() {
     if (cache && cache.expires > Date.now())
         return cache.value;

@@ -3,14 +3,24 @@ import { verifyFirebaseToken, requireAdmin } from '../middleware/verifyFirebaseT
 import { asyncHandler as h } from '../middleware/errorHandler.js';
 import * as admin from '../controllers/adminController.js';
 import { invalidateHomeCache } from '../controllers/homeController.js';
+import { invalidateSettingsCache } from '../services/store.js';
+import { broadcastChange } from '../services/live.js';
 import { uploadMedia, uploadVideoChunk } from '../controllers/mediaController.js';
 const router = Router();
 router.use(verifyFirebaseToken);
 router.use(requireAdmin);
-// Any change made in the admin panel refreshes the cached homepage data.
+// Any change made in the admin panel clears the server caches and is pushed live to every open shop tab.
 router.use((req, res, next) => {
-    if (req.method !== 'GET')
-        res.on('finish', invalidateHomeCache);
+    if (req.method !== 'GET') {
+        res.on('finish', () => {
+            if (res.statusCode >= 400)
+                return;
+            invalidateHomeCache();
+            invalidateSettingsCache();
+            const scope = req.path.split('/')[1] || 'all'; // products, collections, settings, orders, …
+            broadcastChange(scope);
+        });
+    }
     next();
 });
 router.get('/metrics', h(admin.getDashboardMetrics));
