@@ -1,12 +1,12 @@
 import { prisma } from '../config/db.js';
 export const DEFAULT_SETTINGS = {
-    announcementText: 'FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 • THE 1ST DROP IS LIVE • SECURE PREPAID CHECKOUT • ',
+    announcementText: 'FREE DELIVERY ON ALL ORDERS • THE 1ST DROP IS LIVE • SECURE CHECKOUT • ',
     heroHeadline: 'STREETWEAR ARCHITECTURE',
     heroSubtitle: 'Heavyweight Custom-Milled Silhouettes & Limited Private Drops.',
     supportEmail: 'levixfashions@gmail.com',
     supportPhone: '',
     instagramHandle: 'thelevix.shop',
-    freeShippingThreshold: 1999,
+    freeShippingThreshold: 0,
     shippingFee: 150,
     announcementEnabled: false,
     heroDesktopImage: '',
@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS = {
     latestDropTitle: 'Latest drop',
     seoTitle: 'Feel the Luxury of Premium Streetwear with LEVIX',
     seoText: 'LEVIX is an independent streetwear label built around heavyweight fabrics, oversized silhouettes and limited drops. Every piece is designed to drape well, last long and look better with every wear.',
-    shippingInfo: 'Dispatched within 1–3 business days.\nFree delivery pan-India above the free-shipping threshold.\nTracking shared as soon as your order ships.',
+    shippingInfo: 'Free delivery pan-India on every order, no minimum.\nDispatched within 1–3 business days.\nTracking shared as soon as your order ships.',
     careInfo: 'Wash cold, inside out.\nDo not bleach.\nDo not tumble dry.\nIron on reverse, avoiding prints.'
 };
 export const DEFAULT_CATEGORIES = [
@@ -135,5 +135,28 @@ export async function ensureStoreDefaults() {
             await prisma.storeSetting.update({ where: { id: 'default' }, data: { announcementText: cleaned ? `${cleaned} • ` : '' } });
         }
         await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 2 } });
+    }
+    // Version 3: free delivery on every order (admin can bring a minimum/fee back any time in Store Settings).
+    if ((row?.defaultsVersion ?? 0) < 3) {
+        const cur = await prisma.storeSetting.findUnique({ where: { id: 'default' }, select: { announcementText: true, shippingInfo: true } });
+        const ann = (cur?.announcementText || '')
+            .split('•')
+            .map((part) => part.trim())
+            .filter((part) => part && !/(SHIPPING|DELIVERY)/i.test(part));
+        const info = (cur?.shippingInfo || '')
+            .split('\n')
+            .map((l) => l.trim())
+            .filter((l) => l && !/free[- ](delivery|shipping)/i.test(l));
+        await prisma.storeSetting.update({
+            where: { id: 'default' },
+            data: {
+                freeShippingThreshold: 0,
+                announcementText: ['FREE DELIVERY ON ALL ORDERS', ...ann].join(' • ') + ' • ',
+                shippingInfo: ['Free delivery pan-India on every order, no minimum.', ...info].join('\n'),
+                defaultsVersion: 3
+            }
+        });
+        cache = null;
+        console.log('✓ Free delivery on all orders switched on.');
     }
 }

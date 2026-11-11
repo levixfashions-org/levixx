@@ -721,13 +721,13 @@ var import_zod4 = require("zod");
 
 // src/services/store.ts
 var DEFAULT_SETTINGS = {
-  announcementText: "FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 \u2022 THE 1ST DROP IS LIVE \u2022 SECURE PREPAID CHECKOUT \u2022 ",
+  announcementText: "FREE DELIVERY ON ALL ORDERS \u2022 THE 1ST DROP IS LIVE \u2022 SECURE CHECKOUT \u2022 ",
   heroHeadline: "STREETWEAR ARCHITECTURE",
   heroSubtitle: "Heavyweight Custom-Milled Silhouettes & Limited Private Drops.",
   supportEmail: "levixfashions@gmail.com",
   supportPhone: "",
   instagramHandle: "thelevix.shop",
-  freeShippingThreshold: 1999,
+  freeShippingThreshold: 0,
   shippingFee: 150,
   announcementEnabled: false,
   heroDesktopImage: "",
@@ -747,7 +747,7 @@ var DEFAULT_SETTINGS = {
   latestDropTitle: "Latest drop",
   seoTitle: "Feel the Luxury of Premium Streetwear with LEVIX",
   seoText: "LEVIX is an independent streetwear label built around heavyweight fabrics, oversized silhouettes and limited drops. Every piece is designed to drape well, last long and look better with every wear.",
-  shippingInfo: "Dispatched within 1\u20133 business days.\nFree delivery pan-India above the free-shipping threshold.\nTracking shared as soon as your order ships.",
+  shippingInfo: "Free delivery pan-India on every order, no minimum.\nDispatched within 1\u20133 business days.\nTracking shared as soon as your order ships.",
   careInfo: "Wash cold, inside out.\nDo not bleach.\nDo not tumble dry.\nIron on reverse, avoiding prints."
 };
 var DEFAULT_CATEGORIES = [
@@ -845,6 +845,22 @@ async function ensureStoreDefaults() {
     }
     await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 2 } });
   }
+  if ((row?.defaultsVersion ?? 0) < 3) {
+    const cur = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { announcementText: true, shippingInfo: true } });
+    const ann = (cur?.announcementText || "").split("\u2022").map((part) => part.trim()).filter((part) => part && !/(SHIPPING|DELIVERY)/i.test(part));
+    const info = (cur?.shippingInfo || "").split("\n").map((l) => l.trim()).filter((l) => l && !/free[- ](delivery|shipping)/i.test(l));
+    await prisma.storeSetting.update({
+      where: { id: "default" },
+      data: {
+        freeShippingThreshold: 0,
+        announcementText: ["FREE DELIVERY ON ALL ORDERS", ...ann].join(" \u2022 ") + " \u2022 ",
+        shippingInfo: ["Free delivery pan-India on every order, no minimum.", ...info].join("\n"),
+        defaultsVersion: 3
+      }
+    });
+    cache = null;
+    console.log("\u2713 Free delivery on all orders switched on.");
+  }
 }
 
 // src/controllers/cartController.ts
@@ -935,7 +951,7 @@ async function formatCart(cart) {
     };
   });
   const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
-  const threshold = settings.freeShippingThreshold * 100;
+  const threshold = settings.shippingFee > 0 ? Math.max(0, settings.freeShippingThreshold) * 100 : 0;
   return {
     cartId: cart.id,
     items,
