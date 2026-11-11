@@ -273,7 +273,8 @@ export const ProductDetailPage: React.FC = () => {
           {tab === 'shipping' && (
             <div className="space-y-1">
               <Lines text={settings.shippingInfo} />
-              <Link to="/policies/refund-policy" className="underline text-black inline-block pt-1">Returns & exchanges</Link>
+              <p className="pt-1">Returns are accepted only for damaged, defective or wrong items reported within 48 hours of delivery. No size exchanges — please check the size guide.</p>
+              <Link to="/policies/refund-policy" className="underline text-black inline-block">Returns & refund policy</Link>
             </div>
           )}
         </div>

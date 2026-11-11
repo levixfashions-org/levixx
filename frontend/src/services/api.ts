@@ -44,6 +44,11 @@ export interface StoreSettings {
   heroMobileImage: string;
   heroDesktopVideo: string;
   heroMobileVideo: string;
+  legalName: string;
+  businessAddress: string;
+  grievanceOfficer: string;
+  gstin: string;
+  jurisdictionCity: string;
   heroLink: string;
   heroCtaText: string;
   latestDropTitle: string;
@@ -54,7 +59,7 @@ export interface StoreSettings {
 }
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
-  announcementText: 'FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 • NEW LEVIX DROPS LIVE • EASY EXCHANGES • ',
+  announcementText: 'FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 • THE 1ST DROP IS LIVE • SECURE PREPAID CHECKOUT • ',
   heroHeadline: 'STREETWEAR ARCHITECTURE',
   heroSubtitle: 'Heavyweight Custom-Milled Silhouettes & Limited Private Drops.',
   supportEmail: 'levixfashions@gmail.com',
@@ -67,6 +72,11 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   heroMobileImage: '',
   heroDesktopVideo: '',
   heroMobileVideo: '',
+  legalName: 'LEVIX',
+  businessAddress: '',
+  grievanceOfficer: '',
+  gstin: '',
+  jurisdictionCity: '',
   heroLink: '/collections/all-products',
   heroCtaText: 'Shop now',
   latestDropTitle: 'Latest drop',

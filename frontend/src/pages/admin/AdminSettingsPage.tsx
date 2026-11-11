@@ -294,6 +294,39 @@ export const AdminSettingsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Business & legal details — shown on Terms, Privacy, Returns and Contact pages */}
+          <div className="bg-white p-6 border border-black/10 shadow-sm space-y-5">
+            <div>
+              <h2 className="font-bold uppercase tracking-wider text-sm text-black">Business & Legal Details</h2>
+              <p className="text-[11px] text-neutral-500 mt-1">
+                Shown on your Terms, Privacy, Returns and Contact pages. Indian e-commerce rules and Razorpay require your registered business name, address and a grievance contact to be visible on the site.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Registered business name</label>
+                <input id="legalName" value={settings.legalName} onChange={(e) => setSettings({ ...settings, legalName: e.target.value })} placeholder="e.g. LEVIX Fashions (proprietor name)" className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Grievance officer name</label>
+                <input id="grievanceOfficer" value={settings.grievanceOfficer} onChange={(e) => setSettings({ ...settings, grievanceOfficer: e.target.value })} placeholder="Full name of the person handling complaints" className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Registered address</label>
+                <textarea id="businessAddress" rows={3} value={settings.businessAddress} onChange={(e) => setSettings({ ...settings, businessAddress: e.target.value })} placeholder="Door no, street, area, city, state, PIN" className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">City for legal jurisdiction</label>
+                <input id="jurisdictionCity" value={settings.jurisdictionCity} onChange={(e) => setSettings({ ...settings, jurisdictionCity: e.target.value })} placeholder="e.g. Hyderabad" className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">GSTIN (optional)</label>
+                <input id="gstin" value={settings.gstin} onChange={(e) => setSettings({ ...settings, gstin: e.target.value.toUpperCase() })} maxLength={15} placeholder="15-character GST number, if registered" className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
+              </div>
+            </div>
+            <p className="text-[11px] text-neutral-500">Support email and phone (set above) are also shown on these pages. Add a phone number so customers can reach you on WhatsApp for damage claims.</p>
+          </div>
+
           {/* Homepage hero, SEO & product page info */}
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-5">
             <h2 className="font-bold uppercase tracking-wider text-sm text-black">Homepage & Product Page</h2>

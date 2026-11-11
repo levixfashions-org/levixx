@@ -107,7 +107,8 @@ export const MobileNavDrawer: React.FC = () => {
           )}
           <Accordion title="Support">
             <MChip to="/pages/track">Track your order</MChip>
-            <MChip to="/policies/refund-policy">Returns & exchanges</MChip>
+            <MChip to="/policies/refund-policy">Returns & refunds</MChip>
+            <MChip to="/policies/terms-of-service">Terms & conditions</MChip>
             <MChip to="/policies/shipping-policy">Shipping policy</MChip>
             <MChip to="/policies/contact">Contact us</MChip>
           </Accordion>

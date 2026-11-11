@@ -317,6 +317,12 @@ model StoreSetting {
   heroMobileImage       String?  @db.Text
   heroDesktopVideo      String?  @db.Text
   heroMobileVideo       String?  @db.Text
+  // Business & legal details shown on the policy / contact pages
+  legalName             String?
+  businessAddress       String?  @db.Text
+  grievanceOfficer      String?
+  gstin                 String?
+  jurisdictionCity      String?
   heroLink              String   @default("/collections/all-products")
   heroCtaText           String   @default("Shop now")
   latestDropTitle       String   @default("Latest drop")

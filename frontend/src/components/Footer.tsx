@@ -123,12 +123,13 @@ export const Footer: React.FC = () => {
           </div>
           <div className="md:col-span-3">
             <h3 className="text-[12px] font-semibold mb-3">Order Support</h3>
-            <FLink to="/policies/refund-policy#returns">Make a return/Exchange</FLink>
-            <FLink to="/policies/refund-policy">Refund/Exchange policy</FLink>
+            <FLink to="/policies/refund-policy#report">Report a damaged item</FLink>
+            <FLink to="/policies/refund-policy">Returns & refund policy</FLink>
+            <FLink to="/policies/refund-policy#cancellation">Cancellation policy</FLink>
             <FLink to="/pages/track">Track your order</FLink>
             <FLink to="/policies/shipping-policy">Shipping policy</FLink>
             <FLink to="/policies/contact">FAQ's & Contact</FLink>
-            <FLink to="/policies/terms-of-service">Terms</FLink>
+            <FLink to="/policies/terms-of-service">Terms & conditions</FLink>
             <FLink to="/policies/privacy-policy">Privacy policy</FLink>
           </div>
           <div className="md:col-span-2">
@@ -173,7 +174,7 @@ export const Footer: React.FC = () => {
           </div>
         </div>
         <p className="text-[9px] text-neutral-400 uppercase tracking-wide mt-10 md:text-right">
-          © {new Date().getFullYear()} LEVIX. All rights reserved.
+          © {new Date().getFullYear()} {settings.legalName && settings.legalName !== 'LEVIX' ? `${settings.legalName} (LEVIX)` : 'LEVIX'}. All rights reserved.{settings.gstin ? ` · GSTIN ${settings.gstin}` : ''}
         </p>
       </div>
     </footer>

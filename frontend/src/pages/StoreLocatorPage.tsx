@@ -12,7 +12,7 @@ export const StoreLocatorPage: React.FC = () => {
           Digital Atelier & Concierge
         </h1>
         <p className="text-xs text-neutral-600 mt-2 leading-relaxed">
-          LEVIX operates exclusively through our online flagship drops at thelevix.shop, shipping premier luxury streetwear directly to clients nationwide with express delivery.
+          LEVIX operates exclusively through our online flagship drops at thelevix.shop, shipping streetwear directly to customers across India.
         </p>
       </div>
 
@@ -20,10 +20,10 @@ export const StoreLocatorPage: React.FC = () => {
         <div className="bg-white p-8 border border-black/10 shadow-sm space-y-4">
           <Globe className="w-6 h-6 text-[#FF5400]" />
           <h3 className="font-display font-bold text-xl uppercase tracking-tight text-black">
-            Pan-India Air Express
+            Pan-India Delivery
           </h3>
           <p className="text-xs text-neutral-600 leading-relaxed">
-            All drops are dispatched directly from our central fulfillment hub in tamper-evident signature dustbags. Metro orders delivered within 48 to 72 hours.
+            Every order is packed and dispatched within 1–3 business days and usually delivered within 3–7 business days across India.
           </p>
         </div>
 
@@ -46,10 +46,10 @@ export const StoreLocatorPage: React.FC = () => {
         <div className="bg-white p-8 border border-black/10 shadow-sm space-y-4">
           <Shield className="w-6 h-6 text-[#FF5400]" />
           <h3 className="font-display font-bold text-xl uppercase tracking-tight text-black">
-            7-Day Size Exchanges
+            Damage Protection
           </h3>
           <p className="text-xs text-neutral-600 leading-relaxed">
-            Need a different drape or volume? Enjoy hassle-free doorstep reverse pickups and size exchanges on all unworn items.
+            Received a damaged, defective or wrong item? Report it within 48 hours of delivery with an unboxing video and we'll send a free replacement or a full refund.
           </p>
         </div>
       </div>

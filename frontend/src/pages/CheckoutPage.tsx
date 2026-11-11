@@ -57,6 +57,7 @@ export const CheckoutPage: React.FC = () => {
   const [couponLoading, setCouponLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -144,6 +145,7 @@ export const CheckoutPage: React.FC = () => {
     if (!/^(\+91)?[6-9]\d{9}$/.test(cleanPhone)) return setErrorMsg('Please enter a valid 10-digit Indian mobile number.');
     if (!/^\d{6}$/.test(postalCode.trim())) return setErrorMsg('Please enter a valid 6-digit PIN code.');
     if (!state) return setErrorMsg('Please select your state.');
+    if (!agreed) return setErrorMsg('Please accept the Terms & Conditions and the Returns policy to continue.');
 
     setLoading(true);
     try {
@@ -399,6 +401,22 @@ export const CheckoutPage: React.FC = () => {
               <span className="font-mono text-lg">RS. {inr(totalPaise)}</span>
             </div>
           </div>
+
+          <label className="flex items-start gap-2 text-[11px] text-neutral-700 leading-relaxed cursor-pointer">
+            <input
+              id="checkout-agree"
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="accent-black w-4 h-4 mt-0.5 shrink-0"
+            />
+            <span>
+              I agree to the{' '}
+              <Link to="/policies/terms-of-service" target="_blank" className="underline text-black">Terms & Conditions</Link>,{' '}
+              <Link to="/policies/privacy-policy" target="_blank" className="underline text-black">Privacy policy</Link> and{' '}
+              <Link to="/policies/refund-policy" target="_blank" className="underline text-black">Returns policy</Link>. I understand returns are accepted only for damaged, defective or wrong items reported within 48 hours, and there are no size exchanges.
+            </span>
+          </label>
 
           <button
             type="submit"
