@@ -1,6 +1,6 @@
 import { prisma } from '../config/db.js';
 export const DEFAULT_SETTINGS = {
-    announcementText: 'FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 • NEW LEVIX DROPS LIVE • EASY EXCHANGES • ',
+    announcementText: 'FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 • THE 1ST DROP IS LIVE • SECURE PREPAID CHECKOUT • ',
     heroHeadline: 'STREETWEAR ARCHITECTURE',
     heroSubtitle: 'Heavyweight Custom-Milled Silhouettes & Limited Private Drops.',
     supportEmail: 'levixfashions@gmail.com',
@@ -13,6 +13,14 @@ export const DEFAULT_SETTINGS = {
     heroMobileImage: '',
     heroDesktopVideo: '',
     heroMobileVideo: '',
+    legalName: 'LEVIX',
+    businessAddress: '',
+    grievanceOfficer: '',
+    gstin: '',
+    jurisdictionCity: '',
+    codEnabled: false,
+    codFee: 0,
+    codMaxOrder: 0,
     heroLink: '/collections/all-products',
     heroCtaText: 'Shop now',
     latestDropTitle: 'Latest drop',
@@ -113,5 +121,19 @@ export async function ensureStoreDefaults() {
         }
         await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 1 } });
         console.log('✓ Created default drop collections (1st, 2nd, 3rd Drop).');
+    }
+    // Version 2: returns are damage-only now — drop the old "easy exchanges" promise from the announcement bar.
+    if ((row?.defaultsVersion ?? 0) < 2) {
+        const current = await prisma.storeSetting.findUnique({ where: { id: 'default' }, select: { announcementText: true } });
+        const text = current?.announcementText || '';
+        if (/EXCHANGE/i.test(text)) {
+            const cleaned = text
+                .split('•')
+                .map((part) => part.trim())
+                .filter((part) => part && !/EXCHANGE/i.test(part))
+                .join(' • ');
+            await prisma.storeSetting.update({ where: { id: 'default' }, data: { announcementText: cleaned ? `${cleaned} • ` : '' } });
+        }
+        await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 2 } });
     }
 }

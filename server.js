@@ -721,7 +721,7 @@ var import_zod4 = require("zod");
 
 // src/services/store.ts
 var DEFAULT_SETTINGS = {
-  announcementText: "FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 \u2022 NEW LEVIX DROPS LIVE \u2022 EASY EXCHANGES \u2022 ",
+  announcementText: "FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 \u2022 THE 1ST DROP IS LIVE \u2022 SECURE PREPAID CHECKOUT \u2022 ",
   heroHeadline: "STREETWEAR ARCHITECTURE",
   heroSubtitle: "Heavyweight Custom-Milled Silhouettes & Limited Private Drops.",
   supportEmail: "levixfashions@gmail.com",
@@ -734,6 +734,14 @@ var DEFAULT_SETTINGS = {
   heroMobileImage: "",
   heroDesktopVideo: "",
   heroMobileVideo: "",
+  legalName: "LEVIX",
+  businessAddress: "",
+  grievanceOfficer: "",
+  gstin: "",
+  jurisdictionCity: "",
+  codEnabled: false,
+  codFee: 0,
+  codMaxOrder: 0,
   heroLink: "/collections/all-products",
   heroCtaText: "Shop now",
   latestDropTitle: "Latest drop",
@@ -827,6 +835,15 @@ async function ensureStoreDefaults() {
     }
     await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 1 } });
     console.log("\u2713 Created default drop collections (1st, 2nd, 3rd Drop).");
+  }
+  if ((row?.defaultsVersion ?? 0) < 2) {
+    const current = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { announcementText: true } });
+    const text = current?.announcementText || "";
+    if (/EXCHANGE/i.test(text)) {
+      const cleaned = text.split("\u2022").map((part) => part.trim()).filter((part) => part && !/EXCHANGE/i.test(part)).join(" \u2022 ");
+      await prisma.storeSetting.update({ where: { id: "default" }, data: { announcementText: cleaned ? `${cleaned} \u2022 ` : "" } });
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 2 } });
   }
 }
 
@@ -1166,7 +1183,8 @@ var createOrderSchema = import_zod5.z.object({
   customerPhone: addressSchema.shape.phone,
   shippingAddress: addressSchema.omit({ isDefault: true }),
   couponCode: import_zod5.z.string().trim().max(40).optional().or(import_zod5.z.literal("")),
-  saveAddress: import_zod5.z.boolean().optional()
+  saveAddress: import_zod5.z.boolean().optional(),
+  paymentMethod: import_zod5.z.enum(["ONLINE", "COD"]).default("ONLINE")
 });
 async function validateCoupon(req, res) {
   const { code } = import_zod5.z.object({ code: import_zod5.z.string().trim().min(1).max(40) }).parse(req.body);
@@ -1176,11 +1194,23 @@ async function validateCoupon(req, res) {
   const result = await evaluateCoupon(code, formatted.subtotalPaise);
   res.json(result);
 }
+async function saveCheckoutAddress(req, data2) {
+  if (!req.user || !data2.saveAddress) return;
+  const existing = await prisma.address.findFirst({
+    where: { userId: req.user.id, line1: data2.shippingAddress.line1, postalCode: data2.shippingAddress.postalCode }
+  });
+  if (existing) return;
+  const count = await prisma.address.count({ where: { userId: req.user.id } });
+  if (count < 10) {
+    await prisma.address.create({ data: { ...data2.shippingAddress, userId: req.user.id, isDefault: count === 0 } }).catch(() => void 0);
+  }
+}
 async function createOrder(req, res) {
-  if (!isRazorpayConfigured()) {
+  const data2 = createOrderSchema.parse(req.body);
+  const isCod = data2.paymentMethod === "COD";
+  if (!isCod && !isRazorpayConfigured()) {
     throw new AppError("Online payments are temporarily unavailable. Please try again shortly.", 503);
   }
-  const data2 = createOrderSchema.parse(req.body);
   const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
   const items = cart.items.filter((i) => i.variant?.product?.isActive);
   if (items.length === 0) throw new AppError("Your bag is empty", 400);
@@ -1203,10 +1233,86 @@ async function createOrder(req, res) {
   }
   const settings = await getSettings();
   const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
-  const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise;
+  let codFeePaise = 0;
+  if (isCod) {
+    if (!settings.codEnabled) throw new AppError("Cash on Delivery is not available right now. Please pay online.", 400);
+    codFeePaise = Math.max(0, Math.round((settings.codFee || 0) * 100));
+  }
+  const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise + codFeePaise;
   if (totalPaise < 100) throw new AppError("Order total must be at least Rs. 1", 400);
+  if (isCod && settings.codMaxOrder > 0 && totalPaise > settings.codMaxOrder * 100) {
+    throw new AppError(`Cash on Delivery is available for orders up to Rs. ${settings.codMaxOrder.toLocaleString("en-IN")}. Please pay online.`, 400);
+  }
   const orderNumber = generateOrderNumber();
   const accessKey = generateAccessKey();
+  const itemRows = items.map((item) => {
+    const unit = item.variant.product.basePrice + item.variant.priceDelta;
+    return {
+      productId: item.variant.product.id,
+      variantId: item.variantId,
+      productName: item.variant.product.name,
+      productSlug: item.variant.product.slug,
+      size: item.variant.size,
+      color: item.variant.color,
+      unitPricePaise: unit,
+      quantity: item.quantity,
+      subtotalPaise: unit * item.quantity,
+      imageUrl: imageForColor(item.variant.product.images, item.variant.color)
+    };
+  });
+  const baseOrder = {
+    orderNumber,
+    accessKey,
+    userId: req.user?.id || null,
+    cartId: cart.id,
+    customerEmail: data2.customerEmail,
+    customerName: data2.customerName,
+    customerPhone: data2.customerPhone,
+    shippingAddressSnapshot: { ...data2.shippingAddress, phone: data2.shippingAddress.phone },
+    subtotalPaise,
+    shippingPaise,
+    discountPaise,
+    totalPaise,
+    couponCode
+  };
+  if (isCod) {
+    const order2 = await prisma.$transaction(
+      async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            ...baseOrder,
+            paymentMethod: "COD",
+            codFeePaise,
+            status: import_client5.OrderStatus.PROCESSING,
+            paymentStatus: import_client5.PaymentStatus.PENDING,
+            stockDeducted: true,
+            items: { create: itemRows }
+          }
+        });
+        for (const row of itemRows) {
+          if (!row.variantId) continue;
+          const dec = await tx.productVariant.updateMany({
+            where: { id: row.variantId, stockQuantity: { gte: row.quantity } },
+            data: { stockQuantity: { decrement: row.quantity } }
+          });
+          if (dec.count === 0) {
+            throw new AppError(`${row.productName} (${[row.color, row.size].filter(Boolean).join(" / ")}) just sold out. Please update your bag.`, 409);
+          }
+        }
+        if (couponCode) await tx.coupon.updateMany({ where: { code: couponCode }, data: { usedCount: { increment: 1 } } });
+        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+        return created;
+      },
+      { timeout: 2e4, maxWait: 1e4 }
+    );
+    await saveCheckoutAddress(req, data2);
+    res.status(201).json({
+      order: { id: order2.id, orderNumber: order2.orderNumber, totalPaise: order2.totalPaise, customerEmail: order2.customerEmail, customerName: order2.customerName },
+      accessKey,
+      paymentMethod: "COD"
+    });
+    return;
+  }
   let rzpOrder;
   try {
     rzpOrder = await getRazorpay().orders.create({
@@ -1221,53 +1327,16 @@ async function createOrder(req, res) {
   }
   const order = await prisma.order.create({
     data: {
-      orderNumber,
-      accessKey,
-      userId: req.user?.id || null,
-      cartId: cart.id,
-      customerEmail: data2.customerEmail,
-      customerName: data2.customerName,
-      customerPhone: data2.customerPhone,
-      shippingAddressSnapshot: { ...data2.shippingAddress, phone: data2.shippingAddress.phone },
-      subtotalPaise,
-      shippingPaise,
-      discountPaise,
-      totalPaise,
-      couponCode,
+      ...baseOrder,
+      paymentMethod: "ONLINE",
       status: import_client5.OrderStatus.PENDING,
       paymentStatus: import_client5.PaymentStatus.PENDING,
       razorpayOrderId: rzpOrder.id,
-      items: {
-        create: items.map((item) => {
-          const unit = item.variant.product.basePrice + item.variant.priceDelta;
-          return {
-            productId: item.variant.product.id,
-            variantId: item.variantId,
-            productName: item.variant.product.name,
-            productSlug: item.variant.product.slug,
-            size: item.variant.size,
-            color: item.variant.color,
-            unitPricePaise: unit,
-            quantity: item.quantity,
-            subtotalPaise: unit * item.quantity,
-            imageUrl: imageForColor(item.variant.product.images, item.variant.color)
-          };
-        })
-      }
+      items: { create: itemRows }
     },
     include: { items: true }
   });
-  if (req.user && data2.saveAddress) {
-    const existing = await prisma.address.findFirst({
-      where: { userId: req.user.id, line1: data2.shippingAddress.line1, postalCode: data2.shippingAddress.postalCode }
-    });
-    if (!existing) {
-      const count = await prisma.address.count({ where: { userId: req.user.id } });
-      if (count < 10) {
-        await prisma.address.create({ data: { ...data2.shippingAddress, userId: req.user.id, isDefault: count === 0 } }).catch(() => void 0);
-      }
-    }
-  }
+  await saveCheckoutAddress(req, data2);
   res.status(201).json({
     order: {
       id: order.id,
@@ -1287,8 +1356,10 @@ async function getUserOrders(req, res) {
   if (!req.user) throw new AppError("Please sign in to continue.", 401);
   const orders = await prisma.order.findMany({
     where: {
-      OR: [{ userId: req.user.id }, { customerEmail: req.user.email }],
-      paymentStatus: { in: [import_client5.PaymentStatus.PAID, import_client5.PaymentStatus.REFUNDED] }
+      AND: [
+        { OR: [{ userId: req.user.id }, { customerEmail: req.user.email }] },
+        { OR: [{ paymentStatus: { in: [import_client5.PaymentStatus.PAID, import_client5.PaymentStatus.REFUNDED] } }, { paymentMethod: "COD" }] }
+      ]
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -1325,6 +1396,7 @@ async function trackOrder(req, res) {
       orderNumber: order.orderNumber,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
       courier: order.courier,
       trackingNumber: order.trackingNumber,
       createdAt: order.createdAt,
@@ -1543,16 +1615,21 @@ var updateOrderSchema = import_zod7.z.object({
   status: import_zod7.z.nativeEnum(import_client7.OrderStatus).optional(),
   courier: import_zod7.z.string().trim().max(100).optional(),
   trackingNumber: import_zod7.z.string().trim().max(100).optional(),
-  adminNotes: import_zod7.z.string().max(5e3).optional()
+  adminNotes: import_zod7.z.string().max(5e3).optional(),
+  markCodPaid: import_zod7.z.boolean().optional()
 });
 async function updateOrder(req, res) {
   const data2 = updateOrderSchema.parse(req.body);
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
   if (!order) throw new AppError("Order not found", 404);
   if (data2.status && data2.status !== import_client7.OrderStatus.CANCELLED && data2.status !== import_client7.OrderStatus.PENDING) {
-    if (order.paymentStatus !== import_client7.PaymentStatus.PAID) {
+    if (order.paymentStatus !== import_client7.PaymentStatus.PAID && order.paymentMethod !== "COD") {
       throw new AppError("This order has not been paid yet, so it cannot be moved to fulfilment", 400);
     }
+  }
+  if (data2.markCodPaid) {
+    if (order.paymentMethod !== "COD") throw new AppError("Only Cash on Delivery orders can be marked as paid here", 400);
+    if (order.status === import_client7.OrderStatus.CANCELLED) throw new AppError("This order is cancelled", 400);
   }
   const updated = await prisma.$transaction(async (tx) => {
     if (data2.status === import_client7.OrderStatus.CANCELLED && order.status !== import_client7.OrderStatus.CANCELLED && order.stockDeducted) {
@@ -1572,7 +1649,8 @@ async function updateOrder(req, res) {
         ...data2.status === import_client7.OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {},
         ...data2.courier !== void 0 ? { courier: data2.courier || null } : {},
         ...data2.trackingNumber !== void 0 ? { trackingNumber: data2.trackingNumber || null } : {},
-        ...data2.adminNotes !== void 0 ? { adminNotes: data2.adminNotes || null } : {}
+        ...data2.adminNotes !== void 0 ? { adminNotes: data2.adminNotes || null } : {},
+        ...data2.markCodPaid && order.paymentStatus !== import_client7.PaymentStatus.PAID ? { paymentStatus: import_client7.PaymentStatus.PAID, paidAt: /* @__PURE__ */ new Date() } : {}
       },
       include: { items: true }
     });
@@ -1874,6 +1952,14 @@ var settingsSchema = import_zod7.z.object({
   heroDesktopVideo: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
   heroMobileVideo: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
   heroLink: import_zod7.z.string().trim().max(500),
+  legalName: import_zod7.z.string().trim().max(190),
+  businessAddress: import_zod7.z.string().trim().max(1e3),
+  grievanceOfficer: import_zod7.z.string().trim().max(190),
+  gstin: import_zod7.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
+  jurisdictionCity: import_zod7.z.string().trim().max(100),
+  codEnabled: import_zod7.z.boolean(),
+  codFee: import_zod7.z.coerce.number().int().min(0).max(1e3),
+  codMaxOrder: import_zod7.z.coerce.number().int().min(0).max(1e6),
   heroCtaText: import_zod7.z.string().trim().max(60),
   latestDropTitle: import_zod7.z.string().trim().max(100),
   seoTitle: import_zod7.z.string().max(300),
@@ -2600,6 +2686,41 @@ app.use("/api/wishlist", wishlistRoutes_default);
 app.use("/api/admin", adminRoutes_default);
 app.use("/api", notFoundApi);
 app.get("/media/:file", asyncHandler(serveMedia));
+app.get(
+  "/sitemap.xml",
+  asyncHandler(async (_req, res) => {
+    const base = "https://thelevix.shop";
+    const [products, collections, categories] = await Promise.all([
+      prisma.product.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } }),
+      prisma.collection.findMany({ where: { isActive: true }, select: { slug: true } }),
+      prisma.category.findMany({ select: { slug: true } })
+    ]);
+    const fixed = [
+      "/",
+      "/collections/all-products",
+      "/collections/new-in",
+      "/collections/men",
+      "/collections/women",
+      "/pages/about",
+      "/pages/track",
+      "/policies/terms-of-service",
+      "/policies/refund-policy",
+      "/policies/shipping-policy",
+      "/policies/privacy-policy",
+      "/policies/contact"
+    ];
+    const esc = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const urls = [
+      ...fixed.map((u) => `<url><loc>${base}${u}</loc></url>`),
+      ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc(c.slug)}</loc></url>`),
+      ...products.map((p) => `<url><loc>${base}/products/${esc(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
+    ];
+    res.set("Content-Type", "application/xml; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=3600");
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join("")}</urlset>`);
+  })
+);
 var currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 var possiblePaths = [
   import_path2.default.resolve(process.cwd(), "frontend/dist"),

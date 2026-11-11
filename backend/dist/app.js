@@ -153,6 +153,38 @@ app.use('/api/admin', adminRoutes);
 app.use('/api', notFoundApi);
 // Uploaded images (stored in MySQL)
 app.get('/media/:file', asyncHandler(serveMedia));
+/* sitemap.xml — every live product, collection and policy page, for Google */
+app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
+    const base = 'https://thelevix.shop';
+    const [products, collections, categories] = await Promise.all([
+        prisma.product.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } }),
+        prisma.collection.findMany({ where: { isActive: true }, select: { slug: true } }),
+        prisma.category.findMany({ select: { slug: true } })
+    ]);
+    const fixed = [
+        '/',
+        '/collections/all-products',
+        '/collections/new-in',
+        '/collections/men',
+        '/collections/women',
+        '/pages/about',
+        '/pages/track',
+        '/policies/terms-of-service',
+        '/policies/refund-policy',
+        '/policies/shipping-policy',
+        '/policies/privacy-policy',
+        '/policies/contact'
+    ];
+    const esc = (v) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const urls = [
+        ...fixed.map((u) => `<url><loc>${base}${u}</loc></url>`),
+        ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc(c.slug)}</loc></url>`),
+        ...products.map((p) => `<url><loc>${base}/products/${esc(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
+    ];
+    res.set('Content-Type', 'application/xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`);
+}));
 // ------------------------------------------------------------------------------------------
 // Serve the React storefront (frontend/dist) with proper caching
 // ------------------------------------------------------------------------------------------

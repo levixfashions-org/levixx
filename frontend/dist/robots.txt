@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /checkout
+Disallow: /cart
+Disallow: /order-success
+Disallow: /api/
+
+Sitemap: https://thelevix.shop/sitemap.xml
