@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { useSearchParams } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import { ProductCard } from '../components/ProductCard';
@@ -12,14 +13,18 @@ export const SearchPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const live = useLiveRefresh();
+  const lastLive = useRef(live);
   useEffect(() => {
+    const silent = lastLive.current !== live;
+    lastLive.current = live;
     async function executeSearch() {
       if (!q.trim()) {
         setProducts([]);
         return;
       }
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         const res = await apiClient.get('/products', { search: q, limit: 30 });
         setProducts(res.data.products || []);
       } catch (err) {
@@ -29,7 +34,7 @@ export const SearchPage: React.FC = () => {
       }
     }
     executeSearch();
-  }, [q]);
+  }, [q, live]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

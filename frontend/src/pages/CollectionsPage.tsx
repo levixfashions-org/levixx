@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { apiClient } from '../services/api';
 import { Collection } from '../types';
 import { ArrowRight } from 'lucide-react';
@@ -7,11 +8,13 @@ import { ArrowRight } from 'lucide-react';
 export const CollectionsPage: React.FC = () => {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
+  const live = useLiveRefresh();
 
   useEffect(() => {
     async function load() {
       try {
         const res = await apiClient.get('/collections');
+        // (re-runs silently when the admin edits collections)
         setCollections(res.data.collections || []);
       } catch (e) {
         console.warn(e);
@@ -20,7 +23,7 @@ export const CollectionsPage: React.FC = () => {
       }
     }
     load();
-  }, []);
+  }, [live]);
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-8 space-y-10">

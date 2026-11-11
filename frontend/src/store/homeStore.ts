@@ -19,7 +19,8 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   fetchHome: async (force = false) => {
     if (inflight) return inflight;
     if (get().data && !force) return;
-    set({ loading: true, error: null });
+    // Live refreshes keep showing the current data while the new copy loads (no flicker).
+    set(get().data ? { error: null } : { loading: true, error: null });
     inflight = apiClient
       .get('/store/home')
       .then((res) => {

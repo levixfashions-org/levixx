@@ -54,7 +54,7 @@ export async function getCollections(_req: Request, res: Response) {
       _count: { products: c._count.products }
     }));
 
-  res.set('Cache-Control', 'public, max-age=60');
+  res.set('Cache-Control', 'no-cache');
   res.json({ collections: [...curated, ...cats] });
 }
 

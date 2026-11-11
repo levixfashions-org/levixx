@@ -11,7 +11,7 @@ const router = Router();
 router.get(
   '/settings',
   h(async (_req, res) => {
-    res.set('Cache-Control', 'public, max-age=30');
+    res.set('Cache-Control', 'no-cache');
     res.json({ settings: await getSettings() });
   })
 );

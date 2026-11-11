@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiClient, COLOR_SWATCHES } from '../services/api';
 import { useHomeStore } from '../store/homeStore';
@@ -41,11 +42,17 @@ export const CollectionDetailPage: React.FC = () => {
     fetchHome();
   }, [fetchHome]);
 
+  const live = useLiveRefresh();
+  const lastLive = useRef(live);
   useEffect(() => {
     let cancelled = false;
+    const silent = lastLive.current !== live; // admin changed something → refresh in place
+    lastLive.current = live;
     async function load() {
-      setLoading(true);
-      setNotFound(false);
+      if (!silent) {
+        setLoading(true);
+        setNotFound(false);
+      }
       try {
         if (handle === 'all-products' || handle === 'new-in') {
           const res = await apiClient.get('/products', { sort, limit: 100, ...(gender ? { gender } : {}) });
@@ -62,7 +69,7 @@ export const CollectionDetailPage: React.FC = () => {
           setProducts(res.data.products || []);
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && !silent) {
           setNotFound(true);
           setProducts([]);
         }
@@ -74,7 +81,7 @@ export const CollectionDetailPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [handle, sort, gender]);
+  }, [handle, sort, gender, live]);
 
   useEffect(() => {
     if (title) document.title = `${title} | LEVIX`;

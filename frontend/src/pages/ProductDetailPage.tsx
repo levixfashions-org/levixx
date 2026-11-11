@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { apiClient } from '../services/api';
 import { useCartStore } from '../store/cartStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -40,13 +41,23 @@ export const ProductDetailPage: React.FC = () => {
   const [slide, setSlide] = useState(0);
   const sliderRef = useRef<HTMLDivElement>(null);
 
+  const live = useLiveRefresh();
+  const lastHandle = useRef<string | undefined>(undefined);
+  const lastLive = useRef(0);
+
   useEffect(() => {
     let cancelled = false;
+    // Same product re-loaded because the admin changed something → update quietly, keep the shopper's choices.
+    const silent = lastHandle.current === handle && lastLive.current !== live;
+    lastHandle.current = handle;
+    lastLive.current = live;
     async function load() {
-      setLoading(true);
-      setNotFound(false);
-      setMessage(null);
-      setSlide(0);
+      if (!silent) {
+        setLoading(true);
+        setNotFound(false);
+        setMessage(null);
+        setSlide(0);
+      }
       try {
         const res = await apiClient.get(`/products/${handle}`);
         if (cancelled) return;
@@ -57,11 +68,19 @@ export const ProductDetailPage: React.FC = () => {
         }
         setProduct(p);
         setRelated(res.data.relatedProducts || []);
+        if (silent) {
+          // keep the selected size if it still exists and is in stock
+          setVariantId((cur) => (cur && p.variants.some((v) => v.id === cur && v.stockQuantity > 0) ? cur : null));
+          setColor((cur) => (cur && p.variants.some((v) => v.color === cur) ? cur : p.variants[0]?.color || null));
+          document.title = `${p.name} | LEVIX`;
+          return;
+        }
         const first = p.variants.find((v) => v.stockQuantity > 0) || p.variants[0];
         setColor(first?.color || null);
         setVariantId(first && first.stockQuantity > 0 ? first.id : null);
         document.title = `${p.name} | LEVIX`;
       } catch {
+        if (silent) return;
         if (!cancelled) {
           setNotFound(true);
           setProduct(null);
@@ -71,11 +90,11 @@ export const ProductDetailPage: React.FC = () => {
       }
     }
     load();
-    window.scrollTo(0, 0);
+    if (!silent) window.scrollTo(0, 0);
     return () => {
       cancelled = true;
     };
-  }, [handle]);
+  }, [handle, live]);
 
   if (!loading && (notFound || !product)) {
     return (

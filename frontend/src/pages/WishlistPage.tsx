@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { useWishlistStore } from '../store/wishlistStore';
 import { Product } from '../types';
 import { ProductGrid, ProductGridSkeleton } from '../components/ProductGrid';
@@ -14,6 +15,7 @@ export const WishlistPage: React.FC = () => {
     document.title = 'Saved items | LEVIX';
   }, []);
 
+  const live = useLiveRefresh();
   useEffect(() => {
     let cancelled = false;
     if (!ids.length) {
@@ -29,7 +31,7 @@ export const WishlistPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [ids.join(',')]);
+  }, [ids.join(','), live]);
 
   return (
     <div className="pt-4 pb-12 px-2 md:px-[10px] min-h-[70vh]">

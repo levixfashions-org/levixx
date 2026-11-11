@@ -76,7 +76,7 @@ export async function getProducts(req: Request, res: Response) {
     prisma.product.findMany({ where, orderBy: buildOrderBy(sort), skip, take, include: productListInclude })
   ]);
 
-  res.set('Cache-Control', 'public, max-age=30');
+  res.set('Cache-Control', 'no-cache');
   res.json({
     products: products.map(serializeProduct),
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
@@ -108,7 +108,7 @@ export async function getProductBySlug(req: Request, res: Response) {
     include: productListInclude
   });
 
-  res.set('Cache-Control', 'public, max-age=30');
+  res.set('Cache-Control', 'no-cache');
   res.json({ product: serializeProduct(product), relatedProducts: relatedProducts.map(serializeProduct) });
 }
 
@@ -117,7 +117,7 @@ export async function getCategories(_req: Request, res: Response) {
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     include: { _count: { select: { products: { where: { isActive: true } } } } }
   });
-  res.set('Cache-Control', 'public, max-age=60');
+  res.set('Cache-Control', 'no-cache');
   res.json({ categories });
 }
 
@@ -129,7 +129,7 @@ export async function getFilterOptions(_req: Request, res: Response) {
     prisma.product.aggregate({ where: { isActive: true }, _min: { basePrice: true }, _max: { basePrice: true } })
   ]);
   const order = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
-  res.set('Cache-Control', 'public, max-age=60');
+  res.set('Cache-Control', 'no-cache');
   res.json({
     sizes: variants.map((v) => v.size).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)),
     colors: colors.map((c) => c.colorGroup).filter(Boolean),

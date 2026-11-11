@@ -7,6 +7,7 @@ import fs from 'fs';
 import { env } from './config/env.js';
 import { prisma } from './config/db.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
+import { liveStream, liveVersion, broadcastChange } from './services/live.js';
 import { errorHandler, notFoundApi } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
@@ -85,7 +86,7 @@ app.use(
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
   })
 );
-app.use(compression());
+app.use(compression({ filter: (req, res) => !req.path.startsWith('/api/live') && compression.filter(req, res) }));
 
 const allowedOrigins = new Set(
   [env.FRONTEND_URL, 'https://thelevix.shop', 'https://www.thelevix.shop', 'http://localhost:5173', 'http://localhost:4173'].filter(
@@ -154,12 +155,19 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
+app.get('/api/live', liveStream);
+app.get('/api/live/version', liveVersion);
 app.use('/api', apiRateLimiter);
 app.use('/api/store', storeRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/collections', collectionRoutes);
 app.use('/api/cart', cartRoutes);
+// Orders and payments change stock levels — push that live too (so sold-out sizes update instantly).
+app.use(['/api/orders', '/api/payments'], (req, res, next) => {
+  if (req.method === 'POST') res.on('finish', () => res.statusCode < 400 && broadcastChange('stock'));
+  next();
+});
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/wishlist', wishlistRoutes);

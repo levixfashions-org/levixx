@@ -103,6 +103,10 @@ function toPublic(row: any): PublicStoreSettings {
   return out as PublicStoreSettings;
 }
 
+export function invalidateSettingsCache() {
+  cache = null;
+}
+
 export async function getSettings(): Promise<PublicStoreSettings> {
   if (cache && cache.expires > Date.now()) return cache.value;
   const row = await prisma.storeSetting.upsert({
