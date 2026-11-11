@@ -234,7 +234,7 @@ export const CheckoutPage: React.FC = () => {
       <div className="border-b border-black/10 pb-6 mb-8">
         <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black">Secure Checkout</h1>
         <p className="text-xs text-neutral-600 mt-1">
-          Pay safely with UPI, cards, net banking or wallets via Razorpay.
+          Pay safely with UPI, cards, net banking or wallets via Razorpay. Prepaid orders only — Cash on Delivery is not available.
           {!user && (
             <>
               {' '}
