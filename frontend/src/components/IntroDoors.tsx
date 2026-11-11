@@ -32,7 +32,7 @@ export const IntroDoors: React.FC = () => {
   const finish = () => {
     timers.current.forEach(clearTimeout);
     setPhase('leave');
-    timers.current = [window.setTimeout(() => setPhase('done'), 900)];
+    timers.current = [window.setTimeout(() => setPhase('done'), 600)];
   };
 
   useEffect(() => {
@@ -45,10 +45,10 @@ export const IntroDoors: React.FC = () => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const at = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
-    at(1300, () => setPhase('open'));
-    at(1900, () => setPhase('reveal'));
-    at(5000, () => setPhase('leave'));
-    at(5900, () => setPhase('done'));
+    at(450, () => setPhase('open'));
+    at(750, () => setPhase('reveal'));
+    at(2700, () => setPhase('leave'));
+    at(3300, () => setPhase('done'));
     const onKey = () => finish();
     window.addEventListener('keydown', onKey);
     return () => {
@@ -83,7 +83,7 @@ export const IntroDoors: React.FC = () => {
         <div className="lx-intro-copy">
           <h1 className="lx-intro-word" aria-label="LEVIX">
             {'LEVIX'.split('').map((c, i) => (
-              <span key={i} style={{ transitionDelay: `${i * 140}ms` }}>
+              <span key={i} style={{ transitionDelay: `${i * 70}ms` }}>
                 {c}
               </span>
             ))}
