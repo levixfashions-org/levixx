@@ -456,9 +456,32 @@ async function setDefaultAddress(req, res) {
   ]);
   res.json({ success: true });
 }
+async function updateAddress(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const existing = await prisma.address.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!existing) throw new AppError("Address not found", 404);
+  const data2 = addressSchema.parse(req.body);
+  const address = await prisma.$transaction(async (tx) => {
+    if (data2.isDefault) await tx.address.updateMany({ where: { userId: req.user.id }, data: { isDefault: false } });
+    return tx.address.update({
+      where: { id: existing.id },
+      data: { ...data2, line2: data2.line2 ?? null, isDefault: data2.isDefault || existing.isDefault }
+    });
+  });
+  res.json({ address });
+}
 async function deleteAddress(req, res) {
   if (!req.user) throw new AppError("Please sign in to continue.", 401);
-  await prisma.address.deleteMany({ where: { id: req.params.id, userId: req.user.id } });
+  const existing = await prisma.address.findFirst({ where: { id: req.params.id, userId: req.user.id } });
+  if (!existing) {
+    res.json({ success: true });
+    return;
+  }
+  await prisma.address.delete({ where: { id: existing.id } });
+  if (existing.isDefault) {
+    const next = await prisma.address.findFirst({ where: { userId: req.user.id }, orderBy: { createdAt: "desc" } });
+    if (next) await prisma.address.update({ where: { id: next.id }, data: { isDefault: true } });
+  }
   res.json({ success: true });
 }
 
@@ -469,6 +492,7 @@ router.use(verifyFirebaseToken);
 router.get("/profile", asyncHandler(getProfile));
 router.put("/profile", asyncHandler(updateProfile));
 router.post("/addresses", asyncHandler(addAddress));
+router.put("/addresses/:id", asyncHandler(updateAddress));
 router.patch("/addresses/:id/default", asyncHandler(setDefaultAddress));
 router.delete("/addresses/:id", asyncHandler(deleteAddress));
 var authRoutes_default = router;
