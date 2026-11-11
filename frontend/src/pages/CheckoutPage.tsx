@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowRight, Tag, X } from 'lucide-react';
+import { Lock, ArrowRight, Tag, X, Plus } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
+import { Address } from '../types';
+import { SavedAddress, loadDeviceAddresses, upsertDeviceAddress, removeDeviceAddress, setDeviceDefault } from '../services/deviceAddresses';
+
+const CONTACT_KEY = 'levix_checkout_contact';
+const MAX_ADDRESSES = 10;
 import { useSettingsStore } from '../store/settingsStore';
 
 declare global {
@@ -38,7 +43,7 @@ function loadRazorpay(): Promise<boolean> {
 
 export const CheckoutPage: React.FC = () => {
   const { cart, fetchCart } = useCartStore();
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
@@ -51,6 +56,17 @@ export const CheckoutPage: React.FC = () => {
   const [postalCode, setPostalCode] = useState('');
   const [saveAddress, setSaveAddress] = useState(true);
   const [prefilled, setPrefilled] = useState(false);
+
+  // Saved addresses: account addresses when signed in, otherwise addresses remembered on this device.
+  const [deviceAddrs, setDeviceAddrs] = useState<SavedAddress[]>(() => loadDeviceAddresses());
+  const [addrMode, setAddrMode] = useState<'list' | 'form'>('form');
+  const [selectedAddrId, setSelectedAddrId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [addrBusy, setAddrBusy] = useState(false);
+  const [addrError, setAddrError] = useState<string | null>(null);
+  const savedList: SavedAddress[] = user
+    ? ((profile?.addresses || []).filter((a) => a.id) as SavedAddress[])
+    : deviceAddrs;
 
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPaise: number; description: string } | null>(null);
@@ -69,29 +85,169 @@ export const CheckoutPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Prefill from the signed-in account / default address.
+  const fillFrom = (a: Address) => {
+    setFullName(a.fullName);
+    setPhone(a.phone);
+    setLine1(a.line1);
+    setLine2(a.line2 || '');
+    setCity(a.city);
+    setState(a.state);
+    setPostalCode(a.postalCode);
+  };
+
+  // Prefill contact details and pick the default saved address.
   useEffect(() => {
-    if (prefilled) return;
+    if (prefilled || authLoading) return;
+    if (user && !profile) return; // wait for the account to load
     if (user) {
       setEmail((v) => v || user.email || '');
       setFullName((v) => v || user.displayName || '');
-    }
-    if (profile) {
-      const addr = profile.addresses?.find((a) => a.isDefault) || profile.addresses?.[0];
-      if (addr) {
-        setFullName(addr.fullName);
-        setPhone(addr.phone);
-        setLine1(addr.line1);
-        setLine2(addr.line2 || '');
-        setCity(addr.city);
-        setState(addr.state);
-        setPostalCode(addr.postalCode);
-      } else if (profile.phone) {
-        setPhone(profile.phone);
+    } else {
+      try {
+        const c = JSON.parse(localStorage.getItem(CONTACT_KEY) || '{}');
+        if (c.email) setEmail((v) => v || c.email);
+      } catch {
+        /* ignore */
       }
-      setPrefilled(true);
     }
-  }, [user, profile, prefilled]);
+    const list = user ? profile?.addresses || [] : deviceAddrs;
+    const addr = list.find((a) => a.isDefault) || list[0];
+    if (addr) {
+      fillFrom(addr);
+      setSelectedAddrId(addr.id || null);
+      setAddrMode('list');
+    } else if (profile?.phone) {
+      setPhone(profile.phone);
+    }
+    setPrefilled(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, profile, prefilled, authLoading]);
+
+  const currentAddress = (): Address => ({
+    fullName: fullName.trim(),
+    line1: line1.trim(),
+    line2: line2.trim() || undefined,
+    city: city.trim(),
+    state,
+    postalCode: postalCode.trim(),
+    country: 'India',
+    phone: phone.replace(/[\s-]/g, '')
+  });
+
+  const addressProblem = (): string | null => {
+    if (fullName.trim().length < 2) return 'Please enter the recipient’s full name.';
+    if (!/^(\+91)?[6-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) return 'Please enter a valid 10-digit Indian mobile number.';
+    if (line1.trim().length < 3) return 'Please enter the house / street / area.';
+    if (city.trim().length < 2) return 'Please enter the city.';
+    if (!state) return 'Please select your state.';
+    if (!/^\d{6}$/.test(postalCode.trim())) return 'Please enter a valid 6-digit PIN code.';
+    return null;
+  };
+
+  const chooseAddress = (a: SavedAddress) => {
+    setSelectedAddrId(a.id);
+    fillFrom(a);
+    setAddrError(null);
+  };
+
+  const startAdd = () => {
+    setEditingId(null);
+    setSelectedAddrId(null);
+    setLine1('');
+    setLine2('');
+    setCity('');
+    setState('');
+    setPostalCode('');
+    if (user) setFullName(user.displayName || fullName);
+    setSaveAddress(true);
+    setAddrError(null);
+    setAddrMode('form');
+  };
+
+  const startEdit = (a: SavedAddress) => {
+    setEditingId(a.id);
+    setSelectedAddrId(a.id);
+    fillFrom(a);
+    setSaveAddress(true);
+    setAddrError(null);
+    setAddrMode('form');
+  };
+
+  const cancelForm = () => {
+    setEditingId(null);
+    setAddrError(null);
+    const back = savedList.find((a) => a.id === selectedAddrId) || savedList.find((a) => a.isDefault) || savedList[0];
+    if (back) chooseAddress(back);
+    setAddrMode('list');
+  };
+
+  /** "Save address" button in the form: stores it right away and selects it. */
+  const saveAddressNow = async () => {
+    const problem = addressProblem();
+    if (problem) return setAddrError(problem);
+    setAddrBusy(true);
+    setAddrError(null);
+    try {
+      const addr = currentAddress();
+      let id: string;
+      if (user) {
+        const res = editingId
+          ? await apiClient.put(`/auth/addresses/${editingId}`, addr)
+          : await apiClient.post('/auth/addresses', addr);
+        id = res.data.address.id;
+        await refreshProfile();
+      } else {
+        const r = upsertDeviceAddress(addr, editingId);
+        setDeviceAddrs(r.list);
+        id = r.id;
+      }
+      setSelectedAddrId(id);
+      setEditingId(null);
+      setAddrMode('list');
+    } catch (err: any) {
+      setAddrError(err.message || 'Could not save this address. Please try again.');
+    } finally {
+      setAddrBusy(false);
+    }
+  };
+
+  const removeAddress = async (a: SavedAddress) => {
+    if (!window.confirm(`Remove the address for ${a.fullName} (${a.postalCode})?`)) return;
+    setAddrError(null);
+    try {
+      let list: SavedAddress[];
+      if (user) {
+        await apiClient.delete(`/auth/addresses/${a.id}`);
+        await refreshProfile();
+        list = savedList.filter((x) => x.id !== a.id);
+      } else {
+        list = removeDeviceAddress(a.id);
+        setDeviceAddrs(list);
+      }
+      if (selectedAddrId === a.id) {
+        const next = list.find((x) => x.isDefault) || list[0];
+        if (next) chooseAddress(next);
+        else startAdd();
+      }
+      if (!list.length) setAddrMode('form');
+    } catch (err: any) {
+      setAddrError(err.message || 'Could not remove this address.');
+    }
+  };
+
+  const makeDefault = async (a: SavedAddress) => {
+    setAddrError(null);
+    try {
+      if (user) {
+        await apiClient.patch(`/auth/addresses/${a.id}/default`);
+        await refreshProfile();
+      } else {
+        setDeviceAddrs(setDeviceDefault(a.id));
+      }
+    } catch (err: any) {
+      setAddrError(err.message || 'Could not update the default address.');
+    }
+  };
 
   // Re-validate the coupon when the bag changes.
   useEffect(() => {
@@ -150,9 +306,16 @@ export const CheckoutPage: React.FC = () => {
     setErrorMsg(null);
 
     const cleanPhone = phone.replace(/[\s-]/g, '');
-    if (!/^(\+91)?[6-9]\d{9}$/.test(cleanPhone)) return setErrorMsg('Please enter a valid 10-digit Indian mobile number.');
-    if (!/^\d{6}$/.test(postalCode.trim())) return setErrorMsg('Please enter a valid 6-digit PIN code.');
-    if (!state) return setErrorMsg('Please select your state.');
+    if (addrMode === 'list' && !selectedAddrId) return setErrorMsg('Please choose a delivery address, or add a new one.');
+    const problem = addressProblem();
+    if (problem) {
+      if (addrMode === 'list' && selectedAddrId) {
+        const bad = savedList.find((a) => a.id === selectedAddrId);
+        if (bad) startEdit(bad);
+        return setErrorMsg(`${problem} Please update the selected address.`);
+      }
+      return setErrorMsg(problem);
+    }
     if (!agreed) return setErrorMsg('Please accept the Terms & Conditions and the Returns policy to continue.');
 
     setLoading(true);
@@ -178,8 +341,24 @@ export const CheckoutPage: React.FC = () => {
           phone: cleanPhone
         },
         couponCode: appliedCoupon?.code || undefined,
-        saveAddress: Boolean(user) && saveAddress
+        // New address typed at checkout → saved to the account (the server skips duplicates).
+        saveAddress: Boolean(user) && addrMode === 'form' && !editingId && saveAddress
       });
+
+      // Remember the address for next time.
+      const typed = addrMode === 'form' && saveAddress;
+      if (user && typed && editingId) {
+        apiClient.put(`/auth/addresses/${editingId}`, currentAddress()).catch(() => undefined);
+      }
+      if (user && typed) setTimeout(() => refreshProfile().catch(() => undefined), 300);
+      if (!user) {
+        if (typed) setDeviceAddrs(upsertDeviceAddress(currentAddress(), editingId).list);
+        try {
+          localStorage.setItem(CONTACT_KEY, JSON.stringify({ email: email.trim() }));
+        } catch {
+          /* ignore */
+        }
+      }
 
       const { order, accessKey, razorpayOrderId, amountPaise, keyId } = orderRes.data;
       try {
@@ -291,8 +470,73 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            <h3 className="font-bold uppercase tracking-wider text-sm text-black">2. Shipping Address</h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-bold uppercase tracking-wider text-sm text-black">2. Delivery Address</h3>
+              {addrMode === 'list' && savedList.length < MAX_ADDRESSES && (
+                <button type="button" onClick={startAdd} className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-black hover:underline">
+                  <Plus className="w-4 h-4" /> Add new
+                </button>
+              )}
+            </div>
+            {addrError && <p role="alert" className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-3 py-2">{addrError}</p>}
+
+            {addrMode === 'list' ? (
+              <div role="radiogroup" aria-label="Saved delivery addresses" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {savedList.map((a) => {
+                  const on = a.id === selectedAddrId;
+                  return (
+                    <div
+                      key={a.id}
+                      role="radio"
+                      aria-checked={on}
+                      tabIndex={0}
+                      onClick={() => chooseAddress(a)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          chooseAddress(a);
+                        }
+                      }}
+                      className={`p-4 bg-white border cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${on ? 'border-black ring-1 ring-black' : 'border-black/20 hover:border-black/50'}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${on ? 'border-black bg-black shadow-[inset_0_0_0_3px_#fff]' : 'border-black/30'}`} />
+                        <div className="min-w-0 flex-1 text-xs text-neutral-700 space-y-0.5 break-words">
+                          <p className="font-bold text-black text-[13px] flex flex-wrap items-center gap-2">
+                            {a.fullName}
+                            {a.isDefault && <span className="text-[9px] uppercase tracking-wider bg-black text-white px-1.5 py-0.5">Default</span>}
+                          </p>
+                          <p>{a.line1}{a.line2 ? `, ${a.line2}` : ''}</p>
+                          <p>{a.city}, {a.state} – {a.postalCode}</p>
+                          <p className="font-mono">{a.phone}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 pl-7 text-[11px] font-semibold">
+                        <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(a); }} className="underline text-black">Edit</button>
+                        {!a.isDefault && (
+                          <button type="button" onClick={(e) => { e.stopPropagation(); makeDefault(a); }} className="underline text-neutral-600 hover:text-black">Set as default</button>
+                        )}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); removeAddress(a); }} className="underline text-red-600">Remove</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {savedList.length < MAX_ADDRESSES && (
+                  <button
+                    type="button"
+                    onClick={startAdd}
+                    className="flex flex-col items-center justify-center gap-1.5 p-4 min-h-[132px] border-2 border-dashed border-black/25 hover:border-black bg-white/60 text-[11px] font-bold uppercase tracking-wider text-neutral-600 hover:text-black transition-colors"
+                  >
+                    <Plus className="w-7 h-7" strokeWidth={1.5} />
+                    Add new address
+                  </button>
+                )}
+              </div>
+            ) : (
             <div className="space-y-4">
+              {savedList.length > 0 && (
+                <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">{editingId ? 'Edit address' : 'New address'}</p>
+              )}
               <div>
                 <label htmlFor="co-name" className={labelClass}>Full Recipient Name *</label>
                 <input id="co-name" type="text" required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" className={inputClass} />
@@ -324,13 +568,29 @@ export const CheckoutPage: React.FC = () => {
                   <input id="co-pin" type="text" required inputMode="numeric" maxLength={6} autoComplete="postal-code" value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))} placeholder="110001" className={`${inputClass} font-mono`} />
                 </div>
               </div>
-              {user && (
-                <label className="flex items-center space-x-2 text-xs text-neutral-700 cursor-pointer">
-                  <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} className="accent-black" />
-                  <span>Save this address to my account</span>
-                </label>
+              <label className="flex items-center space-x-2 text-xs text-neutral-700 cursor-pointer">
+                <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} className="accent-black" />
+                <span>{user ? 'Save this address to my account for next time' : 'Remember this address on this device for next time'}</span>
+              </label>
+              {(savedList.length > 0 || editingId) && (
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" disabled={addrBusy} onClick={saveAddressNow} className="px-5 py-2.5 bg-black text-white text-[11px] font-bold uppercase tracking-wider disabled:opacity-50">
+                    {addrBusy ? 'Saving…' : editingId ? 'Save changes' : 'Save address'}
+                  </button>
+                  {savedList.length > 0 && (
+                    <button type="button" onClick={cancelForm} className="px-5 py-2.5 border border-black/30 text-[11px] font-bold uppercase tracking-wider text-black hover:border-black">
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              )}
+              {!user && (
+                <p className="text-[10.5px] text-neutral-500">
+                  <Link to="/login" state={{ from: '/checkout' }} className="underline">Sign in</Link> to keep your addresses on every device.
+                </p>
               )}
             </div>
+            )}
           </div>
 
           {storeSettings.codEnabled && (
