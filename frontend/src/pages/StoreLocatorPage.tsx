@@ -1,7 +1,10 @@
 import React from 'react';
 import { Mail, Globe, Shield, Clock } from 'lucide-react';
+import { useSettingsStore } from '../store/settingsStore';
 
 export const StoreLocatorPage: React.FC = () => {
+  const settings = useSettingsStore((st) => st.settings);
+  const freeAll = !(settings.freeShippingThreshold > 0 && settings.shippingFee > 0);
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-12 sm:py-16 space-y-12">
       <div className="border-b border-black/10 pb-6 max-w-2xl">
@@ -23,7 +26,7 @@ export const StoreLocatorPage: React.FC = () => {
             Pan-India Delivery
           </h3>
           <p className="text-xs text-neutral-600 leading-relaxed">
-            Every order is packed and dispatched within 1–3 business days and usually delivered within 3–7 business days across India.
+            {freeAll ? 'Free delivery on every order. ' : `Free delivery on orders above RS. ${settings.freeShippingThreshold.toLocaleString('en-IN')}. `}Each order is packed and dispatched within 1–3 business days and usually delivered within 3–7 business days across India.
           </p>
         </div>
 

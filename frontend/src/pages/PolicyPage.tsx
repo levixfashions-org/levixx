@@ -56,6 +56,11 @@ export const PolicyPage: React.FC = () => {
 
   const free = settings.freeShippingThreshold;
   const fee = settings.shippingFee;
+  /** True when every order ships free (no minimum, or no fee set). Follows Admin → Store Settings. */
+  const freeAll = !(free > 0 && fee > 0);
+  const deliverySentence = freeAll
+    ? 'Delivery is free on every order across India, with no minimum order value.'
+    : `Delivery is free on orders of ₹${free.toLocaleString('en-IN')} or more; orders below this carry a delivery charge of ₹${fee.toLocaleString('en-IN')}.`;
   const email = settings.supportEmail || 'levixfashions@gmail.com';
   const phone = settings.supportPhone?.trim();
   const brand = 'LEVIX';
@@ -169,7 +174,7 @@ export const PolicyPage: React.FC = () => {
             <Section title="4. Prices & payment">
               <List
                 items={[
-                  'All prices are in Indian Rupees (₹) and include applicable taxes (GST). Shipping charges, if any, are shown at checkout before you pay.',
+                  `All prices are in Indian Rupees (₹) and include applicable taxes (GST). ${deliverySentence} The final amount, including any charges, is shown at checkout before you pay.`,
                   `Online payments are processed securely by Razorpay (UPI, debit/credit cards, net banking and wallets). ${codSentence}`,
                   'If a product is listed at an obviously wrong price because of a technical or typing error, we may cancel the order and refund the full amount.'
                 ]}
@@ -185,7 +190,7 @@ export const PolicyPage: React.FC = () => {
             </Section>
             <Section title="6. Shipping, returns & cancellation">
               <p>
-                Delivery timelines and charges are explained in our <Link className="underline" to="/policies/shipping-policy">Shipping policy</Link>.
+                {deliverySentence} Delivery timelines are explained in our <Link className="underline" to="/policies/shipping-policy">Shipping policy</Link>.
                 <span className="font-semibold text-black"> We accept returns only for damaged, defective or wrong items</span> reported within 48 hours of delivery — see the{' '}
                 <Link className="underline" to="/policies/refund-policy">Returns, Refunds & Cancellation policy</Link>.
               </p>
@@ -286,7 +291,7 @@ export const PolicyPage: React.FC = () => {
                 items={[
                   'Approved refunds for online payments go back to the original payment method through Razorpay. For Cash on Delivery orders, we refund to a UPI ID or bank account you share with us. We do not refund in cash.',
                   'We start the refund within 2 business days of approval. Your bank or UPI app usually shows it within 5–7 business days.',
-                  'For damaged, defective or wrong items, we refund the full amount including any shipping charge you paid.',
+                  freeAll ? 'For damaged, defective or wrong items, we refund the full amount you paid for the order.' : 'For damaged, defective or wrong items, we refund the full amount including any delivery charge you paid.',
                   'If money was deducted but your order was not confirmed (a failed payment), the amount is reversed automatically by Razorpay / your bank, usually within 5–7 business days.'
                 ]}
               />
@@ -319,12 +324,10 @@ export const PolicyPage: React.FC = () => {
             <Section title="1. Where we ship">
               <p>We ship to all serviceable pin codes across India. We do not ship internationally at the moment.</p>
             </Section>
-            <Section title="2. Shipping charges">
+            <Section title="2. Delivery charges">
               <p>
-                {free > 0 && fee > 0
-                  ? `Shipping is free on orders of ₹${free.toLocaleString('en-IN')} or more. Orders below this amount carry a delivery charge of ₹${fee.toLocaleString('en-IN')}.`
-                  : 'Delivery is free on every order across India, with no minimum order value.'}{' '}
-                Any delivery charge is always shown at checkout before you pay.
+                {deliverySentence}{' '}
+                {freeAll ? 'You will never be charged for standard delivery at checkout.' : 'Any delivery charge is always shown at checkout before you pay.'}
               </p>
             </Section>
             <Section title="3. Processing time">
@@ -343,7 +346,7 @@ export const PolicyPage: React.FC = () => {
               <List
                 items={[
                   'Please make sure your address, pin code and phone number are correct — we cannot change the address once the order is dispatched.',
-                  'If a parcel comes back to us because the address was wrong or nobody was available after the courier\'s attempts, we will contact you. Re-shipping may carry a delivery charge.'
+                  'If a parcel comes back to us because the address was wrong or nobody was available after the courier\'s attempts, we will contact you. Re-shipping such a parcel may carry a delivery charge, even when delivery is normally free.'
                 ]}
               />
             </Section>
@@ -449,6 +452,7 @@ export const PolicyPage: React.FC = () => {
                   ['Can I return or exchange for a different size?', 'No. We only accept returns for damaged, defective or wrong items reported within 48 hours of delivery. Please check the size guide on the product page before ordering.'],
                   ['What should I do if my T-shirt arrives damaged?', 'Contact us within 48 hours of delivery with your order number, photos and an unboxing video. We will send a free replacement, or a full refund if the item is out of stock.'],
                   ['Do you offer Cash on Delivery (COD)?', cod ? `Yes. ${codSentence}` : 'No. All orders are prepaid securely through Razorpay — UPI, cards, net banking and wallets.'],
+                  ['Do you charge for delivery?', freeAll ? 'No. Delivery is free on every order across India — even if you buy just one T-shirt.' : deliverySentence],
                   ['How long does delivery take?', 'Orders are dispatched within 1–3 business days and usually delivered within 3–7 business days after that.'],
                   ['Can I cancel my order?', 'Yes, before it is dispatched — contact us with your order number for a full refund. Dispatched orders cannot be cancelled.'],
                   ['When will I get my refund?', 'We start approved refunds within 2 business days. Your bank or UPI app usually shows the money within 5–7 business days.'],
