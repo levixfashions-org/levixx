@@ -256,6 +256,32 @@ export const AdminSettingsPage: React.FC = () => {
               </h3>
             </div>
 
+            <div className="flex items-start justify-between gap-4 border border-black/10 bg-neutral-50 p-4">
+              <div>
+                <p className="font-bold uppercase tracking-wider text-xs text-black">Free delivery on all orders</p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  On = every order ships free, even a single T-shirt. Turn it off to charge a delivery fee below a minimum order value. Remember to save.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider cursor-pointer shrink-0">
+                <input
+                  id="freeDeliveryAll"
+                  type="checkbox"
+                  checked={settings.freeShippingThreshold <= 0 || settings.shippingFee <= 0}
+                  onChange={(e) =>
+                    setSettings(
+                      e.target.checked
+                        ? { ...settings, freeShippingThreshold: 0 }
+                        : { ...settings, freeShippingThreshold: 1999, shippingFee: settings.shippingFee > 0 ? settings.shippingFee : 99 }
+                    )
+                  }
+                  className="accent-black w-5 h-5"
+                />
+                {settings.freeShippingThreshold <= 0 || settings.shippingFee <= 0 ? 'On' : 'Off'}
+              </label>
+            </div>
+
+            {settings.freeShippingThreshold > 0 && settings.shippingFee > 0 && (<>
             <div className="max-w-xs text-xs">
               <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
                 Free Domestic Shipping Threshold (INR)
@@ -292,6 +318,10 @@ export const AdminSettingsPage: React.FC = () => {
                 />
               </div>
             </div>
+            </>)}
+            <p className="text-[10.5px] text-neutral-500">
+              Tip: also update the top announcement text and the product page "Shipping" tab below if you change this. Policy pages, cart and checkout update automatically.
+            </p>
           </div>
 
           {/* Cash on Delivery */}

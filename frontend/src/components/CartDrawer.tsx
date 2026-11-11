@@ -106,6 +106,13 @@ export const CartDrawer: React.FC = () => {
           </div>
         ) : (
           <>
+            {threshold <= 0 && cart!.shippingPaise === 0 && (
+              <div className="px-5 pb-3">
+                <p className="text-[10.5px] text-neutral-700">
+                  <b>Free delivery</b> on this order
+                </p>
+              </div>
+            )}
             {threshold > 0 && (
               <div className="px-5 pb-3">
                 <p className="text-[10.5px] text-neutral-700 mb-1.5">

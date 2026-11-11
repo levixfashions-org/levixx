@@ -321,10 +321,10 @@ export const PolicyPage: React.FC = () => {
             </Section>
             <Section title="2. Shipping charges">
               <p>
-                {free > 0
+                {free > 0 && fee > 0
                   ? `Shipping is free on orders of ₹${free.toLocaleString('en-IN')} or more. Orders below this amount carry a delivery charge of ₹${fee.toLocaleString('en-IN')}.`
-                  : 'Shipping is free on all orders.'}{' '}
-                The exact amount is always shown at checkout before you pay.
+                  : 'Delivery is free on every order across India, with no minimum order value.'}{' '}
+                Any delivery charge is always shown at checkout before you pay.
               </p>
             </Section>
             <Section title="3. Processing time">

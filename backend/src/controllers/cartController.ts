@@ -111,7 +111,7 @@ export async function formatCart(cart: Awaited<ReturnType<typeof resolveCart>>) 
     });
 
   const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
-  const threshold = settings.freeShippingThreshold * 100;
+  const threshold = settings.shippingFee > 0 ? Math.max(0, settings.freeShippingThreshold) * 100 : 0;
   return {
     cartId: cart.id,
     items,

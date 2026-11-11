@@ -62,13 +62,13 @@ export interface StoreSettings {
 }
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
-  announcementText: 'FREE DOMESTIC SHIPPING ON ORDERS ABOVE RS. 1,999 • THE 1ST DROP IS LIVE • SECURE PREPAID CHECKOUT • ',
+  announcementText: 'FREE DELIVERY ON ALL ORDERS • THE 1ST DROP IS LIVE • SECURE CHECKOUT • ',
   heroHeadline: 'STREETWEAR ARCHITECTURE',
   heroSubtitle: 'Heavyweight Custom-Milled Silhouettes & Limited Private Drops.',
   supportEmail: 'levixfashions@gmail.com',
   supportPhone: '',
   instagramHandle: 'thelevix.shop',
-  freeShippingThreshold: 1999,
+  freeShippingThreshold: 0,
   shippingFee: 150,
   announcementEnabled: false,
   heroDesktopImage: '',
