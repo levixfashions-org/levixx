@@ -10,6 +10,7 @@ import { SearchDrawer } from './components/SearchDrawer';
 import { MobileNavDrawer } from './components/MobileNavDrawer';
 import { SizeGuideModal } from './components/SizeGuideModal';
 import { GlassyPwaNotification } from './components/GlassyPwaNotification';
+import { IntroDoors } from './components/IntroDoors';
 import { AdminGuard } from './components/admin/AdminGuard';
 import { useSettingsStore } from './store/settingsStore';
 import { HomePage } from './pages/HomePage';
@@ -79,6 +80,7 @@ export const App: React.FC = () => {
       <PwaProvider>
         <BrowserRouter>
           <ScrollToTop />
+          <IntroDoors />
           <div className="flex flex-col min-h-screen bg-[#EFEFEF] text-black">
             <AnnouncementBar />
             <Header />

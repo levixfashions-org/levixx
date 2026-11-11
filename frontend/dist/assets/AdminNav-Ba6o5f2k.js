@@ -1,0 +1,26 @@
+import{i as a,l as h,j as e}from"./index-Df_rD9wU.js";import{u as d,c as p,L as s}from"./react-BEDKma9L.js";import{P as m}from"./package-Dr-xy1qo.js";import{T as y}from"./tag-CmoXHGt3.js";import{L as u}from"./log-out-DEZdWeMy.js";/**
+ * @license lucide-react v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const k=a("ExternalLink",[["path",{d:"M15 3h6v6",key:"1q9fwt"}],["path",{d:"M10 14 21 3",key:"gplh6r"}],["path",{d:"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",key:"a6xqqp"}]]);/**
+ * @license lucide-react v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const g=a("Layers",[["path",{d:"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z",key:"zw3jo"}],["path",{d:"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12",key:"1wduqc"}],["path",{d:"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17",key:"kqbvx6"}]]);/**
+ * @license lucide-react v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const w=a("LayoutDashboard",[["rect",{width:"7",height:"9",x:"3",y:"3",rx:"1",key:"10lvy0"}],["rect",{width:"7",height:"5",x:"14",y:"3",rx:"1",key:"16une8"}],["rect",{width:"7",height:"9",x:"14",y:"12",rx:"1",key:"1hutg5"}],["rect",{width:"7",height:"5",x:"3",y:"16",rx:"1",key:"ldoo1y"}]]);/**
+ * @license lucide-react v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const f=a("ShoppingBag",[["path",{d:"M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z",key:"hou9p0"}],["path",{d:"M3 6h18",key:"d0wm0j"}],["path",{d:"M16 10a4 4 0 0 1-8 0",key:"1ltviw"}]]);/**
+ * @license lucide-react v0.468.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const b=a("SlidersVertical",[["line",{x1:"4",x2:"4",y1:"21",y2:"14",key:"1p332r"}],["line",{x1:"4",x2:"4",y1:"10",y2:"3",key:"gb41h5"}],["line",{x1:"12",x2:"12",y1:"21",y2:"12",key:"hf2csr"}],["line",{x1:"12",x2:"12",y1:"8",y2:"3",key:"1kfi7u"}],["line",{x1:"20",x2:"20",y1:"21",y2:"16",key:"1lhrwl"}],["line",{x1:"20",x2:"20",y1:"12",y2:"3",key:"16vvfq"}],["line",{x1:"2",x2:"6",y1:"14",y2:"14",key:"1uebub"}],["line",{x1:"10",x2:"14",y1:"8",y2:"8",key:"1yglbp"}],["line",{x1:"18",x2:"22",y1:"16",y2:"16",key:"1jxqpz"}]]),A=()=>{const{user:v,logout:i}=h(),o=d(),r=p(),l=[{name:"Dashboard",path:"/admin",icon:w},{name:"Products",path:"/admin/products",icon:m},{name:"Collections & Home",path:"/admin/collections",icon:g},{name:"Customer Orders",path:"/admin/orders",icon:f},{name:"Promo Discounts",path:"/admin/discounts",icon:y},{name:"Store Settings",path:"/admin/settings",icon:b}],x=async()=>{await i(),r("/login")};return e.jsx("div",{className:"bg-black text-white border-b border-white/10 sticky top-16 z-40 shadow-md",children:e.jsx("div",{className:"max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12",children:e.jsxs("div",{className:"flex flex-col md:flex-row md:items-center justify-between py-3 gap-3",children:[e.jsxs("div",{className:"flex items-center space-x-3",children:[e.jsxs(s,{to:"/admin",className:"flex items-center space-x-2",children:[e.jsx("span",{className:"font-display font-black text-2xl uppercase tracking-tighter text-white",children:"LEVIX"}),e.jsx("span",{className:"px-2 py-0.5 bg-[#FF5400] text-white text-[9px] font-mono font-bold uppercase tracking-wider rounded-xs",children:"Admin Console"})]}),e.jsx("span",{className:"hidden sm:inline-block text-neutral-600 text-xs",children:"|"}),e.jsx("span",{className:"hidden sm:inline-block text-neutral-400 text-[11px] font-mono",children:"levixfashions@gmail.com"})]}),e.jsx("nav",{className:"flex items-center space-x-1 sm:space-x-2 overflow-x-auto py-1 scrollbar-none",children:l.map(t=>{const c=t.icon,n=o.pathname===t.path;return e.jsxs(s,{to:t.path,className:`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap rounded-xs ${n?"bg-white text-black shadow-xs":"text-neutral-300 hover:text-white hover:bg-white/10"}`,children:[e.jsx(c,{className:`w-3.5 h-3.5 ${n?"text-[#FF5400]":"text-neutral-400"}`}),e.jsx("span",{children:t.name})]},t.path)})}),e.jsxs("div",{className:"hidden lg:flex items-center space-x-3",children:[e.jsxs(s,{to:"/",target:"_blank",className:"text-xs text-neutral-300 hover:text-white flex items-center space-x-1 font-mono uppercase tracking-wider px-2 py-1 hover:bg-white/5 transition-all",title:"Open Live Storefront in new tab",children:[e.jsx("span",{children:"Live Store"}),e.jsx(k,{className:"w-3.5 h-3.5 text-neutral-400"})]}),e.jsxs("button",{onClick:x,className:"text-xs text-neutral-400 hover:text-red-400 flex items-center space-x-1 font-mono uppercase tracking-wider px-2 py-1 transition-all",title:"Sign Out of Admin Console",children:[e.jsx(u,{className:"w-3.5 h-3.5"}),e.jsx("span",{children:"Exit"})]})]})]})})})};export{A,k as E,g as L,b as S,f as a};
