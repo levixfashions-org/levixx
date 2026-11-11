@@ -33,7 +33,7 @@ export const OrderSuccessPage: React.FC = () => {
         const res = await apiClient.get(`/orders/${orderNumber}`, key ? { key } : undefined);
         setOrder(res.data.order);
         // Payment confirmation can take a few seconds (webhook) — poll briefly.
-        if (res.data.order?.paymentStatus !== 'PAID' && attempts < 6) {
+        if (res.data.order?.paymentStatus !== 'PAID' && res.data.order?.paymentMethod !== 'COD' && attempts < 6) {
           attempts++;
           timer = setTimeout(load, 3000);
         }
@@ -65,7 +65,8 @@ export const OrderSuccessPage: React.FC = () => {
     );
   }
 
-  const paid = order.paymentStatus === 'PAID';
+  const cod = order.paymentMethod === 'COD';
+  const paid = order.paymentStatus === 'PAID' || cod;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16 sm:py-24 text-center space-y-8">
@@ -78,7 +79,9 @@ export const OrderSuccessPage: React.FC = () => {
           {paid ? 'Thank You For Your Order' : 'Almost There'}
         </h1>
         <p className="text-xs text-neutral-600 max-w-md">
-          {paid
+          {cod
+            ? `Your Cash on Delivery order is confirmed. Please keep RS. ${(order.totalPaise / 100).toLocaleString('en-IN')} ready — pay the courier in cash or by UPI when it arrives. We will share courier tracking as soon as it ships.`
+            : paid
             ? 'Your payment was successful. We will pack your order and share courier tracking as soon as it ships.'
             : 'We are waiting for Razorpay to confirm your payment. This usually takes a few seconds — this page will update automatically.'}
         </p>
@@ -118,7 +121,10 @@ export const OrderSuccessPage: React.FC = () => {
             <div className="flex justify-between text-green-700"><span>Discount</span><span className="font-mono">- RS. {(order.discountPaise / 100).toLocaleString('en-IN')}</span></div>
           )}
           <div className="flex justify-between text-neutral-600"><span>Shipping</span><span className="font-mono">{order.shippingPaise === 0 ? 'FREE' : `RS. ${(order.shippingPaise / 100).toLocaleString('en-IN')}`}</span></div>
-          <div className="flex justify-between font-bold text-black text-sm pt-1"><span>Total Paid</span><span className="font-mono">RS. {(order.totalPaise / 100).toLocaleString('en-IN')}</span></div>
+          {cod && (order.codFeePaise || 0) > 0 && (
+            <div className="flex justify-between text-neutral-600"><span>Cash on Delivery fee</span><span className="font-mono">RS. {((order.codFeePaise || 0) / 100).toLocaleString('en-IN')}</span></div>
+          )}
+          <div className="flex justify-between font-bold text-black text-sm pt-1"><span>{cod && order.paymentStatus !== 'PAID' ? 'To pay on delivery' : 'Total Paid'}</span><span className="font-mono">RS. {(order.totalPaise / 100).toLocaleString('en-IN')}</span></div>
         </div>
 
         {order.shippingAddress && (

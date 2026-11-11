@@ -88,6 +88,11 @@ export const OrderHistoryPage: React.FC = () => {
                       <p className="text-xs font-bold uppercase tracking-wider text-black">
                         {order.status}
                       </p>
+                      {order.paymentMethod === 'COD' && (
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#FF5400] mt-0.5">
+                          {order.paymentStatus === 'PAID' ? 'Cash on Delivery · Paid' : 'Cash on Delivery'}
+                        </p>
+                      )}
                       {order.trackingNumber && (
                         <p className="text-[11px] text-neutral-600 font-mono mt-0.5">
                           {order.courier ? `${order.courier}: ` : 'Tracking: '}{order.trackingNumber}

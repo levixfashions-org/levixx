@@ -4,6 +4,7 @@ import { Lock, ArrowRight, Tag, X } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
+import { useSettingsStore } from '../store/settingsStore';
 
 declare global {
   interface Window {
@@ -58,6 +59,8 @@ export const CheckoutPage: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [payMethod, setPayMethod] = useState<'ONLINE' | 'COD'>('ONLINE');
+  const storeSettings = useSettingsStore((s) => s.settings);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -116,7 +119,12 @@ export const CheckoutPage: React.FC = () => {
   }
 
   const discountPaise = appliedCoupon?.discountPaise || 0;
-  const totalPaise = Math.max(0, cart.subtotalPaise - discountPaise) + cart.shippingPaise;
+  const onlineTotalPaise = Math.max(0, cart.subtotalPaise - discountPaise) + cart.shippingPaise;
+  const codFeePaise = Math.max(0, Math.round((storeSettings.codFee || 0) * 100));
+  const codLimitPaise = (storeSettings.codMaxOrder || 0) * 100;
+  const codAvailable = Boolean(storeSettings.codEnabled) && (codLimitPaise === 0 || onlineTotalPaise + codFeePaise <= codLimitPaise);
+  const isCod = payMethod === 'COD' && codAvailable;
+  const totalPaise = onlineTotalPaise + (isCod ? codFeePaise : 0);
   const inr = (p: number) => Math.round(p / 100).toLocaleString('en-IN');
   const stockProblem = cart.items.find((i) => i.quantity > i.stockQuantity);
 
@@ -149,10 +157,13 @@ export const CheckoutPage: React.FC = () => {
 
     setLoading(true);
     try {
-      const ready = await loadRazorpay();
-      if (!ready) throw new Error('Could not load the Razorpay payment window. Please check your connection and try again.');
+      if (!isCod) {
+        const ready = await loadRazorpay();
+        if (!ready) throw new Error('Could not load the Razorpay payment window. Please check your connection and try again.');
+      }
 
       const orderRes = await apiClient.post('/orders', {
+        paymentMethod: isCod ? 'COD' : 'ONLINE',
         customerEmail: email.trim(),
         customerName: fullName.trim(),
         customerPhone: cleanPhone,
@@ -177,6 +188,13 @@ export const CheckoutPage: React.FC = () => {
         /* ignore */
       }
       const successUrl = `/order-success/${order.orderNumber}?key=${encodeURIComponent(accessKey)}`;
+
+      if (isCod) {
+        // Cash on Delivery: the order is already confirmed — no payment window.
+        await fetchCart();
+        navigate(successUrl, { replace: true });
+        return;
+      }
 
       const rzp = new window.Razorpay({
         key: keyId,
@@ -234,7 +252,9 @@ export const CheckoutPage: React.FC = () => {
       <div className="border-b border-black/10 pb-6 mb-8">
         <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black">Secure Checkout</h1>
         <p className="text-xs text-neutral-600 mt-1">
-          Pay safely with UPI, cards, net banking or wallets via Razorpay. Prepaid orders only — Cash on Delivery is not available.
+          {storeSettings.codEnabled
+            ? 'Pay online with UPI, cards, net banking or wallets via Razorpay — or choose Cash on Delivery.'
+            : 'Pay safely with UPI, cards, net banking or wallets via Razorpay. Prepaid orders only — Cash on Delivery is not available.'}
           {!user && (
             <>
               {' '}
@@ -313,9 +333,39 @@ export const CheckoutPage: React.FC = () => {
             </div>
           </div>
 
+          {storeSettings.codEnabled && (
+            <div className="space-y-3">
+              <h3 className="font-bold uppercase tracking-wider text-sm text-black">3. Payment Method</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className={`flex items-start gap-3 p-4 border cursor-pointer bg-white ${payMethod === 'ONLINE' || !codAvailable ? 'border-black ring-1 ring-black' : 'border-black/20 hover:border-black/50'}`}>
+                  <input id="pay-online" type="radio" name="payMethod" checked={payMethod === 'ONLINE' || !codAvailable} onChange={() => setPayMethod('ONLINE')} className="accent-black mt-0.5" />
+                  <span>
+                    <span className="block text-xs font-bold uppercase tracking-wider text-black">Pay online</span>
+                    <span className="block text-[11px] text-neutral-600 mt-0.5">UPI, cards, net banking or wallets via Razorpay</span>
+                  </span>
+                </label>
+                <label className={`flex items-start gap-3 p-4 border bg-white ${!codAvailable ? 'opacity-50 cursor-not-allowed border-black/10' : payMethod === 'COD' ? 'border-black ring-1 ring-black cursor-pointer' : 'border-black/20 hover:border-black/50 cursor-pointer'}`}>
+                  <input id="pay-cod" type="radio" name="payMethod" disabled={!codAvailable} checked={isCod} onChange={() => setPayMethod('COD')} className="accent-black mt-0.5" />
+                  <span>
+                    <span className="block text-xs font-bold uppercase tracking-wider text-black">Cash on Delivery</span>
+                    <span className="block text-[11px] text-neutral-600 mt-0.5">
+                      {codAvailable
+                        ? `Pay in cash or UPI when your order arrives${codFeePaise > 0 ? ` · +RS. ${inr(codFeePaise)} COD fee` : ''}`
+                        : `Available for orders up to RS. ${inr(codLimitPaise)}`}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 bg-white/70 border border-black/10 flex items-center space-x-3 text-xs text-neutral-700">
             <Lock className="w-5 h-5 text-black flex-shrink-0" />
-            <span>Payments are processed securely by Razorpay. LEVIX never sees or stores your card details.</span>
+            <span>
+              {isCod
+                ? 'Your order is confirmed right away. Please keep the exact amount ready — you can pay the courier in cash or by UPI.'
+                : 'Payments are processed securely by Razorpay. LEVIX never sees or stores your card details.'}
+            </span>
           </div>
         </div>
 
@@ -393,11 +443,17 @@ export const CheckoutPage: React.FC = () => {
               <span>Shipping</span>
               <span className="font-mono text-black font-semibold">{cart.shippingPaise === 0 ? 'FREE' : `RS. ${inr(cart.shippingPaise)}`}</span>
             </div>
+            {isCod && codFeePaise > 0 && (
+              <div className="flex justify-between text-neutral-600">
+                <span>Cash on Delivery fee</span>
+                <span className="font-mono text-black font-semibold">RS. {inr(codFeePaise)}</span>
+              </div>
+            )}
             {cart.remainingForFreeShippingPaise > 0 && cart.shippingPaise > 0 && (
               <p className="text-[11px] text-neutral-500">Add RS. {inr(cart.remainingForFreeShippingPaise)} more for free shipping.</p>
             )}
             <div className="flex justify-between text-base font-bold text-black border-t border-black/10 pt-3">
-              <span className="uppercase tracking-wider">Total</span>
+              <span className="uppercase tracking-wider">{isCod ? 'Pay on delivery' : 'Total'}</span>
               <span className="font-mono text-lg">RS. {inr(totalPaise)}</span>
             </div>
           </div>
@@ -423,7 +479,7 @@ export const CheckoutPage: React.FC = () => {
             disabled={loading || Boolean(stockProblem)}
             className="w-full bg-black text-white py-4 text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 transition-colors flex items-center justify-center space-x-2 shadow-lg disabled:opacity-50"
           >
-            <span>{loading ? 'Opening secure payment...' : `Pay RS. ${inr(totalPaise)}`}</span>
+            <span>{loading ? (isCod ? 'Placing your order...' : 'Opening secure payment...') : isCod ? `Place order · Pay RS. ${inr(totalPaise)} on delivery` : `Pay RS. ${inr(totalPaise)}`}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

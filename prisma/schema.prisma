@@ -234,6 +234,8 @@ model Order {
   status                  OrderStatus   @default(PENDING)
   paymentStatus           PaymentStatus @default(PENDING)
   razorpayOrderId         String?       @unique
+  paymentMethod           String        @default("ONLINE") @db.VarChar(10) // ONLINE | COD
+  codFeePaise             Int           @default(0)
   couponCode              String?
   cartId                  String?
   accessKey               String?       // secret key so guest buyers can view their own order
@@ -323,6 +325,10 @@ model StoreSetting {
   grievanceOfficer      String?
   gstin                 String?
   jurisdictionCity      String?
+  // Cash on Delivery
+  codEnabled            Boolean  @default(false)
+  codFee                Int      @default(0)   // rupees
+  codMaxOrder           Int      @default(0)   // rupees, 0 = no limit
   heroLink              String   @default("/collections/all-products")
   heroCtaText           String   @default("Shop now")
   latestDropTitle       String   @default("Latest drop")

@@ -60,6 +60,22 @@ export const AdminOrdersPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isAdmin, authLoading, navigate, showUnpaid]);
 
+  const markCodPaid = async (orderId: string) => {
+    try {
+      setUpdatingId(orderId);
+      await apiClient.patch(`/admin/orders/${orderId}/status`, { markCodPaid: true });
+      const ordNo = orders.find((o) => o.id === orderId)?.orderNumber || '';
+      setActionMsg(`✓ Cash received — order ${ordNo} marked as paid.`);
+      await loadOrders();
+      if (selectedOrder && selectedOrder.id === orderId) setSelectedOrder({ ...selectedOrder, paymentStatus: 'PAID' });
+      setTimeout(() => setActionMsg(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to mark as paid');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     try {
       setUpdatingId(orderId);
@@ -264,6 +280,9 @@ export const AdminOrdersPage: React.FC = () => {
                       }`}>
                         {ord.paymentStatus}
                       </span>
+                      {ord.paymentMethod === 'COD' && (
+                        <span className="ml-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[#FF5400] text-white">COD</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-black">
                       RS. {(ord.totalPaise / 100).toLocaleString('en-IN')}
@@ -353,7 +372,22 @@ export const AdminOrdersPage: React.FC = () => {
                   <p><span className="font-semibold text-black">Name:</span> {selectedOrder.customerName}</p>
                   <p><span className="font-semibold text-black">Email:</span> {selectedOrder.customerEmail}</p>
                   <p><span className="font-semibold text-black">Phone:</span> {selectedOrder.customerPhone || 'N/A'}</p>
-                  <p><span className="font-semibold text-black">Payment:</span> <span className={selectedOrder.paymentStatus === 'PAID' ? 'text-green-700 font-bold' : 'text-yellow-700 font-bold'}>{selectedOrder.paymentStatus} (Razorpay)</span></p>
+                  <p>
+                    <span className="font-semibold text-black">Payment:</span>{' '}
+                    <span className={selectedOrder.paymentStatus === 'PAID' ? 'text-green-700 font-bold' : 'text-yellow-700 font-bold'}>
+                      {selectedOrder.paymentStatus} ({selectedOrder.paymentMethod === 'COD' ? 'Cash on Delivery' : 'Razorpay'})
+                    </span>
+                  </p>
+                  {selectedOrder.paymentMethod === 'COD' && selectedOrder.paymentStatus !== 'PAID' && selectedOrder.status !== 'CANCELLED' && (
+                    <div className="col-span-2 flex flex-wrap items-center gap-2 p-2 bg-orange-50 border border-orange-200">
+                      <span className="text-[11px] text-orange-900">
+                        Collect <span className="font-bold">RS. {(selectedOrder.totalPaise / 100).toLocaleString('en-IN')}</span> on delivery (set COD amount in Shiprocket).
+                      </span>
+                      <button type="button" onClick={() => markCodPaid(selectedOrder.id)} className="px-2.5 py-1 bg-black text-white text-[10px] font-bold uppercase tracking-wider hover:bg-neutral-800">
+                        Mark COD as paid
+                      </button>
+                    </div>
+                  )}
                   {selectedOrder.payment?.razorpayPaymentId && (
                     <p><span className="font-semibold text-black">Payment ID:</span> <span className="font-mono">{selectedOrder.payment.razorpayPaymentId}</span></p>
                   )}

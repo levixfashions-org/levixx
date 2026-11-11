@@ -19,6 +19,9 @@ export interface PublicStoreSettings {
   grievanceOfficer: string;
   gstin: string;
   jurisdictionCity: string;
+  codEnabled: boolean;
+  codFee: number; // rupees
+  codMaxOrder: number; // rupees, 0 = no limit
   heroLink: string;
   heroCtaText: string;
   latestDropTitle: string;
@@ -48,6 +51,9 @@ export const DEFAULT_SETTINGS: PublicStoreSettings = {
   grievanceOfficer: '',
   gstin: '',
   jurisdictionCity: '',
+  codEnabled: false,
+  codFee: 0,
+  codMaxOrder: 0,
   heroLink: '/collections/all-products',
   heroCtaText: 'Shop now',
   latestDropTitle: 'Latest drop',

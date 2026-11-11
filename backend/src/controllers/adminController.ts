@@ -109,7 +109,8 @@ const updateOrderSchema = z.object({
   status: z.nativeEnum(OrderStatus).optional(),
   courier: z.string().trim().max(100).optional(),
   trackingNumber: z.string().trim().max(100).optional(),
-  adminNotes: z.string().max(5000).optional()
+  adminNotes: z.string().max(5000).optional(),
+  markCodPaid: z.boolean().optional()
 });
 
 export async function updateOrder(req: Request, res: Response) {
@@ -118,9 +119,13 @@ export async function updateOrder(req: Request, res: Response) {
   if (!order) throw new AppError('Order not found', 404);
 
   if (data.status && data.status !== OrderStatus.CANCELLED && data.status !== OrderStatus.PENDING) {
-    if (order.paymentStatus !== PaymentStatus.PAID) {
+    if (order.paymentStatus !== PaymentStatus.PAID && order.paymentMethod !== 'COD') {
       throw new AppError('This order has not been paid yet, so it cannot be moved to fulfilment', 400);
     }
+  }
+  if (data.markCodPaid) {
+    if (order.paymentMethod !== 'COD') throw new AppError('Only Cash on Delivery orders can be marked as paid here', 400);
+    if (order.status === OrderStatus.CANCELLED) throw new AppError('This order is cancelled', 400);
   }
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -142,7 +147,8 @@ export async function updateOrder(req: Request, res: Response) {
         ...(data.status === OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {}),
         ...(data.courier !== undefined ? { courier: data.courier || null } : {}),
         ...(data.trackingNumber !== undefined ? { trackingNumber: data.trackingNumber || null } : {}),
-        ...(data.adminNotes !== undefined ? { adminNotes: data.adminNotes || null } : {})
+        ...(data.adminNotes !== undefined ? { adminNotes: data.adminNotes || null } : {}),
+        ...(data.markCodPaid && order.paymentStatus !== PaymentStatus.PAID ? { paymentStatus: PaymentStatus.PAID, paidAt: new Date() } : {})
       },
       include: { items: true }
     });
@@ -510,6 +516,9 @@ const settingsSchema = z.object({
   grievanceOfficer: z.string().trim().max(190),
   gstin: z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), 'GSTIN must be 15 letters/numbers'),
   jurisdictionCity: z.string().trim().max(100),
+  codEnabled: z.boolean(),
+  codFee: z.coerce.number().int().min(0).max(1000),
+  codMaxOrder: z.coerce.number().int().min(0).max(1000000),
   heroCtaText: z.string().trim().max(60),
   latestDropTitle: z.string().trim().max(100),
   seoTitle: z.string().max(300),

@@ -294,6 +294,34 @@ export const AdminSettingsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Cash on Delivery */}
+          <div className="bg-white p-6 border border-black/10 shadow-sm space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-bold uppercase tracking-wider text-sm text-black">Cash on Delivery (COD)</h2>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  When on, customers can choose Cash on Delivery at checkout. Your policy pages, checkout and product pages update automatically. Remember to save.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider cursor-pointer shrink-0">
+                <input id="codEnabled" type="checkbox" checked={settings.codEnabled} onChange={(e) => setSettings({ ...settings, codEnabled: e.target.checked })} className="accent-black w-5 h-5" />
+                {settings.codEnabled ? 'On' : 'Off'}
+              </label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">COD fee (₹)</label>
+                <input id="codFee" type="number" min={0} max={1000} value={settings.codFee} onChange={(e) => setSettings({ ...settings, codFee: Math.max(0, Number(e.target.value) || 0) })} className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
+                <p className="text-[10.5px] text-neutral-500 mt-1">Added to COD orders only. 0 = no fee.</p>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Maximum order value for COD (₹)</label>
+                <input id="codMaxOrder" type="number" min={0} value={settings.codMaxOrder} onChange={(e) => setSettings({ ...settings, codMaxOrder: Math.max(0, Number(e.target.value) || 0) })} className="w-full border border-black/20 p-2.5 font-mono focus:border-black focus:outline-none" />
+                <p className="text-[10.5px] text-neutral-500 mt-1">Bigger orders must be paid online. 0 = no limit.</p>
+              </div>
+            </div>
+          </div>
+
           {/* Business & legal details — shown on Terms, Privacy, Returns and Contact pages */}
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-5">
             <div>

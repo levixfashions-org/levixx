@@ -49,6 +49,9 @@ export interface StoreSettings {
   grievanceOfficer: string;
   gstin: string;
   jurisdictionCity: string;
+  codEnabled: boolean;
+  codFee: number;
+  codMaxOrder: number;
   heroLink: string;
   heroCtaText: string;
   latestDropTitle: string;
@@ -77,6 +80,9 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   grievanceOfficer: '',
   gstin: '',
   jurisdictionCity: '',
+  codEnabled: false,
+  codFee: 0,
+  codMaxOrder: 0,
   heroLink: '/collections/all-products',
   heroCtaText: 'Shop now',
   latestDropTitle: 'Latest drop',

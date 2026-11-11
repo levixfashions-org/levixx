@@ -65,6 +65,12 @@ export const PolicyPage: React.FC = () => {
   const gstin = settings.gstin?.trim();
   const city = settings.jurisdictionCity?.trim();
   const insta = settings.instagramHandle?.replace(/^@/, '');
+  const cod = Boolean(settings.codEnabled);
+  const codFee = settings.codFee || 0;
+  const codMax = settings.codMaxOrder || 0;
+  const codSentence = cod
+    ? `Cash on Delivery (COD) is also available${codMax > 0 ? ` for orders up to ₹${codMax.toLocaleString('en-IN')}` : ''}${codFee > 0 ? `, with a COD fee of ₹${codFee.toLocaleString('en-IN')}` : ''}. COD orders are paid to the courier in cash or by UPI on delivery.`
+    : 'Cash on Delivery (COD) is not available.';
 
   const Mail = <a className="underline font-semibold text-black" href={`mailto:${email}`}>{email}</a>;
   const contactLine = (
@@ -164,7 +170,7 @@ export const PolicyPage: React.FC = () => {
               <List
                 items={[
                   'All prices are in Indian Rupees (₹) and include applicable taxes (GST). Shipping charges, if any, are shown at checkout before you pay.',
-                  'All orders are prepaid. Payments are processed securely by Razorpay (UPI, debit/credit cards, net banking and wallets). Cash on Delivery (COD) is not available.',
+                  `Online payments are processed securely by Razorpay (UPI, debit/credit cards, net banking and wallets). ${codSentence}`,
                   'If a product is listed at an obviously wrong price because of a technical or typing error, we may cancel the order and refund the full amount.'
                 ]}
               />
@@ -278,7 +284,7 @@ export const PolicyPage: React.FC = () => {
             <Section title="5. Refunds" id="refund">
               <List
                 items={[
-                  'Approved refunds go back to the original payment method through Razorpay. We do not refund in cash.',
+                  'Approved refunds for online payments go back to the original payment method through Razorpay. For Cash on Delivery orders, we refund to a UPI ID or bank account you share with us. We do not refund in cash.',
                   'We start the refund within 2 business days of approval. Your bank or UPI app usually shows it within 5–7 business days.',
                   'For damaged, defective or wrong items, we refund the full amount including any shipping charge you paid.',
                   'If money was deducted but your order was not confirmed (a failed payment), the amount is reversed automatically by Razorpay / your bank, usually within 5–7 business days.'
@@ -296,8 +302,9 @@ export const PolicyPage: React.FC = () => {
               />
             </Section>
 
-            <Section title="7. Payments">
-              <p>All orders on LEVIX are prepaid through Razorpay. Cash on Delivery (COD) is not available.</p>
+            <Section title="7. Payment options">
+              <p>Online payments are processed through Razorpay. {codSentence}</p>
+              {cod && <p>Repeatedly refusing COD parcels may lead us to disable Cash on Delivery for your future orders.</p>}
             </Section>
 
             <Section title="8. Need help?">
@@ -441,7 +448,7 @@ export const PolicyPage: React.FC = () => {
                 {[
                   ['Can I return or exchange for a different size?', 'No. We only accept returns for damaged, defective or wrong items reported within 48 hours of delivery. Please check the size guide on the product page before ordering.'],
                   ['What should I do if my T-shirt arrives damaged?', 'Contact us within 48 hours of delivery with your order number, photos and an unboxing video. We will send a free replacement, or a full refund if the item is out of stock.'],
-                  ['Do you offer Cash on Delivery (COD)?', 'No. All orders are prepaid securely through Razorpay — UPI, cards, net banking and wallets.'],
+                  ['Do you offer Cash on Delivery (COD)?', cod ? `Yes. ${codSentence}` : 'No. All orders are prepaid securely through Razorpay — UPI, cards, net banking and wallets.'],
                   ['How long does delivery take?', 'Orders are dispatched within 1–3 business days and usually delivered within 3–7 business days after that.'],
                   ['Can I cancel my order?', 'Yes, before it is dispatched — contact us with your order number for a full refund. Dispatched orders cannot be cancelled.'],
                   ['When will I get my refund?', 'We start approved refunds within 2 business days. Your bank or UPI app usually shows the money within 5–7 business days.'],

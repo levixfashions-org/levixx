@@ -127,6 +127,8 @@ export interface Order {
   totalPaise: number;
   status: 'PENDING' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
   paymentStatus: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+  paymentMethod?: 'ONLINE' | 'COD';
+  codFeePaise?: number;
   razorpayOrderId?: string | null;
   couponCode?: string | null;
   courier?: string | null;
