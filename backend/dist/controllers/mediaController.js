@@ -1,3 +1,6 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -146,6 +149,47 @@ export async function serveMedia(req, res) {
     const file = await prisma.mediaFile.findUnique({ where: { id }, select: { data: true } });
     res.end(Buffer.from(file.data));
 }
+/* Videos are rebuilt from the database once and kept on the server's disk, so playback starts fast. */
+const CACHE_DIR = path.join(os.tmpdir(), 'levix-media-cache');
+const building = new Map();
+async function cachedVideoFile(id, size, chunkCount) {
+    const file = path.join(CACHE_DIR, id);
+    try {
+        const st = await fs.promises.stat(file);
+        if (st.size === size)
+            return file;
+    }
+    catch {
+        /* not cached yet */
+    }
+    if (!building.has(id)) {
+        const job = (async () => {
+            await fs.promises.mkdir(CACHE_DIR, { recursive: true });
+            const tmp = `${file}.${process.pid}.part`;
+            const fh = await fs.promises.open(tmp, 'w');
+            try {
+                for (let i = 0; i < chunkCount; i++) {
+                    const chunk = await prisma.mediaChunk.findUnique({ where: { mediaId_idx: { mediaId: id, idx: i } }, select: { data: true } });
+                    if (!chunk)
+                        throw new Error(`missing chunk ${i}`);
+                    await fh.write(Buffer.from(chunk.data));
+                }
+            }
+            finally {
+                await fh.close();
+            }
+            const st = await fs.promises.stat(tmp);
+            if (st.size === size)
+                await fs.promises.rename(tmp, file);
+            else
+                await fs.promises.unlink(tmp).catch(() => undefined);
+        })()
+            .catch((err) => console.error('Video cache build failed:', err?.message || err))
+            .finally(() => building.delete(id));
+        building.set(id, job);
+    }
+    return null;
+}
 async function streamVideo(req, res, id, size, chunkCount) {
     res.setHeader('Accept-Ranges', 'bytes');
     let start = 0;
@@ -177,6 +221,14 @@ async function streamVideo(req, res, id, size, chunkCount) {
     res.setHeader('Content-Length', String(end - start + 1));
     if (req.method === 'HEAD') {
         res.end();
+        return;
+    }
+    const cached = await cachedVideoFile(id, size, chunkCount);
+    if (cached) {
+        const stream = fs.createReadStream(cached, { start, end });
+        stream.on('error', () => res.destroy());
+        req.on('close', () => stream.destroy());
+        stream.pipe(res);
         return;
     }
     let closed = false;

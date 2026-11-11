@@ -40,8 +40,8 @@ var import_express10 = __toESM(require("express"), 1);
 var import_cors = __toESM(require("cors"), 1);
 var import_helmet = __toESM(require("helmet"), 1);
 var import_compression = __toESM(require("compression"), 1);
-var import_path = __toESM(require("path"), 1);
-var import_fs2 = __toESM(require("fs"), 1);
+var import_path2 = __toESM(require("path"), 1);
+var import_fs3 = __toESM(require("fs"), 1);
 
 // src/config/env.ts
 var import_dotenv = __toESM(require("dotenv"), 1);
@@ -2148,6 +2148,9 @@ async function getHome(_req, res) {
 }
 
 // src/controllers/mediaController.ts
+var import_fs2 = __toESM(require("fs"), 1);
+var import_os = __toESM(require("os"), 1);
+var import_path = __toESM(require("path"), 1);
 var MAX_BYTES = 8 * 1024 * 1024;
 function sniff(buf) {
   if (buf.length < 12) return null;
@@ -2261,6 +2264,37 @@ async function serveMedia(req, res) {
   const file = await prisma.mediaFile.findUnique({ where: { id }, select: { data: true } });
   res.end(Buffer.from(file.data));
 }
+var CACHE_DIR = import_path.default.join(import_os.default.tmpdir(), "levix-media-cache");
+var building = /* @__PURE__ */ new Map();
+async function cachedVideoFile(id, size, chunkCount) {
+  const file = import_path.default.join(CACHE_DIR, id);
+  try {
+    const st = await import_fs2.default.promises.stat(file);
+    if (st.size === size) return file;
+  } catch {
+  }
+  if (!building.has(id)) {
+    const job = (async () => {
+      await import_fs2.default.promises.mkdir(CACHE_DIR, { recursive: true });
+      const tmp = `${file}.${process.pid}.part`;
+      const fh = await import_fs2.default.promises.open(tmp, "w");
+      try {
+        for (let i = 0; i < chunkCount; i++) {
+          const chunk = await prisma.mediaChunk.findUnique({ where: { mediaId_idx: { mediaId: id, idx: i } }, select: { data: true } });
+          if (!chunk) throw new Error(`missing chunk ${i}`);
+          await fh.write(Buffer.from(chunk.data));
+        }
+      } finally {
+        await fh.close();
+      }
+      const st = await import_fs2.default.promises.stat(tmp);
+      if (st.size === size) await import_fs2.default.promises.rename(tmp, file);
+      else await import_fs2.default.promises.unlink(tmp).catch(() => void 0);
+    })().catch((err) => console.error("Video cache build failed:", err?.message || err)).finally(() => building.delete(id));
+    building.set(id, job);
+  }
+  return null;
+}
 async function streamVideo(req, res, id, size, chunkCount) {
   res.setHeader("Accept-Ranges", "bytes");
   let start = 0;
@@ -2288,6 +2322,14 @@ async function streamVideo(req, res, id, size, chunkCount) {
   res.setHeader("Content-Length", String(end - start + 1));
   if (req.method === "HEAD") {
     res.end();
+    return;
+  }
+  const cached = await cachedVideoFile(id, size, chunkCount);
+  if (cached) {
+    const stream = import_fs2.default.createReadStream(cached, { start, end });
+    stream.on("error", () => res.destroy());
+    req.on("close", () => stream.destroy());
+    stream.pipe(res);
     return;
   }
   let closed = false;
@@ -2560,15 +2602,15 @@ app.use("/api", notFoundApi);
 app.get("/media/:file", asyncHandler(serveMedia));
 var currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 var possiblePaths = [
-  import_path.default.resolve(process.cwd(), "frontend/dist"),
-  import_path.default.resolve(currentDir, "frontend/dist"),
-  import_path.default.resolve(currentDir, "../frontend/dist"),
-  import_path.default.resolve(currentDir, "../../frontend/dist"),
-  import_path.default.resolve(process.cwd(), "dist")
+  import_path2.default.resolve(process.cwd(), "frontend/dist"),
+  import_path2.default.resolve(currentDir, "frontend/dist"),
+  import_path2.default.resolve(currentDir, "../frontend/dist"),
+  import_path2.default.resolve(currentDir, "../../frontend/dist"),
+  import_path2.default.resolve(process.cwd(), "dist")
 ];
 var frontendDist = possiblePaths.find((p) => {
   try {
-    return import_fs2.default.existsSync(import_path.default.join(p, "index.html"));
+    return import_fs3.default.existsSync(import_path2.default.join(p, "index.html"));
   } catch {
     return false;
   }
@@ -2579,7 +2621,7 @@ if (frontendDist) {
     import_express10.default.static(frontendDist, {
       index: false,
       setHeaders: (res, filePath) => {
-        if (filePath.includes(`${import_path.default.sep}assets${import_path.default.sep}`)) {
+        if (filePath.includes(`${import_path2.default.sep}assets${import_path2.default.sep}`)) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
         } else if (filePath.endsWith("sw.js") || filePath.endsWith("index.html") || filePath.endsWith("manifest.json")) {
           res.setHeader("Cache-Control", "no-cache");
@@ -2596,7 +2638,7 @@ if (frontendDist) {
       return;
     }
     res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(import_path.default.join(frontendDist, "index.html"));
+    res.sendFile(import_path2.default.join(frontendDist, "index.html"));
   });
 } else {
   console.warn("\u26A0\uFE0F frontend/dist not found. Checked:", possiblePaths);
@@ -2609,13 +2651,13 @@ app.use(errorHandler);
 
 // src/server.ts
 var import_child_process = require("child_process");
-var import_path2 = __toESM(require("path"), 1);
-var import_fs3 = __toESM(require("fs"), 1);
+var import_path3 = __toESM(require("path"), 1);
+var import_fs4 = __toESM(require("fs"), 1);
 function runDbPush() {
   return new Promise((resolve) => {
-    const roots = [process.cwd(), import_path2.default.resolve(process.cwd(), "..")];
-    const root = roots.find((r) => import_fs3.default.existsSync(import_path2.default.join(r, "node_modules", "prisma", "build", "index.js")));
-    const schema = roots.map((r) => import_path2.default.join(r, "prisma", "schema.prisma")).find((f) => import_fs3.default.existsSync(f));
+    const roots = [process.cwd(), import_path3.default.resolve(process.cwd(), "..")];
+    const root = roots.find((r) => import_fs4.default.existsSync(import_path3.default.join(r, "node_modules", "prisma", "build", "index.js")));
+    const schema = roots.map((r) => import_path3.default.join(r, "prisma", "schema.prisma")).find((f) => import_fs4.default.existsSync(f));
     if (!root || !schema) {
       console.warn("\u26A0\uFE0F Cannot auto-create tables: prisma CLI or schema not found.");
       return resolve(false);
@@ -2623,7 +2665,7 @@ function runDbPush() {
     console.log("\u2026 Creating/updating database tables (prisma db push)\u2026");
     (0, import_child_process.execFile)(
       process.execPath,
-      [import_path2.default.join(root, "node_modules", "prisma", "build", "index.js"), "db", "push", "--skip-generate", `--schema=${schema}`],
+      [import_path3.default.join(root, "node_modules", "prisma", "build", "index.js"), "db", "push", "--skip-generate", `--schema=${schema}`],
       { cwd: root, env: process.env, timeout: 12e4 },
       (err, stdout, stderr) => {
         if (err) {
