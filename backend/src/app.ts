@@ -8,6 +8,7 @@ import { env } from './config/env.js';
 import { prisma } from './config/db.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { liveStream, liveVersion, broadcastChange } from './services/live.js';
+import { razorpayMode, razorpayKeyCheck } from './config/razorpay.js';
 import { sendVerification, sendPasswordReset, authMailReady } from './controllers/authMailController.js';
 import { authRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundApi } from './middleware/errorHandler.js';
@@ -144,12 +145,17 @@ app.get('/api/health', async (_req, res) => {
             ? 'database name in DATABASE_URL does not exist'
             : 'database error';
   }
+  const paymentsMode = razorpayMode();
+  const paymentsKeys = paymentsMode === 'missing' ? 'missing' : await razorpayKeyCheck();
   res.set('Cache-Control', 'no-store');
   res.status(database === 'ok' ? 200 : 503).json({
     status: database === 'ok' ? 'ok' : 'degraded',
     database,
     ...(databaseProblem ? { databaseProblem } : {}),
-    payments: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    payments: paymentsKeys === 'ok',
+    paymentsMode, // test | live | invalid | missing
+    paymentsKeys, // ok | keys-rejected | unreachable | missing
+    webhook: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
     signIn: Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID),
     emails: authMailReady(),
     service: 'levix',

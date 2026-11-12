@@ -171,8 +171,14 @@ export async function createOrder(req: Request, res: Response) {
       notes: { orderNumber, customerEmail: data.customerEmail }
     });
   } catch (err: any) {
-    console.error('Razorpay order creation failed:', err?.error || err?.message || err);
-    throw new AppError('Could not start the payment. Please try again in a moment.', 502);
+    console.error('Razorpay order creation failed:', err?.statusCode, err?.error || err?.message || err);
+    const rejected = err?.statusCode === 401;
+    throw new AppError(
+      rejected
+        ? 'Online payments are being set up and are not available right now. Please try again later. (code RZP-401)'
+        : 'Could not start the payment. Please try again in a moment.',
+      rejected ? 503 : 502
+    );
   }
 
   const order = await prisma.order.create({
