@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, Eye, EyeOff, Star, Palette } from 'lucide-react';
+import { Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, Eye, EyeOff, Star, Palette, ChevronUp, ChevronDown, ChevronsUp } from 'lucide-react';
 import { apiClient, COLOR_GROUPS, COLOR_SWATCHES } from '../../services/api';
 import { Category, Gender, Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
@@ -402,6 +402,31 @@ export const AdminProductsPage: React.FC = () => {
       return matchesQ && matchesCat && matchesCol && matchesGender;
     });
   }, [products, searchTerm, categoryFilter, collectionFilter, genderFilter]);
+  /**
+   * Move a product to a new place in the list that is currently shown (1 = first).
+   * With filters on, only the shown products swap places among themselves; everything else keeps its spot.
+   */
+  const moveProduct = async (id: string, toIndex: number) => {
+    const shown = filtered.map((p) => p.id);
+    const from = shown.indexOf(id);
+    const to = Math.max(0, Math.min(shown.length - 1, toIndex));
+    if (from < 0 || from === to) return;
+    shown.splice(to, 0, shown.splice(from, 1)[0]);
+    const shownSet = new Set(shown);
+    const byId = new Map(products.map((p) => [p.id, p]));
+    let k = 0;
+    const next = products.map((p) => (shownSet.has(p.id) ? byId.get(shown[k++])! : p));
+    const before = products;
+    setProducts(next);
+    setActionMsg(null);
+    try {
+      await apiClient.put('/admin/products/reorder', { ids: next.map((p) => p.id) });
+    } catch (err: any) {
+      setProducts(before);
+      setActionMsg(err.message || 'Could not save the new order. Please try again.');
+    }
+  };
+
   const genderCount = (g: Gender) => products.filter((p) => (p.gender || 'UNISEX') === g).length;
 
   const colourNamesOf = (p: Product) => [...new Set(p.variants.map((v) => v.color).filter(Boolean))] as string[];
@@ -446,6 +471,10 @@ export const AdminProductsPage: React.FC = () => {
           </div>
         )}
 
+        <p className="text-[11px] text-neutral-600 bg-white border border-black/10 px-3 py-2">
+          <b>Product order:</b> use the ▲ ▼ arrows, the ⏫ button (move to No. 1), or type a position number and press Enter. The shop shows products in this order and updates instantly. Tip: pick a category or collection filter first to arrange just that group.
+        </p>
+
         <div className="flex flex-wrap gap-1.5">
           {(['ALL', 'MEN', 'WOMEN', 'UNISEX'] as const).map((g) => (
             <button
@@ -474,9 +503,10 @@ export const AdminProductsPage: React.FC = () => {
         </div>
 
         <div className="bg-white border border-black/10 shadow-sm overflow-x-auto">
-          <table className="w-full text-xs min-w-[820px]">
+          <table className="w-full text-xs min-w-[940px]">
             <thead className="bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500 font-mono">
               <tr>
+                <th className="py-3 px-3 text-left">Position</th>
                 <th className="py-3 px-4 text-left">Image</th>
                 <th className="py-3 px-4 text-left">Product</th>
                 <th className="py-3 px-4 text-left">Type / Collections</th>
@@ -488,20 +518,53 @@ export const AdminProductsPage: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-black/5">
               {loading ? (
-                <tr><td colSpan={7} className="py-16 text-center text-neutral-500 font-mono uppercase">Loading catalog...</td></tr>
+                <tr><td colSpan={8} className="py-16 text-center text-neutral-500 font-mono uppercase">Loading catalog...</td></tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-neutral-500">
+                  <td colSpan={8} className="py-16 text-center text-neutral-500">
                     {products.length === 0 ? 'No products yet. Click "Add Product" to publish your first drop.' : 'No products match these filters.'}
                   </td>
                 </tr>
               ) : (
-                filtered.map((p) => {
+                filtered.map((p, idx) => {
                   const totalStock = p.variants.reduce((a, v) => a + v.stockQuantity, 0);
                   const cols = colourNamesOf(p);
                   const colNames = (p.collectionIds || []).map((id) => allCollections.find((c) => c.id === id)?.name).filter(Boolean);
                   return (
                     <tr key={p.id} className={`hover:bg-neutral-50/60 ${!p.isActive ? 'opacity-60' : ''}`}>
+                      <td className="py-3 px-3 align-middle">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            key={`${p.id}-${idx}`}
+                            type="number"
+                            min={1}
+                            max={filtered.length}
+                            defaultValue={idx + 1}
+                            aria-label={`Position of ${p.name}`}
+                            title="Type a position number and press Enter"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            }}
+                            onBlur={(e) => {
+                              const n = parseInt(e.target.value, 10);
+                              if (Number.isFinite(n) && n !== idx + 1) moveProduct(p.id, n - 1);
+                              else e.target.value = String(idx + 1);
+                            }}
+                            className="w-11 h-9 border border-black/20 text-center font-mono font-bold text-[12px] focus:border-black focus:outline-none"
+                          />
+                          <div className="flex flex-col gap-0.5">
+                            <button type="button" disabled={idx === 0} onClick={() => moveProduct(p.id, idx - 1)} aria-label={`Move ${p.name} up`} title="Move up" className="w-8 h-[17px] flex items-center justify-center border border-black/20 bg-white hover:bg-black hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-black">
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button type="button" disabled={idx === filtered.length - 1} onClick={() => moveProduct(p.id, idx + 1)} aria-label={`Move ${p.name} down`} title="Move down" className="w-8 h-[17px] flex items-center justify-center border border-black/20 bg-white hover:bg-black hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-black">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <button type="button" disabled={idx === 0} onClick={() => moveProduct(p.id, 0)} aria-label={`Move ${p.name} to the top`} title="Move to top (No. 1)" className="w-8 h-9 flex items-center justify-center border border-black/20 bg-white hover:bg-black hover:text-white disabled:opacity-25 disabled:hover:bg-white disabled:hover:text-black">
+                            <ChevronsUp className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                       <td className="py-3 px-4">
                         <div className="w-12 h-16 bg-neutral-100 overflow-hidden flex items-center justify-center">
                           {p.images[0] ? <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover" loading="lazy" /> : <ImageIcon className="w-4 h-4 text-neutral-400" />}

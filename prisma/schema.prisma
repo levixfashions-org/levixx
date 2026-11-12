@@ -124,10 +124,12 @@ model Product {
   orderItems   OrderItem[]
   wishlistItems WishlistItem[]
   reviews      Review[]
+  position     Int                 @default(0) // Manual display order set in Admin → Products (lower shows first; 0 = new, shows on top)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
   @@index([slug])
+  @@index([position])
   @@index([categoryId])
   @@index([gender])
 }

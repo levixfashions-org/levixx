@@ -16,7 +16,7 @@ function buildOrderBy(sort?: string): Prisma.ProductOrderByWithRelationInput | P
       return { createdAt: 'desc' };
     case 'featured':
     default:
-      return [{ isFeatured: 'desc' }, { createdAt: 'desc' }];
+      return [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }];
   }
 }
 

@@ -295,11 +295,19 @@ async function setProductCollections(productId: string, collectionIds: string[])
   }
 }
 
+/** PUT /admin/products/reorder — body { ids: [...] } in the order they should appear on the shop. */
+export async function reorderProducts(req: Request, res: Response) {
+  const { ids } = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(2000) }).parse(req.body);
+  const unique = [...new Set(ids)];
+  await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
+  res.json({ success: true, count: unique.length });
+}
+
 export async function getAdminProducts(req: Request, res: Response) {
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
   const products = await prisma.product.findMany({
     where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }],
     take: 500,
     include: { ...productFullInclude, collections: { select: { collectionId: true } } }
   });
