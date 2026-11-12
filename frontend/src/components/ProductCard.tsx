@@ -103,7 +103,9 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
           <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-white/90 text-[9.5px] text-neutral-500">Sold Out</span>
         )}
         {!soldOut && product.comparePrice && product.comparePrice > product.basePrice && (
-          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black text-white text-[9.5px]">Sale</span>
+          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black text-white text-[9.5px] font-semibold">
+            {Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF
+          </span>
         )}
 
         <button

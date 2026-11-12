@@ -181,7 +181,12 @@ export const ProductDetailPage: React.FC = () => {
           <p className="text-[11px] text-neutral-600">
             {formatRs(product.basePrice + (selected?.priceDelta || 0))}
             {product.comparePrice && product.comparePrice > product.basePrice && (
-              <span className="ml-2 line-through text-neutral-400">{formatRs(product.comparePrice)}</span>
+              <>
+                <span className="ml-2 line-through text-neutral-400">MRP {formatRs(product.comparePrice)}</span>
+                <span className="ml-2 font-semibold text-[#FF5400]">
+                  {Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF
+                </span>
+              </>
             )}
           </p>
           <button onClick={openSizeGuide} className="px-2.5 py-1 rounded bg-[#E9E9E9] text-[9.5px] hover:bg-[#ddd]">Size Guide</button>

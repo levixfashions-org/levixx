@@ -203,4 +203,15 @@ export async function ensureStoreDefaults(): Promise<void> {
     cache = null;
     console.log('✓ Free delivery on all orders switched on.');
   }
+  // Version 4: show every product as "MRP ₹799, now at its current price" (strike-through + % off).
+  // Selling prices are not changed. Admin can edit "Compare at price" per product afterwards.
+  if ((row?.defaultsVersion ?? 0) < 4) {
+    const MRP = 79900; // ₹799 in paise
+    const updated = await prisma.product.updateMany({
+      where: { basePrice: { lt: MRP }, OR: [{ comparePrice: null }, { comparePrice: { lte: MRP } }] },
+      data: { comparePrice: MRP }
+    });
+    await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 4 } });
+    console.log(`✓ Set MRP ₹799 on ${updated.count} products (selling prices unchanged).`);
+  }
 }
