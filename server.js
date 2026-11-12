@@ -995,6 +995,8 @@ var DEFAULT_SETTINGS = {
   freeShippingThreshold: 0,
   shippingFee: 150,
   announcementEnabled: false,
+  menCoverImage: "",
+  womenCoverImage: "",
   heroDesktopImage: "",
   heroMobileImage: "",
   heroDesktopVideo: "",
@@ -1247,6 +1249,16 @@ async function ensureStoreDefaults() {
     }
     await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 8 } });
     console.log("\u2713 Category banners updated (full-length, no cropping).");
+  }
+  if ((row?.defaultsVersion ?? 0) < 9) {
+    const cats = await prisma.category.findMany({ where: { imageUrl: { contains: "/catalog/cat-" } }, select: { id: true, imageUrl: true } });
+    for (const c of cats) {
+      const next = (c.imageUrl || "").replace(/\/catalog\/cat-(overlength|waffle|acid)\.jpg(#lx=[\d.,]+)?$/, "/catalog/cat-$1-v2.jpg$2");
+      if (next !== c.imageUrl) await prisma.category.update({ where: { id: c.id }, data: { imageUrl: next } });
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 9 } });
+    cache = null;
+    console.log("\u2713 Category banners sharpened.");
   }
 }
 
@@ -2082,7 +2094,7 @@ async function deleteOrder(req, res) {
   await prisma.order.delete({ where: { id: order.id } });
   res.json({ success: true });
 }
-var imageUrl = import_zod9.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), "Each image must be uploaded or be a full https:// link");
+var imageUrl = import_zod9.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+(#lx=[\d.,]+)?$/i.test(v), "Each image must be uploaded or be a full https:// link");
 var imageSchema = import_zod9.z.object({
   url: imageUrl,
   altText: import_zod9.z.string().max(200).optional().nullable(),
@@ -2185,6 +2197,11 @@ async function reorderProducts(req, res) {
   const unique = [...new Set(ids)];
   await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
   res.json({ success: true, count: unique.length });
+}
+async function reorderCategories(req, res) {
+  const { ids } = import_zod9.z.object({ ids: import_zod9.z.array(import_zod9.z.string().min(1).max(64)).min(1).max(500) }).parse(req.body);
+  await prisma.$transaction([...new Set(ids)].map((id, i) => prisma.category.updateMany({ where: { id }, data: { sortOrder: i } })));
+  res.json({ success: true });
 }
 async function getAdminProducts(req, res) {
   const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
@@ -2368,6 +2385,8 @@ var settingsSchema = patchSchema(import_zod9.z.object({
   freeShippingThreshold: import_zod9.z.coerce.number().int().min(0).max(1e6),
   shippingFee: import_zod9.z.coerce.number().int().min(0).max(1e5),
   announcementEnabled: import_zod9.z.boolean(),
+  menCoverImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Cover image must be uploaded or a full URL"),
+  womenCoverImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Cover image must be uploaded or a full URL"),
   heroDesktopImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
   heroMobileImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
   heroDesktopVideo: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
@@ -2615,7 +2634,7 @@ async function getHome(_req, res) {
       key,
       name: key === "men" ? "Men" : "Women",
       count: rows.length,
-      coverImage: rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+      coverImage: (key === "men" ? settings.menCoverImage : settings.womenCoverImage) || rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
       categories: categories.filter((c) => catCount.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || "TOP", count: catCount.get(c.id) || 0 })),
       collections: collections.filter((c) => c.showInMenu && colIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
     };
@@ -2884,6 +2903,7 @@ router7.put("/products/reorder", asyncHandler(reorderProducts));
 router7.put("/products/:id", asyncHandler(updateProduct));
 router7.delete("/products/:id", asyncHandler(deleteProduct));
 router7.post("/categories", asyncHandler(createCategory));
+router7.put("/categories/reorder", asyncHandler(reorderCategories));
 router7.put("/categories/:id", asyncHandler(updateCategory));
 router7.delete("/categories/:id", asyncHandler(deleteCategory));
 router7.get("/settings", asyncHandler(getAdminStoreSettings));

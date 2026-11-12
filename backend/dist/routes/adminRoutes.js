@@ -37,6 +37,7 @@ router.put('/products/reorder', h(admin.reorderProducts));
 router.put('/products/:id', h(admin.updateProduct));
 router.delete('/products/:id', h(admin.deleteProduct));
 router.post('/categories', h(admin.createCategory));
+router.put('/categories/reorder', h(admin.reorderCategories));
 router.put('/categories/:id', h(admin.updateCategory));
 router.delete('/categories/:id', h(admin.deleteCategory));
 router.get('/settings', h(admin.getAdminStoreSettings));

@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS = {
     freeShippingThreshold: 0,
     shippingFee: 150,
     announcementEnabled: false,
+    menCoverImage: '',
+    womenCoverImage: '',
     heroDesktopImage: '',
     heroMobileImage: '',
     heroDesktopVideo: '',
@@ -289,5 +291,17 @@ export async function ensureStoreDefaults() {
         }
         await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 8 } });
         console.log('✓ Category banners updated (full-length, no cropping).');
+    }
+    // Version 9: sharper, edge-to-edge category banners (2400×1200). Only replaces the version-8 files.
+    if ((row?.defaultsVersion ?? 0) < 9) {
+        const cats = await prisma.category.findMany({ where: { imageUrl: { contains: '/catalog/cat-' } }, select: { id: true, imageUrl: true } });
+        for (const c of cats) {
+            const next = (c.imageUrl || '').replace(/\/catalog\/cat-(overlength|waffle|acid)\.jpg(#lx=[\d.,]+)?$/, '/catalog/cat-$1-v2.jpg$2');
+            if (next !== c.imageUrl)
+                await prisma.category.update({ where: { id: c.id }, data: { imageUrl: next } });
+        }
+        await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 9 } });
+        cache = null;
+        console.log('✓ Category banners sharpened.');
     }
 }

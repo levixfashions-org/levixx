@@ -166,7 +166,7 @@ const imageUrl = z
     .string()
     .trim()
     .max(2000)
-    .refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), 'Each image must be uploaded or be a full https:// link');
+    .refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+(#lx=[\d.,]+)?$/i.test(v), 'Each image must be uploaded or be a full https:// link');
 const imageSchema = z.object({
     url: imageUrl,
     altText: z.string().max(200).optional().nullable(),
@@ -278,6 +278,12 @@ export async function reorderProducts(req, res) {
     const unique = [...new Set(ids)];
     await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
     res.json({ success: true, count: unique.length });
+}
+/** PUT /admin/categories/reorder — body { ids } in display order (menu, slideshow, stories). */
+export async function reorderCategories(req, res) {
+    const { ids } = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500) }).parse(req.body);
+    await prisma.$transaction([...new Set(ids)].map((id, i) => prisma.category.updateMany({ where: { id }, data: { sortOrder: i } })));
+    res.json({ success: true });
 }
 export async function getAdminProducts(req, res) {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
@@ -480,6 +486,8 @@ const settingsSchema = patchSchema(z.object({
     freeShippingThreshold: z.coerce.number().int().min(0).max(1000000),
     shippingFee: z.coerce.number().int().min(0).max(100000),
     announcementEnabled: z.boolean(),
+    menCoverImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Cover image must be uploaded or a full URL'),
+    womenCoverImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Cover image must be uploaded or a full URL'),
     heroDesktopImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),
     heroMobileImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),
     heroDesktopVideo: z.string().trim().max(2000).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), 'Hero video must be an uploaded video'),
