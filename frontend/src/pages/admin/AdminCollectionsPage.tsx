@@ -187,7 +187,7 @@ export const AdminCollectionsPage: React.FC = () => {
         </div>
 
         {msg && <div className="p-3 bg-black text-white text-xs font-semibold">{msg}</div>}
-        <DepartmentCovers />
+        <DepartmentCovers onSaved={load} />
         {error && !editing && <div className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs">{error}</div>}
 
         <div className="bg-white border border-black/10 divide-y divide-black/5">
