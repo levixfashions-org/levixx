@@ -313,4 +313,24 @@ export async function ensureStoreDefaults(): Promise<void> {
     await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 7 } });
     console.log('✓ Category covers set to LEVIX product photos.');
   }
+  // Version 8: wide 2:1 category banners (3 full-length looks side by side) so nothing gets cut off.
+  if ((row?.defaultsVersion ?? 0) < 8) {
+    const SITE = (process.env.FRONTEND_URL || 'https://thelevix.shop').replace(/\/+$/, '');
+    const banners: Record<string, string> = {
+      'overlength-t-shirts': 'cat-overlength.jpg',
+      'waffle-boxy-fit-full-sleeves': 'cat-waffle.jpg',
+      'acid-wash-t-shirts': 'cat-acid.jpg'
+    };
+    const v7 = ['00824b88-6976-4cc6-b171-4ae02c086404', 'd00265fc-31ed-4a0b-bc96-7515bccbcd52', 'd91fcd40-184c-43b1-a7b1-6645545e3e15'];
+    for (const [slug, file] of Object.entries(banners)) {
+      const cat = await prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } });
+      const cur = cat?.imageUrl || '';
+      // Replace only the old stock photo or the version-7 photo — never a banner the admin uploaded since.
+      if (cat && (!cur || cur.includes('images.unsplash.com') || v7.some((id) => cur.includes(id)))) {
+        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE}/catalog/${file}` } });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 8 } });
+    console.log('✓ Category banners updated (full-length, no cropping).');
+  }
 }
