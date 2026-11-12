@@ -1230,6 +1230,24 @@ async function ensureStoreDefaults() {
     await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 7 } });
     console.log("\u2713 Category covers set to LEVIX product photos.");
   }
+  if ((row?.defaultsVersion ?? 0) < 8) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const banners = {
+      "overlength-t-shirts": "cat-overlength.jpg",
+      "waffle-boxy-fit-full-sleeves": "cat-waffle.jpg",
+      "acid-wash-t-shirts": "cat-acid.jpg"
+    };
+    const v7 = ["00824b88-6976-4cc6-b171-4ae02c086404", "d00265fc-31ed-4a0b-bc96-7515bccbcd52", "d91fcd40-184c-43b1-a7b1-6645545e3e15"];
+    for (const [slug, file] of Object.entries(banners)) {
+      const cat = await prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } });
+      const cur = cat?.imageUrl || "";
+      if (cat && (!cur || cur.includes("images.unsplash.com") || v7.some((id) => cur.includes(id)))) {
+        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE2}/catalog/${file}` } });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 8 } });
+    console.log("\u2713 Category banners updated (full-length, no cropping).");
+  }
 }
 
 // src/controllers/cartController.ts
