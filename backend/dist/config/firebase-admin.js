@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
 import { env } from './env.js';
 let firebaseApp = null;
@@ -11,8 +12,8 @@ let hasServiceAccount = false;
 export function getFirebaseAdmin() {
     if (firebaseApp)
         return firebaseApp;
-    if (admin.apps.length > 0 && admin.apps[0]) {
-        firebaseApp = admin.apps[0];
+    if (getApps().length > 0) {
+        firebaseApp = getApps()[0];
         return firebaseApp;
     }
     // Easiest option on Hostinger: paste the whole downloaded service-account JSON into one variable.
@@ -21,7 +22,7 @@ export function getFirebaseAdmin() {
             const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
             if (serviceAccount.private_key)
                 serviceAccount.private_key = String(serviceAccount.private_key).replace(/\\n/g, '\n');
-            firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+            firebaseApp = initializeApp({ credential: cert(serviceAccount) });
             hasServiceAccount = true;
             console.log('✓ Firebase Admin initialised with service account (JSON variable).');
             return firebaseApp;
@@ -32,7 +33,7 @@ export function getFirebaseAdmin() {
     }
     if (env.FIREBASE_SERVICE_ACCOUNT_PATH && fs.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
         const serviceAccount = JSON.parse(fs.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8'));
-        firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+        firebaseApp = initializeApp({ credential: cert(serviceAccount) });
         hasServiceAccount = true;
         console.log('✓ Firebase Admin initialised with service account file.');
         return firebaseApp;
@@ -43,8 +44,8 @@ export function getFirebaseAdmin() {
         console.warn('⚠️ FIREBASE_PRIVATE_KEY looks like a placeholder — ignoring it and verifying tokens with the project id only.');
     }
     if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && keyLooksValid) {
-        firebaseApp = admin.initializeApp({
-            credential: admin.credential.cert({
+        firebaseApp = initializeApp({
+            credential: cert({
                 projectId: env.FIREBASE_PROJECT_ID,
                 clientEmail: env.FIREBASE_CLIENT_EMAIL,
                 privateKey
@@ -57,11 +58,11 @@ export function getFirebaseAdmin() {
     if (!env.FIREBASE_PROJECT_ID) {
         throw new Error('FIREBASE_PROJECT_ID is not configured — cannot verify sign-in tokens.');
     }
-    firebaseApp = admin.initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
+    firebaseApp = initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
     console.log(`✓ Firebase Admin initialised for token verification (project: ${env.FIREBASE_PROJECT_ID}).`);
     return firebaseApp;
 }
-export const adminAuth = () => getFirebaseAdmin().auth();
+export const adminAuth = () => getAuth(getFirebaseAdmin());
 /** True when Admin can do more than verify tokens (needed to create verification / reset links). */
 export function firebaseHasServiceAccount() {
     try {

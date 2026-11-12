@@ -33,6 +33,7 @@ router.patch('/orders/:id/status', h(admin.updateOrder));
 router.delete('/orders/:id', h(admin.deleteOrder));
 router.get('/products', h(admin.getAdminProducts));
 router.post('/products', h(admin.createProduct));
+router.put('/products/reorder', h(admin.reorderProducts));
 router.put('/products/:id', h(admin.updateProduct));
 router.delete('/products/:id', h(admin.deleteProduct));
 router.post('/categories', h(admin.createCategory));

@@ -19,7 +19,7 @@ export async function getHome(_req, res) {
         getSettings(),
         prisma.product.findMany({
             where: { isActive: true },
-            orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+            orderBy: [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }],
             take: 12,
             include: productListInclude
         }),
@@ -28,7 +28,7 @@ export async function getHome(_req, res) {
             orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
             include: {
                 products: {
-                    orderBy: { sortOrder: 'asc' },
+                    orderBy: [{ product: { position: 'asc' } }, { sortOrder: 'asc' }],
                     take: 16,
                     where: { product: { isActive: true } },
                     include: { product: { include: productListInclude } }
@@ -52,7 +52,7 @@ export async function getHome(_req, res) {
                 collections: { select: { collectionId: true } },
                 images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } }
             },
-            orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+            orderBy: [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }],
             take: 2000
         })
     ]);

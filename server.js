@@ -205,21 +205,22 @@ function broadcastChange(scope = "all") {
 var import_zod2 = require("zod");
 
 // src/config/firebase-admin.ts
-var import_firebase_admin = __toESM(require("firebase-admin"), 1);
+var import_app = require("firebase-admin/app");
+var import_auth = require("firebase-admin/auth");
 var import_fs = __toESM(require("fs"), 1);
 var firebaseApp = null;
 var hasServiceAccount = false;
 function getFirebaseAdmin() {
   if (firebaseApp) return firebaseApp;
-  if (import_firebase_admin.default.apps.length > 0 && import_firebase_admin.default.apps[0]) {
-    firebaseApp = import_firebase_admin.default.apps[0];
+  if ((0, import_app.getApps)().length > 0) {
+    firebaseApp = (0, import_app.getApps)()[0];
     return firebaseApp;
   }
   if (env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     try {
       const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
       if (serviceAccount.private_key) serviceAccount.private_key = String(serviceAccount.private_key).replace(/\\n/g, "\n");
-      firebaseApp = import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(serviceAccount) });
+      firebaseApp = (0, import_app.initializeApp)({ credential: (0, import_app.cert)(serviceAccount) });
       hasServiceAccount = true;
       console.log("\u2713 Firebase Admin initialised with service account (JSON variable).");
       return firebaseApp;
@@ -229,7 +230,7 @@ function getFirebaseAdmin() {
   }
   if (env.FIREBASE_SERVICE_ACCOUNT_PATH && import_fs.default.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
     const serviceAccount = JSON.parse(import_fs.default.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, "utf8"));
-    firebaseApp = import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(serviceAccount) });
+    firebaseApp = (0, import_app.initializeApp)({ credential: (0, import_app.cert)(serviceAccount) });
     hasServiceAccount = true;
     console.log("\u2713 Firebase Admin initialised with service account file.");
     return firebaseApp;
@@ -240,8 +241,8 @@ function getFirebaseAdmin() {
     console.warn("\u26A0\uFE0F FIREBASE_PRIVATE_KEY looks like a placeholder \u2014 ignoring it and verifying tokens with the project id only.");
   }
   if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && keyLooksValid) {
-    firebaseApp = import_firebase_admin.default.initializeApp({
-      credential: import_firebase_admin.default.credential.cert({
+    firebaseApp = (0, import_app.initializeApp)({
+      credential: (0, import_app.cert)({
         projectId: env.FIREBASE_PROJECT_ID,
         clientEmail: env.FIREBASE_CLIENT_EMAIL,
         privateKey
@@ -254,11 +255,11 @@ function getFirebaseAdmin() {
   if (!env.FIREBASE_PROJECT_ID) {
     throw new Error("FIREBASE_PROJECT_ID is not configured \u2014 cannot verify sign-in tokens.");
   }
-  firebaseApp = import_firebase_admin.default.initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
+  firebaseApp = (0, import_app.initializeApp)({ projectId: env.FIREBASE_PROJECT_ID });
   console.log(`\u2713 Firebase Admin initialised for token verification (project: ${env.FIREBASE_PROJECT_ID}).`);
   return firebaseApp;
 }
-var adminAuth = () => getFirebaseAdmin().auth();
+var adminAuth = () => (0, import_auth.getAuth)(getFirebaseAdmin());
 function firebaseHasServiceAccount() {
   try {
     getFirebaseAdmin();
@@ -419,10 +420,10 @@ function notFoundApi(req, res) {
 }
 function errorHandler(err, req, res, _next) {
   if (err instanceof import_zod3.ZodError) {
-    const first = err.errors[0];
+    const first = err.issues[0];
     res.status(400).json({
       error: first ? `${first.path.join(".") || "input"}: ${first.message}` : "Validation error",
-      details: err.errors.map((e) => ({ field: e.path.join("."), message: e.message }))
+      details: err.issues.map((e) => ({ field: e.path.join("."), message: e.message }))
     });
     return;
   }
@@ -733,7 +734,7 @@ function buildOrderBy(sort) {
       return { createdAt: "desc" };
     case "featured":
     default:
-      return [{ isFeatured: "desc" }, { createdAt: "desc" }];
+      return [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }];
   }
 }
 async function getProducts(req, res) {
@@ -862,7 +863,7 @@ function orderByFor(sort) {
     case "newest":
       return { createdAt: "desc" };
     default:
-      return [{ isFeatured: "desc" }, { createdAt: "desc" }];
+      return [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }];
   }
 }
 async function getCollections(_req, res) {
@@ -920,6 +921,7 @@ async function getCollectionBySlug(req, res) {
     if (sort === "price-asc") products2 = products2.sort((a, b) => a.basePrice - b.basePrice);
     else if (sort === "price-desc") products2 = products2.sort((a, b) => b.basePrice - a.basePrice);
     else if (sort === "newest") products2 = products2.sort((a, b) => +b.createdAt - +a.createdAt);
+    else products2 = products2.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     res.json({
       collection: {
         id: collection.id,
@@ -1126,6 +1128,70 @@ async function ensureStoreDefaults() {
     });
     cache = null;
     console.log("\u2713 Free delivery on all orders switched on.");
+  }
+  if ((row?.defaultsVersion ?? 0) < 4) {
+    const MRP = 79900;
+    const updated = await prisma.product.updateMany({
+      where: { basePrice: { lt: MRP }, OR: [{ comparePrice: null }, { comparePrice: { lte: MRP } }] },
+      data: { comparePrice: MRP }
+    });
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 4 } });
+    console.log(`\u2713 Set MRP \u20B9799 on ${updated.count} products (selling prices unchanged).`);
+  }
+  if ((row?.defaultsVersion ?? 0) < 5) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const slug = "shri-ram-overlength-tee-beige";
+    if (!await prisma.product.findUnique({ where: { slug } })) {
+      const category = await prisma.category.findUnique({ where: { slug: "overlength-t-shirts" } });
+      const ref = category ? await prisma.product.findFirst({ where: { categoryId: category.id, NOT: { details: null } }, orderBy: { createdAt: "asc" } }) : null;
+      const drop = await prisma.collection.findUnique({ where: { slug: "first-drop" } });
+      const sizes = ["S", "M", "L", "XL", "XXL"];
+      await prisma.product.create({
+        data: {
+          name: "Shri Ram Overlength Tee \u2013 Beige",
+          slug,
+          description: 'Carry the calm before the arrow. A hand-inked back print of Shri Ram standing tall with his bow against a rising sun, with "\u0936\u094D\u0930\u0940 \u0930\u093E\u092E" in Devanagari \u2014 and a smaller archer print on the front chest. Printed in deep brown on a soft beige base, cut in our signature overlength, drop-shoulder fit. Unisex.',
+          details: ref?.details ?? null,
+          fabricCare: ref?.fabricCare ?? null,
+          fitGuide: ref?.fitGuide ?? null,
+          basePrice: 54900,
+          comparePrice: 79900,
+          categoryId: category?.id ?? null,
+          gender: "UNISEX",
+          colorGroup: "NEUTRALS",
+          isActive: true,
+          images: {
+            create: [1, 2, 3, 4].map((n, i) => ({
+              url: `${SITE2}/catalog/shri-ram-overlength-${n}.jpg`,
+              altText: ["Front on him", "Back on him", "Front on her", "Back on her"][i],
+              sortOrder: i,
+              isCover: i === 0
+            }))
+          },
+          variants: {
+            create: sizes.map((size) => ({
+              size,
+              color: "Beige",
+              colorHex: "#E6D7BD",
+              sku: `${slug.toUpperCase()}-BEIGE-${size}`,
+              stockQuantity: 10
+            }))
+          },
+          ...drop ? { collections: { create: [{ collectionId: drop.id, sortOrder: 0 }] } } : {}
+        }
+      });
+      console.log("\u2713 Added Shri Ram Overlength Tee \u2013 Beige.");
+    }
+    await prisma.storeSetting.update({
+      where: { id: "default" },
+      data: {
+        heroDesktopVideo: `${SITE2}/videos/hero-offer-desktop.mp4`,
+        heroMobileVideo: `${SITE2}/videos/hero-offer-mobile.mp4`,
+        defaultsVersion: 5
+      }
+    });
+    cache = null;
+    console.log("\u2713 Homepage videos switched to the offer-price versions.");
   }
 }
 
@@ -1807,8 +1873,20 @@ var paymentRoutes_default = router6;
 // src/routes/adminRoutes.ts
 var import_express7 = __toESM(require("express"), 1);
 
-// src/controllers/adminController.ts
+// src/utils/zodPatch.ts
 var import_zod8 = require("zod");
+function patchSchema(schema) {
+  const shape = {};
+  for (const [key, field] of Object.entries(schema.shape)) {
+    let inner = field;
+    while (inner instanceof import_zod8.z.ZodDefault) inner = inner.unwrap();
+    shape[key] = inner.optional();
+  }
+  return import_zod8.z.object(shape);
+}
+
+// src/controllers/adminController.ts
+var import_zod9 = require("zod");
 var import_client7 = require("@prisma/client");
 async function getDashboardMetrics(_req, res) {
   const startOfToday = /* @__PURE__ */ new Date();
@@ -1893,12 +1971,12 @@ async function getAllOrders(req, res) {
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
   });
 }
-var updateOrderSchema = import_zod8.z.object({
-  status: import_zod8.z.nativeEnum(import_client7.OrderStatus).optional(),
-  courier: import_zod8.z.string().trim().max(100).optional(),
-  trackingNumber: import_zod8.z.string().trim().max(100).optional(),
-  adminNotes: import_zod8.z.string().max(5e3).optional(),
-  markCodPaid: import_zod8.z.boolean().optional()
+var updateOrderSchema = import_zod9.z.object({
+  status: import_zod9.z.nativeEnum(import_client7.OrderStatus).optional(),
+  courier: import_zod9.z.string().trim().max(100).optional(),
+  trackingNumber: import_zod9.z.string().trim().max(100).optional(),
+  adminNotes: import_zod9.z.string().max(5e3).optional(),
+  markCodPaid: import_zod9.z.boolean().optional()
 });
 async function updateOrder(req, res) {
   const data2 = updateOrderSchema.parse(req.body);
@@ -1949,39 +2027,39 @@ async function deleteOrder(req, res) {
   await prisma.order.delete({ where: { id: order.id } });
   res.json({ success: true });
 }
-var imageUrl = import_zod8.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), "Each image must be uploaded or be a full https:// link");
-var imageSchema = import_zod8.z.object({
+var imageUrl = import_zod9.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), "Each image must be uploaded or be a full https:// link");
+var imageSchema = import_zod9.z.object({
   url: imageUrl,
-  altText: import_zod8.z.string().max(200).optional().nullable(),
-  color: import_zod8.z.string().trim().max(40).optional().nullable(),
-  isCover: import_zod8.z.boolean().optional(),
-  sortOrder: import_zod8.z.number().int().optional()
+  altText: import_zod9.z.string().max(200).optional().nullable(),
+  color: import_zod9.z.string().trim().max(40).optional().nullable(),
+  isCover: import_zod9.z.boolean().optional(),
+  sortOrder: import_zod9.z.number().int().optional()
 });
-var variantSchema = import_zod8.z.object({
-  size: import_zod8.z.string().trim().min(1).max(10),
-  color: import_zod8.z.string().trim().max(40).optional().nullable(),
-  colorHex: import_zod8.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod8.z.literal("")),
-  stockQuantity: import_zod8.z.number().int().min(0).max(1e5),
-  priceDelta: import_zod8.z.number().int().default(0)
+var variantSchema = import_zod9.z.object({
+  size: import_zod9.z.string().trim().min(1).max(10),
+  color: import_zod9.z.string().trim().max(40).optional().nullable(),
+  colorHex: import_zod9.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod9.z.literal("")),
+  stockQuantity: import_zod9.z.number().int().min(0).max(1e5),
+  priceDelta: import_zod9.z.number().int().default(0)
 });
-var productSchema = import_zod8.z.object({
-  name: import_zod8.z.string().trim().min(2).max(190),
-  slug: import_zod8.z.string().trim().max(120).optional(),
-  description: import_zod8.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
-  details: import_zod8.z.string().max(2e4).optional().nullable(),
-  fabricCare: import_zod8.z.string().max(2e4).optional().nullable(),
-  fitGuide: import_zod8.z.string().max(2e4).optional().nullable(),
-  basePrice: import_zod8.z.number().int().positive("Price must be more than 0"),
-  comparePrice: import_zod8.z.number().int().positive().optional().nullable(),
-  categoryId: import_zod8.z.string().max(120).optional().nullable(),
-  categoryName: import_zod8.z.string().max(120).optional().nullable(),
-  isFeatured: import_zod8.z.boolean().default(false),
-  isActive: import_zod8.z.boolean().default(true),
-  colorGroup: import_zod8.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
-  gender: import_zod8.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
-  collectionIds: import_zod8.z.array(import_zod8.z.string().max(64)).max(50).optional(),
-  images: import_zod8.z.array(imageSchema).min(1, "Add at least one product image").max(60),
-  variants: import_zod8.z.array(variantSchema).min(1, "Add at least one size").max(200)
+var productSchema = import_zod9.z.object({
+  name: import_zod9.z.string().trim().min(2).max(190),
+  slug: import_zod9.z.string().trim().max(120).optional(),
+  description: import_zod9.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
+  details: import_zod9.z.string().max(2e4).optional().nullable(),
+  fabricCare: import_zod9.z.string().max(2e4).optional().nullable(),
+  fitGuide: import_zod9.z.string().max(2e4).optional().nullable(),
+  basePrice: import_zod9.z.number().int().positive("Price must be more than 0"),
+  comparePrice: import_zod9.z.number().int().positive().optional().nullable(),
+  categoryId: import_zod9.z.string().max(120).optional().nullable(),
+  categoryName: import_zod9.z.string().max(120).optional().nullable(),
+  isFeatured: import_zod9.z.boolean().default(false),
+  isActive: import_zod9.z.boolean().default(true),
+  colorGroup: import_zod9.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
+  gender: import_zod9.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
+  collectionIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(50).optional(),
+  images: import_zod9.z.array(imageSchema).min(1, "Add at least one product image").max(60),
+  variants: import_zod9.z.array(variantSchema).min(1, "Add at least one size").max(200)
 });
 async function resolveCategoryId(categoryId, categoryName) {
   if (categoryId) {
@@ -2047,11 +2125,17 @@ async function setProductCollections(productId, collectionIds) {
     }
   }
 }
+async function reorderProducts(req, res) {
+  const { ids } = import_zod9.z.object({ ids: import_zod9.z.array(import_zod9.z.string().min(1).max(64)).min(1).max(2e3) }).parse(req.body);
+  const unique = [...new Set(ids)];
+  await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
+  res.json({ success: true, count: unique.length });
+}
 async function getAdminProducts(req, res) {
   const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
   const products = await prisma.product.findMany({
     where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
     take: 500,
     include: { ...productFullInclude, collections: { select: { collectionId: true } } }
   });
@@ -2101,7 +2185,7 @@ async function createProduct(req, res) {
 }
 async function updateProduct(req, res) {
   const { id } = req.params;
-  const data2 = productSchema.partial().parse(req.body);
+  const data2 = patchSchema(productSchema).parse(req.body);
   const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
   if (!existing) throw new AppError("Product not found", 404);
   const slug = data2.slug !== void 0 || data2.name !== void 0 ? slugify(data2.slug || data2.name || existing.slug) : existing.slug;
@@ -2180,12 +2264,12 @@ async function deleteProduct(req, res) {
   await prisma.product.delete({ where: { id } });
   res.json({ success: true, archived: false });
 }
-var categorySchema = import_zod8.z.object({
-  name: import_zod8.z.string().trim().min(2).max(120),
-  group: import_zod8.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
-  description: import_zod8.z.string().max(2e3).optional().nullable(),
-  imageUrl: imageUrl.optional().nullable().or(import_zod8.z.literal("")),
-  sortOrder: import_zod8.z.number().int().optional()
+var categorySchema = import_zod9.z.object({
+  name: import_zod9.z.string().trim().min(2).max(120),
+  group: import_zod9.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
+  description: import_zod9.z.string().max(2e3).optional().nullable(),
+  imageUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
+  sortOrder: import_zod9.z.number().int().optional()
 });
 async function createCategory(req, res) {
   const data2 = categorySchema.parse(req.body);
@@ -2202,7 +2286,7 @@ async function createCategory(req, res) {
   res.status(201).json({ category });
 }
 async function updateCategory(req, res) {
-  const data2 = categorySchema.partial().parse(req.body);
+  const data2 = patchSchema(categorySchema).parse(req.body);
   const category = await prisma.category.update({
     where: { id: req.params.id },
     data: {
@@ -2219,36 +2303,36 @@ async function deleteCategory(req, res) {
   await prisma.category.delete({ where: { id: req.params.id } });
   res.json({ success: true });
 }
-var settingsSchema = import_zod8.z.object({
-  announcementText: import_zod8.z.string().max(1e3),
-  heroHeadline: import_zod8.z.string().max(190),
-  heroSubtitle: import_zod8.z.string().max(1e3),
-  supportEmail: import_zod8.z.string().trim().email().or(import_zod8.z.literal("")),
-  supportPhone: import_zod8.z.string().trim().max(30),
-  instagramHandle: import_zod8.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
-  freeShippingThreshold: import_zod8.z.coerce.number().int().min(0).max(1e6),
-  shippingFee: import_zod8.z.coerce.number().int().min(0).max(1e5),
-  announcementEnabled: import_zod8.z.boolean(),
-  heroDesktopImage: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
-  heroMobileImage: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
-  heroDesktopVideo: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
-  heroMobileVideo: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
-  heroLink: import_zod8.z.string().trim().max(500),
-  legalName: import_zod8.z.string().trim().max(190),
-  businessAddress: import_zod8.z.string().trim().max(1e3),
-  grievanceOfficer: import_zod8.z.string().trim().max(190),
-  gstin: import_zod8.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
-  jurisdictionCity: import_zod8.z.string().trim().max(100),
-  codEnabled: import_zod8.z.boolean(),
-  codFee: import_zod8.z.coerce.number().int().min(0).max(1e3),
-  codMaxOrder: import_zod8.z.coerce.number().int().min(0).max(1e6),
-  heroCtaText: import_zod8.z.string().trim().max(60),
-  latestDropTitle: import_zod8.z.string().trim().max(100),
-  seoTitle: import_zod8.z.string().max(300),
-  seoText: import_zod8.z.string().max(2e4),
-  shippingInfo: import_zod8.z.string().max(5e3),
-  careInfo: import_zod8.z.string().max(5e3)
-}).partial();
+var settingsSchema = patchSchema(import_zod9.z.object({
+  announcementText: import_zod9.z.string().max(1e3),
+  heroHeadline: import_zod9.z.string().max(190),
+  heroSubtitle: import_zod9.z.string().max(1e3),
+  supportEmail: import_zod9.z.string().trim().email().or(import_zod9.z.literal("")),
+  supportPhone: import_zod9.z.string().trim().max(30),
+  instagramHandle: import_zod9.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
+  freeShippingThreshold: import_zod9.z.coerce.number().int().min(0).max(1e6),
+  shippingFee: import_zod9.z.coerce.number().int().min(0).max(1e5),
+  announcementEnabled: import_zod9.z.boolean(),
+  heroDesktopImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroMobileImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroDesktopVideo: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroMobileVideo: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroLink: import_zod9.z.string().trim().max(500),
+  legalName: import_zod9.z.string().trim().max(190),
+  businessAddress: import_zod9.z.string().trim().max(1e3),
+  grievanceOfficer: import_zod9.z.string().trim().max(190),
+  gstin: import_zod9.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
+  jurisdictionCity: import_zod9.z.string().trim().max(100),
+  codEnabled: import_zod9.z.boolean(),
+  codFee: import_zod9.z.coerce.number().int().min(0).max(1e3),
+  codMaxOrder: import_zod9.z.coerce.number().int().min(0).max(1e6),
+  heroCtaText: import_zod9.z.string().trim().max(60),
+  latestDropTitle: import_zod9.z.string().trim().max(100),
+  seoTitle: import_zod9.z.string().max(300),
+  seoText: import_zod9.z.string().max(2e4),
+  shippingInfo: import_zod9.z.string().max(5e3),
+  careInfo: import_zod9.z.string().max(5e3)
+}));
 async function getAdminStoreSettings(_req, res) {
   res.json({ settings: await getSettings() });
 }
@@ -2271,14 +2355,14 @@ function toDiscountDto(c) {
     usedCount: c.usedCount
   };
 }
-var discountSchema = import_zod8.z.object({
-  code: import_zod8.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
-  type: import_zod8.z.enum(["PERCENTAGE", "FIXED"]),
-  value: import_zod8.z.coerce.number().positive(),
-  minOrderINR: import_zod8.z.coerce.number().min(0).default(0),
-  expiresAt: import_zod8.z.string().optional().or(import_zod8.z.literal("")),
-  isActive: import_zod8.z.boolean().default(true),
-  maxUses: import_zod8.z.coerce.number().int().positive().optional().nullable()
+var discountSchema = import_zod9.z.object({
+  code: import_zod9.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
+  type: import_zod9.z.enum(["PERCENTAGE", "FIXED"]),
+  value: import_zod9.z.coerce.number().positive(),
+  minOrderINR: import_zod9.z.coerce.number().min(0).default(0),
+  expiresAt: import_zod9.z.string().optional().or(import_zod9.z.literal("")),
+  isActive: import_zod9.z.boolean().default(true),
+  maxUses: import_zod9.z.coerce.number().int().positive().optional().nullable()
 });
 async function getAdminDiscounts(_req, res) {
   const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
@@ -2326,18 +2410,18 @@ async function exportSubscribers(req, res) {
   res.setHeader("Content-Disposition", 'attachment; filename="levix-subscribers.csv"');
   res.send(csv);
 }
-var collectionSchema = import_zod8.z.object({
-  name: import_zod8.z.string().trim().min(2).max(120),
-  slug: import_zod8.z.string().trim().max(120).optional(),
-  description: import_zod8.z.string().max(5e3).optional().nullable(),
-  bannerImageUrl: imageUrl.optional().nullable().or(import_zod8.z.literal("")),
-  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod8.z.literal("")),
-  isActive: import_zod8.z.boolean().default(true),
-  sortOrder: import_zod8.z.coerce.number().int().default(0),
-  homeLayout: import_zod8.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
-  showInGallery: import_zod8.z.boolean().default(false),
-  showInMenu: import_zod8.z.boolean().default(true),
-  productIds: import_zod8.z.array(import_zod8.z.string().max(64)).max(500).optional()
+var collectionSchema = import_zod9.z.object({
+  name: import_zod9.z.string().trim().min(2).max(120),
+  slug: import_zod9.z.string().trim().max(120).optional(),
+  description: import_zod9.z.string().max(5e3).optional().nullable(),
+  bannerImageUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
+  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
+  isActive: import_zod9.z.boolean().default(true),
+  sortOrder: import_zod9.z.coerce.number().int().default(0),
+  homeLayout: import_zod9.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
+  showInGallery: import_zod9.z.boolean().default(false),
+  showInMenu: import_zod9.z.boolean().default(true),
+  productIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(500).optional()
 });
 async function getAdminCollections(_req, res) {
   const collections = await prisma.collection.findMany({
@@ -2381,7 +2465,7 @@ async function createCollection(req, res) {
   res.status(201).json({ collection });
 }
 async function updateCollection(req, res) {
-  const data2 = collectionSchema.partial().parse(req.body);
+  const data2 = patchSchema(collectionSchema).parse(req.body);
   const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
   if (!existing) throw new AppError("Collection not found", 404);
   const slug = data2.slug !== void 0 ? slugify(data2.slug || data2.name || existing.name) : existing.slug;
@@ -2426,7 +2510,7 @@ async function getHome(_req, res) {
     getSettings(),
     prisma.product.findMany({
       where: { isActive: true },
-      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
       take: 12,
       include: productListInclude
     }),
@@ -2435,7 +2519,7 @@ async function getHome(_req, res) {
       orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
       include: {
         products: {
-          orderBy: { sortOrder: "asc" },
+          orderBy: [{ product: { position: "asc" } }, { sortOrder: "asc" }],
           take: 16,
           where: { product: { isActive: true } },
           include: { product: { include: productListInclude } }
@@ -2459,7 +2543,7 @@ async function getHome(_req, res) {
         collections: { select: { collectionId: true } },
         images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } }
       },
-      orderBy: [{ isFeatured: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
       take: 2e3
     })
   ]);
@@ -2741,6 +2825,7 @@ router7.patch("/orders/:id/status", asyncHandler(updateOrder));
 router7.delete("/orders/:id", asyncHandler(deleteOrder));
 router7.get("/products", asyncHandler(getAdminProducts));
 router7.post("/products", asyncHandler(createProduct));
+router7.put("/products/reorder", asyncHandler(reorderProducts));
 router7.put("/products/:id", asyncHandler(updateProduct));
 router7.delete("/products/:id", asyncHandler(deleteProduct));
 router7.post("/categories", asyncHandler(createCategory));
@@ -2762,7 +2847,7 @@ var adminRoutes_default = router7;
 
 // src/routes/storeRoutes.ts
 var import_express8 = require("express");
-var import_zod9 = require("zod");
+var import_zod10 = require("zod");
 var router8 = (0, import_express8.Router)();
 router8.get(
   "/settings",
@@ -2777,7 +2862,7 @@ router8.post(
   "/subscribe",
   authRateLimiter,
   asyncHandler(async (req, res) => {
-    const { email } = import_zod9.z.object({ email: import_zod9.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
+    const { email } = import_zod10.z.object({ email: import_zod10.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
     await prisma.subscriber.upsert({ where: { email }, update: {}, create: { email } });
     res.json({ success: true });
   })
@@ -2788,7 +2873,7 @@ var storeRoutes_default = router8;
 var import_express9 = require("express");
 
 // src/controllers/wishlistController.ts
-var import_zod10 = require("zod");
+var import_zod11 = require("zod");
 async function getOrCreateWishlist(userId) {
   return prisma.wishlist.upsert({ where: { userId }, update: {}, create: { userId } });
 }
@@ -2823,7 +2908,7 @@ async function toggleWishlist(req, res) {
 }
 async function mergeWishlist(req, res) {
   if (!req.user) throw new AppError("Please sign in", 401);
-  const { productIds } = import_zod10.z.object({ productIds: import_zod10.z.array(import_zod10.z.string().max(64)).max(200) }).parse(req.body);
+  const { productIds } = import_zod11.z.object({ productIds: import_zod11.z.array(import_zod11.z.string().max(64)).max(200) }).parse(req.body);
   const wl = await getOrCreateWishlist(req.user.id);
   if (productIds.length) {
     const valid = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true } });

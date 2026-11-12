@@ -10,7 +10,7 @@ function orderByFor(sort) {
         case 'newest':
             return { createdAt: 'desc' };
         default:
-            return [{ isFeatured: 'desc' }, { createdAt: 'desc' }];
+            return [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }];
     }
 }
 /** Curated collections (managed in Admin → Collections) followed by product categories. */
@@ -74,6 +74,9 @@ export async function getCollectionBySlug(req, res) {
             products = products.sort((a, b) => b.basePrice - a.basePrice);
         else if (sort === 'newest')
             products = products.sort((a, b) => +b.createdAt - +a.createdAt);
+        // Default: the order set in Admin → Products (stable sort keeps the collection's own order for ties).
+        else
+            products = products.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         res.json({
             collection: {
                 id: collection.id,

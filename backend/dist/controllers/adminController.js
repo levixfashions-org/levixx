@@ -1,3 +1,4 @@
+import { patchSchema } from '../utils/zodPatch.js';
 import { z } from 'zod';
 import { DiscountType, OrderStatus, PaymentStatus, Role } from '@prisma/client';
 import { prisma } from '../config/db.js';
@@ -271,11 +272,18 @@ async function setProductCollections(productId, collectionIds) {
         }
     }
 }
+/** PUT /admin/products/reorder — body { ids: [...] } in the order they should appear on the shop. */
+export async function reorderProducts(req, res) {
+    const { ids } = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(2000) }).parse(req.body);
+    const unique = [...new Set(ids)];
+    await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
+    res.json({ success: true, count: unique.length });
+}
 export async function getAdminProducts(req, res) {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const products = await prisma.product.findMany({
         where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }],
         take: 500,
         include: { ...productFullInclude, collections: { select: { collectionId: true } } }
     });
@@ -328,7 +336,7 @@ export async function createProduct(req, res) {
 }
 export async function updateProduct(req, res) {
     const { id } = req.params;
-    const data = productSchema.partial().parse(req.body);
+    const data = patchSchema(productSchema).parse(req.body);
     const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
     if (!existing)
         throw new AppError('Product not found', 404);
@@ -441,7 +449,7 @@ export async function createCategory(req, res) {
     res.status(201).json({ category });
 }
 export async function updateCategory(req, res) {
-    const data = categorySchema.partial().parse(req.body);
+    const data = patchSchema(categorySchema).parse(req.body);
     const category = await prisma.category.update({
         where: { id: req.params.id },
         data: {
@@ -462,7 +470,7 @@ export async function deleteCategory(req, res) {
 /* ----------------------------------------------------------------------------------------------
  * Store settings
  * --------------------------------------------------------------------------------------------*/
-const settingsSchema = z.object({
+const settingsSchema = patchSchema(z.object({
     announcementText: z.string().max(1000),
     heroHeadline: z.string().max(190),
     heroSubtitle: z.string().max(1000),
@@ -491,7 +499,7 @@ const settingsSchema = z.object({
     seoText: z.string().max(20000),
     shippingInfo: z.string().max(5000),
     careInfo: z.string().max(5000)
-}).partial();
+}));
 export async function getAdminStoreSettings(_req, res) {
     res.json({ settings: await getSettings() });
 }
@@ -644,7 +652,7 @@ export async function createCollection(req, res) {
     res.status(201).json({ collection });
 }
 export async function updateCollection(req, res) {
-    const data = collectionSchema.partial().parse(req.body);
+    const data = patchSchema(collectionSchema).parse(req.body);
     const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
     if (!existing)
         throw new AppError('Collection not found', 404);

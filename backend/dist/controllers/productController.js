@@ -13,7 +13,7 @@ function buildOrderBy(sort) {
             return { createdAt: 'desc' };
         case 'featured':
         default:
-            return [{ isFeatured: 'desc' }, { createdAt: 'desc' }];
+            return [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }];
     }
 }
 export async function getProducts(req, res) {
