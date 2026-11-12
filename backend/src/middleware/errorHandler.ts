@@ -17,10 +17,10 @@ export function notFoundApi(req: Request, res: Response) {
 
 export function errorHandler(err: any, req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof ZodError) {
-    const first = err.errors[0];
+    const first = err.issues[0];
     res.status(400).json({
       error: first ? `${first.path.join('.') || 'input'}: ${first.message}` : 'Validation error',
-      details: err.errors.map((e) => ({ field: e.path.join('.'), message: e.message }))
+      details: err.issues.map((e) => ({ field: e.path.join('.'), message: e.message }))
     });
     return;
   }

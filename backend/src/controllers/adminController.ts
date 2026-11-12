@@ -1,3 +1,4 @@
+import { patchSchema } from '../utils/zodPatch.js';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { DiscountType, OrderStatus, PaymentStatus, Prisma, Role } from '@prisma/client';
@@ -352,7 +353,7 @@ export async function createProduct(req: Request, res: Response) {
 
 export async function updateProduct(req: Request, res: Response) {
   const { id } = req.params;
-  const data = productSchema.partial().parse(req.body);
+  const data = patchSchema(productSchema).parse(req.body);
   const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
   if (!existing) throw new AppError('Product not found', 404);
 
@@ -473,7 +474,7 @@ export async function createCategory(req: Request, res: Response) {
 }
 
 export async function updateCategory(req: Request, res: Response) {
-  const data = categorySchema.partial().parse(req.body);
+  const data = patchSchema(categorySchema).parse(req.body);
   const category = await prisma.category.update({
     where: { id: req.params.id },
     data: {
@@ -496,7 +497,7 @@ export async function deleteCategory(req: Request, res: Response) {
 /* ----------------------------------------------------------------------------------------------
  * Store settings
  * --------------------------------------------------------------------------------------------*/
-const settingsSchema = z.object({
+const settingsSchema = patchSchema(z.object({
   announcementText: z.string().max(1000),
   heroHeadline: z.string().max(190),
   heroSubtitle: z.string().max(1000),
@@ -525,7 +526,7 @@ const settingsSchema = z.object({
   seoText: z.string().max(20000),
   shippingInfo: z.string().max(5000),
   careInfo: z.string().max(5000)
-}).partial();
+}));
 
 export async function getAdminStoreSettings(_req: Request, res: Response) {
   res.json({ settings: await getSettings() });
@@ -687,7 +688,7 @@ export async function createCollection(req: Request, res: Response) {
 }
 
 export async function updateCollection(req: Request, res: Response) {
-  const data = collectionSchema.partial().parse(req.body);
+  const data = patchSchema(collectionSchema).parse(req.body);
   const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
   if (!existing) throw new AppError('Collection not found', 404);
   const slug = data.slug !== undefined ? slugify(data.slug || data.name || existing.name) : existing.slug;

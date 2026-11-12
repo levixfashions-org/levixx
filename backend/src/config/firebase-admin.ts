@@ -1,8 +1,9 @@
-import admin from 'firebase-admin';
+import { App, cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
 import { env } from './env.js';
 
-let firebaseApp: admin.app.App | null = null;
+let firebaseApp: App | null = null;
 let hasServiceAccount = false;
 
 /**
@@ -10,10 +11,10 @@ let hasServiceAccount = false;
  * Verifying ID tokens only needs the Firebase project id (Google's public keys are
  * fetched automatically), so a service account is optional.
  */
-export function getFirebaseAdmin(): admin.app.App {
+export function getFirebaseAdmin(): App {
   if (firebaseApp) return firebaseApp;
-  if (admin.apps.length > 0 && admin.apps[0]) {
-    firebaseApp = admin.apps[0];
+  if (getApps().length > 0) {
+    firebaseApp = getApps()[0];
     return firebaseApp;
   }
 
@@ -22,7 +23,7 @@ export function getFirebaseAdmin(): admin.app.App {
     try {
       const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
       if (serviceAccount.private_key) serviceAccount.private_key = String(serviceAccount.private_key).replace(/\\n/g, '\n');
-      firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+      firebaseApp = initializeApp({ credential: cert(serviceAccount) });
       hasServiceAccount = true;
       console.log('✓ Firebase Admin initialised with service account (JSON variable).');
       return firebaseApp;
@@ -33,7 +34,7 @@ export function getFirebaseAdmin(): admin.app.App {
 
   if (env.FIREBASE_SERVICE_ACCOUNT_PATH && fs.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
     const serviceAccount = JSON.parse(fs.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8'));
-    firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    firebaseApp = initializeApp({ credential: cert(serviceAccount) });
     hasServiceAccount = true;
     console.log('✓ Firebase Admin initialised with service account file.');
     return firebaseApp;
@@ -46,8 +47,8 @@ export function getFirebaseAdmin(): admin.app.App {
   }
 
   if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && keyLooksValid) {
-    firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert({
+    firebaseApp = initializeApp({
+      credential: cert({
         projectId: env.FIREBASE_PROJECT_ID,
         clientEmail: env.FIREBASE_CLIENT_EMAIL,
         privateKey
@@ -62,12 +63,12 @@ export function getFirebaseAdmin(): admin.app.App {
     throw new Error('FIREBASE_PROJECT_ID is not configured — cannot verify sign-in tokens.');
   }
 
-  firebaseApp = admin.initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
+  firebaseApp = initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
   console.log(`✓ Firebase Admin initialised for token verification (project: ${env.FIREBASE_PROJECT_ID}).`);
   return firebaseApp;
 }
 
-export const adminAuth = () => getFirebaseAdmin().auth();
+export const adminAuth = () => getAuth(getFirebaseAdmin());
 
 /** True when Admin can do more than verify tokens (needed to create verification / reset links). */
 export function firebaseHasServiceAccount(): boolean {
