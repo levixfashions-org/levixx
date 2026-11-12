@@ -266,12 +266,30 @@ export async function ensureStoreDefaults(): Promise<void> {
     await prisma.storeSetting.update({
       where: { id: 'default' },
       data: {
-        heroDesktopVideo: `${SITE}/videos/hero-offer-desktop.mp4`,
-        heroMobileVideo: `${SITE}/videos/hero-offer-mobile.mp4`,
+        heroDesktopVideo: `${SITE}/videos/hero-offer-desktop-sound.mp4`,
+        heroMobileVideo: `${SITE}/videos/hero-offer-mobile-sound.mp4`,
         defaultsVersion: 5
       }
     });
     cache = null;
     console.log('✓ Homepage videos switched to the offer-price versions.');
+  }
+  // Version 6: same offer videos, now with the beat soundtrack (the "Sound on" button plays it).
+  if ((row?.defaultsVersion ?? 0) < 6) {
+    const SITE = (process.env.FRONTEND_URL || 'https://thelevix.shop').replace(/\/+$/, '');
+    const cur = await prisma.storeSetting.findUnique({ where: { id: 'default' }, select: { heroDesktopVideo: true, heroMobileVideo: true } });
+    // Only replace our own offer videos — never a video the admin uploaded later.
+    const swap = (v: string | null | undefined, kind: 'desktop' | 'mobile') =>
+      !v || /\/videos\/hero-offer-(desktop|mobile)\.mp4$/.test(v) ? `${SITE}/videos/hero-offer-${kind}-sound.mp4` : v;
+    await prisma.storeSetting.update({
+      where: { id: 'default' },
+      data: {
+        heroDesktopVideo: swap(cur?.heroDesktopVideo, 'desktop'),
+        heroMobileVideo: swap(cur?.heroMobileVideo, 'mobile'),
+        defaultsVersion: 6
+      }
+    });
+    cache = null;
+    console.log('✓ Homepage videos now include sound.');
   }
 }
