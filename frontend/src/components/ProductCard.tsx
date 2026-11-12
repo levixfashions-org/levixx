@@ -102,11 +102,6 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
         {soldOut && (
           <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-white/90 text-[9.5px] text-neutral-500">Sold Out</span>
         )}
-        {!soldOut && product.comparePrice && product.comparePrice > product.basePrice && (
-          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-black text-white text-[9.5px] font-semibold">
-            {Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF
-          </span>
-        )}
 
         <button
           onClick={() => toggleSave(product.id)}
@@ -160,7 +155,12 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
           <p className={`text-[11px] leading-snug ${soldOut ? 'text-neutral-400' : 'text-neutral-700'}`}>
             {formatRs(product.basePrice)}
             {product.comparePrice && product.comparePrice > product.basePrice && (
-              <span className="ml-1.5 line-through text-neutral-400">{formatRs(product.comparePrice)}</span>
+              <>
+                {!soldOut && (
+                  <span className="ml-1.5 font-semibold text-[#FF5400]">{Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF</span>
+                )}
+                <span className="ml-1.5 line-through text-neutral-400">{formatRs(product.comparePrice)}</span>
+              </>
             )}
           </p>
           {colours.length > 1 && (

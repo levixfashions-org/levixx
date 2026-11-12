@@ -182,10 +182,10 @@ export const ProductDetailPage: React.FC = () => {
             {formatRs(product.basePrice + (selected?.priceDelta || 0))}
             {product.comparePrice && product.comparePrice > product.basePrice && (
               <>
-                <span className="ml-2 line-through text-neutral-400">MRP {formatRs(product.comparePrice)}</span>
                 <span className="ml-2 font-semibold text-[#FF5400]">
                   {Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF
                 </span>
+                <span className="ml-2 line-through text-neutral-400">MRP {formatRs(product.comparePrice)}</span>
               </>
             )}
           </p>

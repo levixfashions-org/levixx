@@ -4,6 +4,7 @@ import { useCartStore } from '../store/cartStore';
 import { useHomeStore } from '../store/homeStore';
 import { ArrowUpRight, CloseIcon } from './Icons';
 import { formatRs } from './ProductCard';
+import { FramedImg } from './FramedImg';
 
 export const CartDrawer: React.FC = () => {
   const { cart, isCartOpen, closeCart, fetchCart, updateQuantity, removeItem } = useCartStore();
@@ -95,7 +96,7 @@ export const CartDrawer: React.FC = () => {
                   {collections.map((c) => (
                     <Link key={c.id} to={`/collections/${c.slug}`} className="flex items-center gap-4 py-2 hover:opacity-70">
                       <span className="w-[54px] h-[38px] rounded-[4px] overflow-hidden bg-[#ccc] shrink-0">
-                        {c.img && <img src={c.img} alt="" className="w-full h-full object-cover" loading="lazy" />}
+                        {c.img && <FramedImg src={c.img} alt="" loading="lazy" />}
                       </span>
                       <span className="text-[11px] font-medium">{c.name}</span>
                     </Link>

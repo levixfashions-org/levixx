@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Layers, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Layers, Plus, Save, Trash2 } from 'lucide-react';
 import { apiClient } from '../../services/api';
 import { Category } from '../../types';
 import { ImageUploader } from './ImageUploader';
+import { ImageFramer } from './ImageFramer';
+import { FramedImg } from '../FramedImg';
 
 /** Lets the owner manage categories (used as the store's collections), including their banner image URL. */
 export const AdminCategoriesManager: React.FC = () => {
@@ -50,6 +52,22 @@ export const AdminCategoriesManager: React.FC = () => {
     }
   };
 
+  /** Move a category up/down; the menu, homepage slideshow and story bubbles follow this order. */
+  const move = async (idx: number, dir: -1 | 1) => {
+    const j = idx + dir;
+    if (j < 0 || j >= categories.length) return;
+    const next = [...categories];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    const before = categories;
+    setCategories(next);
+    try {
+      await apiClient.put('/admin/categories/reorder', { ids: next.map((c) => c.id) });
+    } catch (err: any) {
+      setCategories(before);
+      alert(err.message);
+    }
+  };
+
   const remove = async (c: Category) => {
     if (!window.confirm(`Delete category "${c.name}"? Products in it will stay but become uncategorised.`)) return;
     try {
@@ -88,18 +106,30 @@ export const AdminCategoriesManager: React.FC = () => {
       {msg && <div className="p-2.5 bg-black text-white text-xs">{msg}</div>}
 
       <div className="space-y-4">
-        {categories.map((c) => {
+        {categories.map((c, idx) => {
           const d = drafts[c.id] || {};
           const img = (d.imageUrl ?? c.imageUrl) || '';
           return (
             <div key={c.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 border border-black/10 p-3 items-start">
-              <div className="md:col-span-2 aspect-[4/3] bg-neutral-100 overflow-hidden">
-                {/^https?:\/\//.test(img) && <img src={img} alt={c.name} className="w-full h-full object-cover" />}
+              <div className="md:col-span-2 flex md:flex-col gap-2">
+                <div className="flex md:justify-center gap-1">
+                  <button type="button" onClick={() => move(idx, -1)} disabled={idx === 0} className="p-1.5 border border-black/20 hover:bg-black hover:text-white disabled:opacity-25" aria-label={`Move ${c.name} up`} title="Move up"><ArrowUp className="w-3.5 h-3.5" /></button>
+                  <span className="w-7 h-7 flex items-center justify-center font-mono font-bold text-[12px]">{idx + 1}</span>
+                  <button type="button" onClick={() => move(idx, 1)} disabled={idx === categories.length - 1} className="p-1.5 border border-black/20 hover:bg-black hover:text-white disabled:opacity-25" aria-label={`Move ${c.name} down`} title="Move down"><ArrowDown className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="flex-1 md:flex-none aspect-[4/3] bg-neutral-100 overflow-hidden relative">
+                  {img && <FramedImg src={img} alt={c.name} className="absolute inset-0" />}
+                </div>
               </div>
               <div className="md:col-span-9 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input className={input} value={d.name ?? c.name} onChange={(e) => update(c.id, { name: e.target.value })} aria-label="Category name" />
                 <div className="sm:col-span-2">
                   <ImageUploader single compact value={img ? [img] : []} onChange={(urls) => update(c.id, { imageUrl: urls[0] || '' })} hint="Banner for this product type (collection page, menu, slideshow fallback)." />
+                  {img && (
+                    <div className="mt-2">
+                      <ImageFramer value={img} onChange={(u) => update(c.id, { imageUrl: u })} />
+                    </div>
+                  )}
                 </div>
                 <input className={`${input} sm:col-span-2`} value={(d.description ?? c.description) || ''} onChange={(e) => update(c.id, { description: e.target.value })} placeholder="Short description" aria-label="Description" />
                 <select className={input} value={(d.group ?? c.group) || 'TOP'} onChange={(e) => update(c.id, { group: e.target.value })} aria-label="Menu group">

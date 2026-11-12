@@ -75,7 +75,11 @@ export async function getHome(_req: Request, res: Response) {
       key,
       name: key === 'men' ? 'Men' : 'Women',
       count: rows.length,
-      coverImage: rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+      coverImage:
+        (key === 'men' ? settings.menCoverImage : settings.womenCoverImage) ||
+        rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url ||
+        rows.find((r) => r.images[0])?.images[0]?.url ||
+        null,
       categories: categories
         .filter((c) => catCount.has(c.id))
         .map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || 'TOP', count: catCount.get(c.id) || 0 })),

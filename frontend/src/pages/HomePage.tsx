@@ -8,6 +8,7 @@ import { ProductGrid, ProductGridSkeleton } from '../components/ProductGrid';
 import { GallerySlider, Slide } from '../components/GallerySlider';
 import { StoriesBar } from '../components/StoriesBar';
 import { HomeSection } from '../types';
+import { FramedImg } from '../components/FramedImg';
 
 const useMedia = (query: string) => {
   const get = () => typeof window !== 'undefined' && window.matchMedia(query).matches;
@@ -201,7 +202,7 @@ export const HomePage: React.FC = () => {
                   {departments.map((d) => (
                     <Link key={d.key} to={`/collections/${d.key}`} className="group relative block aspect-[4/5] md:aspect-[16/11] rounded-[12px] overflow-hidden bg-[#DADADA]">
                       {d.coverImage && (
-                        <img src={d.coverImage} alt={d.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" />
+                        <FramedImg src={d.coverImage} alt={d.name} loading="lazy" className="absolute inset-0" />
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
                       <div className="absolute left-3 right-3 bottom-3 md:left-5 md:bottom-5 flex items-end justify-between text-white">

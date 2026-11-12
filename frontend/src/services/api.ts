@@ -40,6 +40,8 @@ export interface StoreSettings {
   freeShippingThreshold: number; // rupees
   shippingFee: number; // rupees
   announcementEnabled: boolean;
+  menCoverImage: string;
+  womenCoverImage: string;
   heroDesktopImage: string;
   heroMobileImage: string;
   heroDesktopVideo: string;
@@ -71,6 +73,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   freeShippingThreshold: 0,
   shippingFee: 150,
   announcementEnabled: false,
+  menCoverImage: '',
+  womenCoverImage: '',
   heroDesktopImage: '',
   heroMobileImage: '',
   heroDesktopVideo: '',

@@ -317,6 +317,8 @@ model StoreSetting {
   freeShippingThreshold Int      @default(1999) // rupees
   shippingFee           Int      @default(150)  // rupees
   announcementEnabled   Boolean  @default(false)
+  menCoverImage         String?  @db.Text
+  womenCoverImage       String?  @db.Text
   heroDesktopImage      String?  @db.Text
   heroMobileImage       String?  @db.Text
   heroDesktopVideo      String?  @db.Text

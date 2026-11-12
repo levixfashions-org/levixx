@@ -4,6 +4,7 @@ import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { apiClient } from '../services/api';
 import { Collection } from '../types';
 import { ArrowRight } from 'lucide-react';
+import { FramedImg } from '../components/FramedImg';
 
 export const CollectionsPage: React.FC = () => {
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -50,10 +51,10 @@ export const CollectionsPage: React.FC = () => {
               to={`/collections/${col.slug}`}
               className="group relative aspect-[4/3] overflow-hidden bg-neutral-900 block shadow-md"
             >
-              <img
+              <FramedImg
                 src={col.bannerImageUrl || 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=800&q=80'}
                 alt={col.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-85"
+                className="opacity-85"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent flex items-end p-6">
                 <div className="space-y-1">

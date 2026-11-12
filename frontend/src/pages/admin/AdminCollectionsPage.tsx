@@ -5,6 +5,9 @@ import { apiClient } from '../../services/api';
 import { Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { ImageUploader } from '../../components/admin/ImageUploader';
+import { FramedImg } from '../../components/FramedImg';
+import { ImageFramer } from '../../components/admin/ImageFramer';
+import { DepartmentCovers } from '../../components/admin/DepartmentCovers';
 
 interface AdminCollection {
   id: string;
@@ -184,6 +187,7 @@ export const AdminCollectionsPage: React.FC = () => {
         </div>
 
         {msg && <div className="p-3 bg-black text-white text-xs font-semibold">{msg}</div>}
+        <DepartmentCovers />
         {error && !editing && <div className="p-3 bg-red-100 border border-red-300 text-red-800 text-xs">{error}</div>}
 
         <div className="bg-white border border-black/10 divide-y divide-black/5">
@@ -202,7 +206,7 @@ export const AdminCollectionsPage: React.FC = () => {
                   <button onClick={() => move(c, 1)} disabled={idx === collections.length - 1} className="p-1 disabled:opacity-20" aria-label="Move down"><ArrowDown className="w-3.5 h-3.5" /></button>
                 </div>
                 <div className="w-24 h-14 bg-neutral-100 overflow-hidden flex items-center justify-center shrink-0">
-                  {c.bannerImageUrl ? <img src={c.bannerImageUrl} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-neutral-400" />}
+                  {c.bannerImageUrl ? <FramedImg src={c.bannerImageUrl} alt="" /> : <ImageIcon className="w-4 h-4 text-neutral-400" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">{c.name}</p>
@@ -264,6 +268,15 @@ export const AdminCollectionsPage: React.FC = () => {
                     onChange={(urls) => setEditing({ ...editing, bannerImageUrl: urls[0] || '' })}
                     hint="Used for the homepage banner slideshow & collection page. Wide photo works best."
                   />
+                  {editing.bannerImageUrl && (
+                    <div className="mt-2">
+                      <ImageFramer
+                        value={editing.bannerImageUrl}
+                        onChange={(u) => setEditing({ ...editing, bannerImageUrl: u })}
+                        shapes={[{ label: 'Banner / slideshow', aspect: '2 / 1' }, { label: 'Collections tile', aspect: '4 / 3' }, { label: 'Story', aspect: '1 / 1', round: true }]}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <ImageUploader
@@ -273,6 +286,15 @@ export const AdminCollectionsPage: React.FC = () => {
                     onChange={(urls) => setEditing({ ...editing, mobileBannerUrl: urls[0] || '' })}
                     hint="Portrait photo for phones. If empty, the desktop banner is used."
                   />
+                  {editing.mobileBannerUrl && (
+                    <div className="mt-2">
+                      <ImageFramer
+                        value={editing.mobileBannerUrl}
+                        onChange={(u) => setEditing({ ...editing, mobileBannerUrl: u })}
+                        shapes={[{ label: 'Phone slideshow', aspect: '9 / 16' }]}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className={label}>Homepage layout</label>

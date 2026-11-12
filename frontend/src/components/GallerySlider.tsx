@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { FramedImg } from './FramedImg';
+import { parseFrame } from '../utils/frame';
 
 export interface Slide {
   id: string;
@@ -12,6 +14,7 @@ export interface Slide {
 /** Full-width banner slideshow ("discover collection"): title + SHOP NOW, dots, auto-advances. */
 export const GallerySlider: React.FC<{ slides: Slide[] }> = ({ slides }) => {
   const [idx, setIdx] = useState(0);
+  const isMobile = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches;
   useEffect(() => {
     if (slides.length < 2) return;
     const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 5000);
@@ -30,8 +33,8 @@ export const GallerySlider: React.FC<{ slides: Slide[] }> = ({ slides }) => {
           tabIndex={i === idx ? 0 : -1}
         >
           <picture>
-            {s.mobileImage && <source media="(max-width: 767px)" srcSet={s.mobileImage} />}
-            <img src={s.image} alt={s.name} className="w-full h-full object-cover" loading={i === 0 ? 'eager' : 'lazy'} />
+            {s.mobileImage && <source media="(max-width: 767px)" srcSet={parseFrame(s.mobileImage).src} />}
+            <FramedImg src={isMobile && s.mobileImage ? s.mobileImage : s.image} alt={s.name} loading={i === 0 ? 'eager' : 'lazy'} />
           </picture>
           <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/45 to-transparent" />
           <div className="absolute inset-x-0 bottom-[11%] text-center text-white px-6">
