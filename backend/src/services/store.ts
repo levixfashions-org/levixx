@@ -214,4 +214,64 @@ export async function ensureStoreDefaults(): Promise<void> {
     await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 4 } });
     console.log(`✓ Set MRP ₹799 on ${updated.count} products (selling prices unchanged).`);
   }
+  // Version 5: add the Shri Ram overlength tee and switch the homepage videos to the offer-price versions.
+  if ((row?.defaultsVersion ?? 0) < 5) {
+    const SITE = (process.env.FRONTEND_URL || 'https://thelevix.shop').replace(/\/+$/, '');
+    const slug = 'shri-ram-overlength-tee-beige';
+    if (!(await prisma.product.findUnique({ where: { slug } }))) {
+      const category = await prisma.category.findUnique({ where: { slug: 'overlength-t-shirts' } });
+      // Copy fabric / care / fit text from an existing overlength tee so every product matches.
+      const ref = category
+        ? await prisma.product.findFirst({ where: { categoryId: category.id, NOT: { details: null } }, orderBy: { createdAt: 'asc' } })
+        : null;
+      const drop = await prisma.collection.findUnique({ where: { slug: 'first-drop' } });
+      const sizes = ['S', 'M', 'L', 'XL', 'XXL'];
+      await prisma.product.create({
+        data: {
+          name: 'Shri Ram Overlength Tee – Beige',
+          slug,
+          description:
+            'Carry the calm before the arrow. A hand-inked back print of Shri Ram standing tall with his bow against a rising sun, with "श्री राम" in Devanagari — and a smaller archer print on the front chest. Printed in deep brown on a soft beige base, cut in our signature overlength, drop-shoulder fit. Unisex.',
+          details: ref?.details ?? null,
+          fabricCare: ref?.fabricCare ?? null,
+          fitGuide: ref?.fitGuide ?? null,
+          basePrice: 54900,
+          comparePrice: 79900,
+          categoryId: category?.id ?? null,
+          gender: 'UNISEX',
+          colorGroup: 'NEUTRALS',
+          isActive: true,
+          images: {
+            create: [1, 2, 3, 4].map((n, i) => ({
+              url: `${SITE}/catalog/shri-ram-overlength-${n}.jpg`,
+              altText: ['Front on him', 'Back on him', 'Front on her', 'Back on her'][i],
+              sortOrder: i,
+              isCover: i === 0
+            }))
+          },
+          variants: {
+            create: sizes.map((size) => ({
+              size,
+              color: 'Beige',
+              colorHex: '#E6D7BD',
+              sku: `${slug.toUpperCase()}-BEIGE-${size}`,
+              stockQuantity: 10
+            }))
+          },
+          ...(drop ? { collections: { create: [{ collectionId: drop.id, sortOrder: 0 }] } } : {})
+        }
+      });
+      console.log('✓ Added Shri Ram Overlength Tee – Beige.');
+    }
+    await prisma.storeSetting.update({
+      where: { id: 'default' },
+      data: {
+        heroDesktopVideo: `${SITE}/videos/hero-offer-desktop.mp4`,
+        heroMobileVideo: `${SITE}/videos/hero-offer-mobile.mp4`,
+        defaultsVersion: 5
+      }
+    });
+    cache = null;
+    console.log('✓ Homepage videos switched to the offer-price versions.');
+  }
 }
