@@ -18,6 +18,12 @@ const envSchema = z.object({
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM_NAME: z.string().optional(),
 
   // Razorpay
   RAZORPAY_KEY_ID: z.string().optional().default(''),
@@ -44,6 +50,13 @@ export const env = {
   FIREBASE_CLIENT_EMAIL: data.FIREBASE_CLIENT_EMAIL as string | undefined,
   FIREBASE_PRIVATE_KEY: data.FIREBASE_PRIVATE_KEY as string | undefined,
   FIREBASE_SERVICE_ACCOUNT_PATH: data.FIREBASE_SERVICE_ACCOUNT_PATH as string | undefined,
+  FIREBASE_SERVICE_ACCOUNT_JSON: data.FIREBASE_SERVICE_ACCOUNT_JSON as string | undefined,
+  // Outgoing email (Hostinger mailbox by default)
+  SMTP_HOST: String(data.SMTP_HOST || 'smtp.hostinger.com'),
+  SMTP_PORT: Number(data.SMTP_PORT || 465),
+  SMTP_USER: String(data.SMTP_USER || ''),
+  SMTP_PASS: String(data.SMTP_PASS || ''),
+  MAIL_FROM_NAME: String(data.MAIL_FROM_NAME || 'LEVIX'),
   RAZORPAY_KEY_ID: String(data.RAZORPAY_KEY_ID || ''),
   RAZORPAY_KEY_SECRET: String(data.RAZORPAY_KEY_SECRET || ''),
   RAZORPAY_WEBHOOK_SECRET: String(data.RAZORPAY_WEBHOOK_SECRET || '')

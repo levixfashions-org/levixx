@@ -8,6 +8,8 @@ import { env } from './config/env.js';
 import { prisma } from './config/db.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { liveStream, liveVersion, broadcastChange } from './services/live.js';
+import { sendVerification, sendPasswordReset, authMailReady } from './controllers/authMailController.js';
+import { authRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundApi } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
@@ -149,6 +151,7 @@ app.get('/api/health', async (_req, res) => {
     ...(databaseProblem ? { databaseProblem } : {}),
     payments: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
     signIn: Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID),
+    emails: authMailReady(),
     service: 'levix',
     timestamp: new Date().toISOString(),
     uptime: Math.round(process.uptime())
@@ -159,6 +162,8 @@ app.get('/api/live', liveStream);
 app.get('/api/live/version', liveVersion);
 app.use('/api', apiRateLimiter);
 app.use('/api/store', storeRoutes);
+app.post('/api/auth-mail/verify', authRateLimiter, asyncHandler(sendVerification));
+app.post('/api/auth-mail/reset', authRateLimiter, asyncHandler(sendPasswordReset));
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/collections', collectionRoutes);

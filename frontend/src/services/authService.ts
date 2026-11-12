@@ -35,15 +35,30 @@ export function friendlyAuthError(err: any): string {
   return err?.message?.replace('Firebase: ', '') || 'Something went wrong. Please try again.';
 }
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
+
+/** Sends the LEVIX-branded verification email from our server (link on thelevix.shop);
+ *  falls back to Firebase's default email if the server isn't configured for email yet. */
+async function sendVerificationEmail(user: User): Promise<void> {
+  try {
+    const token = await user.getIdToken();
+    const r = await fetch(`${API_BASE}/auth-mail/verify`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) return;
+  } catch {
+    /* fall through */
+  }
+  await sendEmailVerification(user, { url: `${window.location.origin}/account` });
+}
+
 export const authService = {
   async register(email: string, password: string, displayName: string): Promise<User> {
     const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
     if (displayName.trim()) {
       await updateProfile(cred.user, { displayName: displayName.trim() });
     }
-    sendEmailVerification(cred.user).catch(() => undefined);
     // Force a fresh token so the backend sees the new display name.
     await cred.user.getIdToken(true);
+    sendVerificationEmail(cred.user).catch(() => undefined);
     return cred.user;
   },
 
@@ -76,10 +91,26 @@ export const authService = {
   },
 
   async resendVerification(): Promise<void> {
-    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+    if (auth.currentUser) await sendVerificationEmail(auth.currentUser);
   },
 
   async resetPassword(email: string): Promise<void> {
+    // LEVIX-branded email from our server; falls back to Firebase's default email if that isn't set up.
+    let r: Response | null = null;
+    try {
+      r = await fetch(`${API_BASE}/auth-mail/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() })
+      });
+    } catch {
+      r = null; // network problem → use Firebase directly
+    }
+    if (r?.ok) return;
+    if (r) {
+      const data = await r.json().catch(() => ({}));
+      if (!data.fallback) throw new Error(data.error || 'Could not send the reset email. Please try again.');
+    }
     await sendPasswordResetEmail(auth, email.trim(), { url: `${window.location.origin}/login` });
   },
 
