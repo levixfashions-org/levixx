@@ -1185,13 +1185,28 @@ async function ensureStoreDefaults() {
     await prisma.storeSetting.update({
       where: { id: "default" },
       data: {
-        heroDesktopVideo: `${SITE2}/videos/hero-offer-desktop.mp4`,
-        heroMobileVideo: `${SITE2}/videos/hero-offer-mobile.mp4`,
+        heroDesktopVideo: `${SITE2}/videos/hero-offer-desktop-sound.mp4`,
+        heroMobileVideo: `${SITE2}/videos/hero-offer-mobile-sound.mp4`,
         defaultsVersion: 5
       }
     });
     cache = null;
     console.log("\u2713 Homepage videos switched to the offer-price versions.");
+  }
+  if ((row?.defaultsVersion ?? 0) < 6) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const cur = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { heroDesktopVideo: true, heroMobileVideo: true } });
+    const swap = (v, kind) => !v || /\/videos\/hero-offer-(desktop|mobile)\.mp4$/.test(v) ? `${SITE2}/videos/hero-offer-${kind}-sound.mp4` : v;
+    await prisma.storeSetting.update({
+      where: { id: "default" },
+      data: {
+        heroDesktopVideo: swap(cur?.heroDesktopVideo, "desktop"),
+        heroMobileVideo: swap(cur?.heroMobileVideo, "mobile"),
+        defaultsVersion: 6
+      }
+    });
+    cache = null;
+    console.log("\u2713 Homepage videos now include sound.");
   }
 }
 
