@@ -1208,6 +1208,28 @@ async function ensureStoreDefaults() {
     cache = null;
     console.log("\u2713 Homepage videos now include sound.");
   }
+  if ((row?.defaultsVersion ?? 0) < 7) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const covers = {
+      "overlength-t-shirts": "/media/00824b88-6976-4cc6-b171-4ae02c086404.jpg",
+      // Hare Krishna – blue Krishna back print
+      "waffle-boxy-fit-full-sleeves": "/media/d00265fc-31ed-4a0b-bc96-7515bccbcd52.jpg",
+      // Sacred Vine – off white
+      "acid-wash-t-shirts": "/media/d91fcd40-184c-43b1-a7b1-6645545e3e15.jpg"
+      // Lone Wolf – acid red
+    };
+    for (const [slug, path4] of Object.entries(covers)) {
+      const [cat, file] = await Promise.all([
+        prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } }),
+        prisma.mediaFile.findUnique({ where: { id: path4.slice(7, 43) }, select: { id: true } }).catch(() => null)
+      ]);
+      if (cat && file && (!cat.imageUrl || cat.imageUrl.includes("images.unsplash.com"))) {
+        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE2}${path4}` } });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 7 } });
+    console.log("\u2713 Category covers set to LEVIX product photos.");
+  }
 }
 
 // src/controllers/cartController.ts
