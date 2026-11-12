@@ -2,6 +2,7 @@ import admin from 'firebase-admin';
 import fs from 'fs';
 import { env } from './env.js';
 let firebaseApp = null;
+let hasServiceAccount = false;
 /**
  * Initialises Firebase Admin.
  * Verifying ID tokens only needs the Firebase project id (Google's public keys are
@@ -14,9 +15,25 @@ export function getFirebaseAdmin() {
         firebaseApp = admin.apps[0];
         return firebaseApp;
     }
+    // Easiest option on Hostinger: paste the whole downloaded service-account JSON into one variable.
+    if (env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        try {
+            const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            if (serviceAccount.private_key)
+                serviceAccount.private_key = String(serviceAccount.private_key).replace(/\\n/g, '\n');
+            firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+            hasServiceAccount = true;
+            console.log('✓ Firebase Admin initialised with service account (JSON variable).');
+            return firebaseApp;
+        }
+        catch (err) {
+            console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT_JSON could not be read:', err?.message);
+        }
+    }
     if (env.FIREBASE_SERVICE_ACCOUNT_PATH && fs.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
         const serviceAccount = JSON.parse(fs.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8'));
         firebaseApp = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+        hasServiceAccount = true;
         console.log('✓ Firebase Admin initialised with service account file.');
         return firebaseApp;
     }
@@ -33,6 +50,7 @@ export function getFirebaseAdmin() {
                 privateKey
             })
         });
+        hasServiceAccount = true;
         console.log('✓ Firebase Admin initialised with service account credentials.');
         return firebaseApp;
     }
@@ -44,3 +62,13 @@ export function getFirebaseAdmin() {
     return firebaseApp;
 }
 export const adminAuth = () => getFirebaseAdmin().auth();
+/** True when Admin can do more than verify tokens (needed to create verification / reset links). */
+export function firebaseHasServiceAccount() {
+    try {
+        getFirebaseAdmin();
+    }
+    catch {
+        return false;
+    }
+    return hasServiceAccount;
+}

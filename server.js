@@ -60,6 +60,12 @@ var envSchema = import_zod.z.object({
   FIREBASE_CLIENT_EMAIL: import_zod.z.string().optional(),
   FIREBASE_PRIVATE_KEY: import_zod.z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_PATH: import_zod.z.string().optional(),
+  FIREBASE_SERVICE_ACCOUNT_JSON: import_zod.z.string().optional(),
+  SMTP_HOST: import_zod.z.string().optional(),
+  SMTP_PORT: import_zod.z.string().optional(),
+  SMTP_USER: import_zod.z.string().optional(),
+  SMTP_PASS: import_zod.z.string().optional(),
+  MAIL_FROM_NAME: import_zod.z.string().optional(),
   // Razorpay
   RAZORPAY_KEY_ID: import_zod.z.string().optional().default(""),
   RAZORPAY_KEY_SECRET: import_zod.z.string().optional().default(""),
@@ -79,6 +85,13 @@ var env = {
   FIREBASE_CLIENT_EMAIL: data.FIREBASE_CLIENT_EMAIL,
   FIREBASE_PRIVATE_KEY: data.FIREBASE_PRIVATE_KEY,
   FIREBASE_SERVICE_ACCOUNT_PATH: data.FIREBASE_SERVICE_ACCOUNT_PATH,
+  FIREBASE_SERVICE_ACCOUNT_JSON: data.FIREBASE_SERVICE_ACCOUNT_JSON,
+  // Outgoing email (Hostinger mailbox by default)
+  SMTP_HOST: String(data.SMTP_HOST || "smtp.hostinger.com"),
+  SMTP_PORT: Number(data.SMTP_PORT || 465),
+  SMTP_USER: String(data.SMTP_USER || ""),
+  SMTP_PASS: String(data.SMTP_PASS || ""),
+  MAIL_FROM_NAME: String(data.MAIL_FROM_NAME || "LEVIX"),
   RAZORPAY_KEY_ID: String(data.RAZORPAY_KEY_ID || ""),
   RAZORPAY_KEY_SECRET: String(data.RAZORPAY_KEY_SECRET || ""),
   RAZORPAY_WEBHOOK_SECRET: String(data.RAZORPAY_WEBHOOK_SECRET || "")
@@ -188,8 +201,210 @@ function broadcastChange(scope = "all") {
   }, 60);
 }
 
-// src/middleware/errorHandler.ts
+// src/controllers/authMailController.ts
 var import_zod2 = require("zod");
+
+// src/config/firebase-admin.ts
+var import_firebase_admin = __toESM(require("firebase-admin"), 1);
+var import_fs = __toESM(require("fs"), 1);
+var firebaseApp = null;
+var hasServiceAccount = false;
+function getFirebaseAdmin() {
+  if (firebaseApp) return firebaseApp;
+  if (import_firebase_admin.default.apps.length > 0 && import_firebase_admin.default.apps[0]) {
+    firebaseApp = import_firebase_admin.default.apps[0];
+    return firebaseApp;
+  }
+  if (env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const serviceAccount = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      if (serviceAccount.private_key) serviceAccount.private_key = String(serviceAccount.private_key).replace(/\\n/g, "\n");
+      firebaseApp = import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(serviceAccount) });
+      hasServiceAccount = true;
+      console.log("\u2713 Firebase Admin initialised with service account (JSON variable).");
+      return firebaseApp;
+    } catch (err) {
+      console.warn("\u26A0\uFE0F FIREBASE_SERVICE_ACCOUNT_JSON could not be read:", err?.message);
+    }
+  }
+  if (env.FIREBASE_SERVICE_ACCOUNT_PATH && import_fs.default.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
+    const serviceAccount = JSON.parse(import_fs.default.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, "utf8"));
+    firebaseApp = import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(serviceAccount) });
+    hasServiceAccount = true;
+    console.log("\u2713 Firebase Admin initialised with service account file.");
+    return firebaseApp;
+  }
+  const privateKey = (env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+  const keyLooksValid = privateKey.includes("-----BEGIN PRIVATE KEY-----") && privateKey.length > 1e3;
+  if (env.FIREBASE_PRIVATE_KEY && !keyLooksValid) {
+    console.warn("\u26A0\uFE0F FIREBASE_PRIVATE_KEY looks like a placeholder \u2014 ignoring it and verifying tokens with the project id only.");
+  }
+  if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && keyLooksValid) {
+    firebaseApp = import_firebase_admin.default.initializeApp({
+      credential: import_firebase_admin.default.credential.cert({
+        projectId: env.FIREBASE_PROJECT_ID,
+        clientEmail: env.FIREBASE_CLIENT_EMAIL,
+        privateKey
+      })
+    });
+    hasServiceAccount = true;
+    console.log("\u2713 Firebase Admin initialised with service account credentials.");
+    return firebaseApp;
+  }
+  if (!env.FIREBASE_PROJECT_ID) {
+    throw new Error("FIREBASE_PROJECT_ID is not configured \u2014 cannot verify sign-in tokens.");
+  }
+  firebaseApp = import_firebase_admin.default.initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
+  console.log(`\u2713 Firebase Admin initialised for token verification (project: ${env.FIREBASE_PROJECT_ID}).`);
+  return firebaseApp;
+}
+var adminAuth = () => getFirebaseAdmin().auth();
+function firebaseHasServiceAccount() {
+  try {
+    getFirebaseAdmin();
+  } catch {
+    return false;
+  }
+  return hasServiceAccount;
+}
+
+// src/services/mailer.ts
+var import_nodemailer = __toESM(require("nodemailer"), 1);
+var transporter = null;
+function isMailConfigured() {
+  return Boolean(env.SMTP_USER && env.SMTP_PASS);
+}
+function getTransporter() {
+  if (!transporter) {
+    transporter = import_nodemailer.default.createTransport({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_PORT === 465,
+      auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+      pool: true,
+      maxConnections: 3
+    });
+  }
+  return transporter;
+}
+async function sendMail(to, subject, html, text) {
+  await getTransporter().sendMail({
+    from: { name: env.MAIL_FROM_NAME, address: env.SMTP_USER },
+    replyTo: "levixfashions@gmail.com",
+    to,
+    subject,
+    html,
+    text
+  });
+}
+var esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+function brandedEmail(opts) {
+  const { preheader, title, greeting, body, button, link, footnote } = opts;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
+<body style="margin:0;padding:0;background:#efefef;font-family:Helvetica,Arial,sans-serif;color:#111">
+<span style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efefef;padding:32px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff">
+<tr><td style="background:#000;padding:22px 28px;text-align:center"><span style="color:#fff;font-size:26px;font-weight:900;letter-spacing:8px">LEVIX</span></td></tr>
+<tr><td style="padding:32px 28px 8px">
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.5px">${esc(title)}</h1>
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6">${esc(greeting)}</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#333">${esc(body)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#000"><a href="${esc(link)}" style="display:inline-block;padding:14px 28px;color:#fff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase">${esc(button)}</a></td></tr></table>
+<p style="margin:24px 0 6px;font-size:12px;color:#666">If the button doesn't work, copy this link into your browser:</p>
+<p style="margin:0 0 20px;font-size:12px;word-break:break-all"><a href="${esc(link)}" style="color:#111">${esc(link)}</a></p>
+<p style="margin:0 0 24px;font-size:12px;color:#666;line-height:1.5">${esc(footnote)}</p>
+</td></tr>
+<tr><td style="border-top:1px solid #eee;padding:18px 28px;font-size:11px;color:#888;text-align:center">LEVIX \xB7 Premium streetwear \xB7 <a href="https://thelevix.shop" style="color:#888">thelevix.shop</a></td></tr>
+</table></td></tr></table></body></html>`;
+  const text = `${title}
+
+${greeting}
+
+${body}
+
+${button}: ${link}
+
+${footnote}
+
+LEVIX \xB7 thelevix.shop`;
+  return { html, text };
+}
+
+// src/controllers/authMailController.ts
+var SITE = env.FRONTEND_URL || "https://thelevix.shop";
+function onOurDomain(link) {
+  try {
+    const u = new URL(link);
+    const site = new URL(SITE);
+    u.protocol = site.protocol;
+    u.host = site.host;
+    return u.toString();
+  } catch {
+    return link;
+  }
+}
+function authMailReady() {
+  return isMailConfigured() && firebaseHasServiceAccount();
+}
+function notReady(res) {
+  res.status(503).json({ error: "Branded emails are not configured yet.", fallback: true });
+}
+async function sendVerification(req, res) {
+  if (!authMailReady()) return notReady(res);
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) {
+    res.status(401).json({ error: "Please sign in again." });
+    return;
+  }
+  const decoded = await adminAuth().verifyIdToken(token);
+  const user = await adminAuth().getUser(decoded.uid);
+  if (!user.email) {
+    res.status(400).json({ error: "Your account has no email address." });
+    return;
+  }
+  if (user.emailVerified) {
+    res.json({ success: true, alreadyVerified: true });
+    return;
+  }
+  const link = onOurDomain(await adminAuth().generateEmailVerificationLink(user.email, { url: `${SITE}/account` }));
+  const name = (user.displayName || "").trim().split(" ")[0] || "there";
+  const { html, text } = brandedEmail({
+    preheader: "Confirm your email to finish setting up your LEVIX account.",
+    title: "Verify your email",
+    greeting: `Hi ${name},`,
+    body: "Welcome to LEVIX! Tap the button below to confirm your email address and finish setting up your account.",
+    button: "Verify my email",
+    link,
+    footnote: "If you didn't create a LEVIX account, you can safely ignore this email."
+  });
+  await sendMail(user.email, "Verify your email for LEVIX", html, text);
+  res.json({ success: true });
+}
+async function sendPasswordReset(req, res) {
+  if (!authMailReady()) return notReady(res);
+  const { email } = import_zod2.z.object({ email: import_zod2.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
+  try {
+    const link = onOurDomain(await adminAuth().generatePasswordResetLink(email, { url: `${SITE}/login` }));
+    const { html, text } = brandedEmail({
+      preheader: "Reset the password for your LEVIX account.",
+      title: "Reset your password",
+      greeting: "Hi,",
+      body: "We received a request to reset the password for your LEVIX account. Tap the button below to choose a new password. The link expires in 1 hour.",
+      button: "Reset password",
+      link,
+      footnote: "If you didn't ask to reset your password, you can ignore this email \u2014 your password won't change."
+    });
+    await sendMail(email, "Reset your LEVIX password", html, text);
+  } catch (err) {
+    if (err?.code !== "auth/user-not-found" && err?.code !== "auth/email-not-found") throw err;
+  }
+  res.json({ success: true });
+}
+
+// src/middleware/errorHandler.ts
+var import_zod3 = require("zod");
 var import_client2 = require("@prisma/client");
 var AppError = class _AppError extends Error {
   statusCode;
@@ -203,7 +418,7 @@ function notFoundApi(req, res) {
   res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
 }
 function errorHandler(err, req, res, _next) {
-  if (err instanceof import_zod2.ZodError) {
+  if (err instanceof import_zod3.ZodError) {
     const first = err.errors[0];
     res.status(400).json({
       error: first ? `${first.path.join(".") || "input"}: ${first.message}` : "Validation error",
@@ -258,49 +473,6 @@ var import_express = require("express");
 
 // src/middleware/verifyFirebaseToken.ts
 var import_client3 = require("@prisma/client");
-
-// src/config/firebase-admin.ts
-var import_firebase_admin = __toESM(require("firebase-admin"), 1);
-var import_fs = __toESM(require("fs"), 1);
-var firebaseApp = null;
-function getFirebaseAdmin() {
-  if (firebaseApp) return firebaseApp;
-  if (import_firebase_admin.default.apps.length > 0 && import_firebase_admin.default.apps[0]) {
-    firebaseApp = import_firebase_admin.default.apps[0];
-    return firebaseApp;
-  }
-  if (env.FIREBASE_SERVICE_ACCOUNT_PATH && import_fs.default.existsSync(env.FIREBASE_SERVICE_ACCOUNT_PATH)) {
-    const serviceAccount = JSON.parse(import_fs.default.readFileSync(env.FIREBASE_SERVICE_ACCOUNT_PATH, "utf8"));
-    firebaseApp = import_firebase_admin.default.initializeApp({ credential: import_firebase_admin.default.credential.cert(serviceAccount) });
-    console.log("\u2713 Firebase Admin initialised with service account file.");
-    return firebaseApp;
-  }
-  const privateKey = (env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
-  const keyLooksValid = privateKey.includes("-----BEGIN PRIVATE KEY-----") && privateKey.length > 1e3;
-  if (env.FIREBASE_PRIVATE_KEY && !keyLooksValid) {
-    console.warn("\u26A0\uFE0F FIREBASE_PRIVATE_KEY looks like a placeholder \u2014 ignoring it and verifying tokens with the project id only.");
-  }
-  if (env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && keyLooksValid) {
-    firebaseApp = import_firebase_admin.default.initializeApp({
-      credential: import_firebase_admin.default.credential.cert({
-        projectId: env.FIREBASE_PROJECT_ID,
-        clientEmail: env.FIREBASE_CLIENT_EMAIL,
-        privateKey
-      })
-    });
-    console.log("\u2713 Firebase Admin initialised with service account credentials.");
-    return firebaseApp;
-  }
-  if (!env.FIREBASE_PROJECT_ID) {
-    throw new Error("FIREBASE_PROJECT_ID is not configured \u2014 cannot verify sign-in tokens.");
-  }
-  firebaseApp = import_firebase_admin.default.initializeApp({ projectId: env.FIREBASE_PROJECT_ID });
-  console.log(`\u2713 Firebase Admin initialised for token verification (project: ${env.FIREBASE_PROJECT_ID}).`);
-  return firebaseApp;
-}
-var adminAuth = () => getFirebaseAdmin().auth();
-
-// src/middleware/verifyFirebaseToken.ts
 var USER_CACHE_TTL_MS = 5 * 60 * 1e3;
 var userCache = /* @__PURE__ */ new Map();
 function extractBearer(req) {
@@ -394,18 +566,18 @@ function requireAdmin(req, res, next) {
 }
 
 // src/controllers/authController.ts
-var import_zod3 = require("zod");
-var phoneSchema = import_zod3.z.string().trim().transform((v) => v.replace(/[\s-]/g, "")).refine((v) => /^(\+91)?[6-9]\d{9}$/.test(v), "Enter a valid 10-digit Indian mobile number");
-var addressSchema = import_zod3.z.object({
-  fullName: import_zod3.z.string().trim().min(2).max(100),
-  line1: import_zod3.z.string().trim().min(3).max(200),
-  line2: import_zod3.z.string().trim().max(200).optional().or(import_zod3.z.literal("")).transform((v) => v || void 0),
-  city: import_zod3.z.string().trim().min(2).max(80),
-  state: import_zod3.z.string().trim().min(2).max(80),
-  postalCode: import_zod3.z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit PIN code"),
-  country: import_zod3.z.string().trim().default("India"),
+var import_zod4 = require("zod");
+var phoneSchema = import_zod4.z.string().trim().transform((v) => v.replace(/[\s-]/g, "")).refine((v) => /^(\+91)?[6-9]\d{9}$/.test(v), "Enter a valid 10-digit Indian mobile number");
+var addressSchema = import_zod4.z.object({
+  fullName: import_zod4.z.string().trim().min(2).max(100),
+  line1: import_zod4.z.string().trim().min(3).max(200),
+  line2: import_zod4.z.string().trim().max(200).optional().or(import_zod4.z.literal("")).transform((v) => v || void 0),
+  city: import_zod4.z.string().trim().min(2).max(80),
+  state: import_zod4.z.string().trim().min(2).max(80),
+  postalCode: import_zod4.z.string().trim().regex(/^\d{6}$/, "Enter a valid 6-digit PIN code"),
+  country: import_zod4.z.string().trim().default("India"),
   phone: phoneSchema,
-  isDefault: import_zod3.z.boolean().default(false)
+  isDefault: import_zod4.z.boolean().default(false)
 });
 async function getProfile(req, res) {
   if (!req.user) throw new AppError("Please sign in to continue.", 401);
@@ -422,8 +594,8 @@ async function getProfile(req, res) {
 }
 async function updateProfile(req, res) {
   if (!req.user) throw new AppError("Please sign in to continue.", 401);
-  const { name, phone } = import_zod3.z.object({
-    name: import_zod3.z.string().trim().min(2).max(100).optional(),
+  const { name, phone } = import_zod4.z.object({
+    name: import_zod4.z.string().trim().min(2).max(100).optional(),
     phone: phoneSchema.optional()
   }).parse(req.body);
   const user = await prisma.user.update({
@@ -808,7 +980,7 @@ var collectionRoutes_default = router3;
 var import_express4 = require("express");
 
 // src/controllers/cartController.ts
-var import_zod4 = require("zod");
+var import_zod5 = require("zod");
 
 // src/services/store.ts
 var DEFAULT_SETTINGS = {
@@ -1065,9 +1237,9 @@ async function sendCart(req, res) {
 async function getCart(req, res) {
   await sendCart(req, res);
 }
-var addToCartSchema = import_zod4.z.object({
-  variantId: import_zod4.z.string().min(1).max(64),
-  quantity: import_zod4.z.number().int().min(1).max(20).default(1)
+var addToCartSchema = import_zod5.z.object({
+  variantId: import_zod5.z.string().min(1).max(64),
+  quantity: import_zod5.z.number().int().min(1).max(20).default(1)
 });
 async function addToCart(req, res) {
   const { variantId, quantity } = addToCartSchema.parse(req.body);
@@ -1098,7 +1270,7 @@ async function findOwnedItem(req, itemId) {
   return item;
 }
 async function updateCartItem(req, res) {
-  const { quantity } = import_zod4.z.object({ quantity: import_zod4.z.number().int().min(0).max(20) }).parse(req.body);
+  const { quantity } = import_zod5.z.object({ quantity: import_zod5.z.number().int().min(0).max(20) }).parse(req.body);
   const item = await findOwnedItem(req, req.params.id);
   if (quantity === 0) {
     await prisma.cartItem.delete({ where: { id: item.id } });
@@ -1129,7 +1301,7 @@ var cartRoutes_default = router4;
 var import_express5 = require("express");
 
 // src/controllers/orderController.ts
-var import_zod5 = require("zod");
+var import_zod6 = require("zod");
 var import_client5 = require("@prisma/client");
 
 // src/config/razorpay.ts
@@ -1287,17 +1459,17 @@ function formatAddress(snapshot) {
 }
 
 // src/controllers/orderController.ts
-var createOrderSchema = import_zod5.z.object({
-  customerEmail: import_zod5.z.string().trim().toLowerCase().email("Enter a valid email address"),
-  customerName: import_zod5.z.string().trim().min(2, "Enter your full name").max(100),
+var createOrderSchema = import_zod6.z.object({
+  customerEmail: import_zod6.z.string().trim().toLowerCase().email("Enter a valid email address"),
+  customerName: import_zod6.z.string().trim().min(2, "Enter your full name").max(100),
   customerPhone: addressSchema.shape.phone,
   shippingAddress: addressSchema.omit({ isDefault: true }),
-  couponCode: import_zod5.z.string().trim().max(40).optional().or(import_zod5.z.literal("")),
-  saveAddress: import_zod5.z.boolean().optional(),
-  paymentMethod: import_zod5.z.enum(["ONLINE", "COD"]).default("ONLINE")
+  couponCode: import_zod6.z.string().trim().max(40).optional().or(import_zod6.z.literal("")),
+  saveAddress: import_zod6.z.boolean().optional(),
+  paymentMethod: import_zod6.z.enum(["ONLINE", "COD"]).default("ONLINE")
 });
 async function validateCoupon(req, res) {
-  const { code } = import_zod5.z.object({ code: import_zod5.z.string().trim().min(1).max(40) }).parse(req.body);
+  const { code } = import_zod6.z.object({ code: import_zod6.z.string().trim().min(1).max(40) }).parse(req.body);
   const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
   const formatted = await formatCart(cart);
   if (formatted.items.length === 0) throw new AppError("Your bag is empty", 400);
@@ -1492,7 +1664,7 @@ async function getOrderByNumber(req, res) {
   res.json({ order: { ...publicOrder, shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
 }
 async function trackOrder(req, res) {
-  const { orderNumber, email } = import_zod5.z.object({ orderNumber: import_zod5.z.string().trim().min(5).max(40), email: import_zod5.z.string().trim().toLowerCase().email() }).parse(req.body);
+  const { orderNumber, email } = import_zod6.z.object({ orderNumber: import_zod6.z.string().trim().min(5).max(40), email: import_zod6.z.string().trim().toLowerCase().email() }).parse(req.body);
   const order = await prisma.order.findUnique({
     where: { orderNumber: orderNumber.toUpperCase() },
     include: { items: { select: { quantity: true } } }
@@ -1528,13 +1700,13 @@ var orderRoutes_default = router5;
 var import_express6 = require("express");
 
 // src/controllers/paymentController.ts
-var import_zod6 = require("zod");
+var import_zod7 = require("zod");
 var import_client6 = require("@prisma/client");
-var verifySchema = import_zod6.z.object({
-  orderNumber: import_zod6.z.string().min(5).max(40),
-  razorpayOrderId: import_zod6.z.string().min(5).max(60),
-  razorpayPaymentId: import_zod6.z.string().min(5).max(60),
-  razorpaySignature: import_zod6.z.string().min(10).max(200)
+var verifySchema = import_zod7.z.object({
+  orderNumber: import_zod7.z.string().min(5).max(40),
+  razorpayOrderId: import_zod7.z.string().min(5).max(60),
+  razorpayPaymentId: import_zod7.z.string().min(5).max(60),
+  razorpaySignature: import_zod7.z.string().min(10).max(200)
 });
 async function verifyPayment(req, res) {
   const { orderNumber, razorpayOrderId, razorpayPaymentId, razorpaySignature } = verifySchema.parse(req.body);
@@ -1636,7 +1808,7 @@ var paymentRoutes_default = router6;
 var import_express7 = __toESM(require("express"), 1);
 
 // src/controllers/adminController.ts
-var import_zod7 = require("zod");
+var import_zod8 = require("zod");
 var import_client7 = require("@prisma/client");
 async function getDashboardMetrics(_req, res) {
   const startOfToday = /* @__PURE__ */ new Date();
@@ -1721,12 +1893,12 @@ async function getAllOrders(req, res) {
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
   });
 }
-var updateOrderSchema = import_zod7.z.object({
-  status: import_zod7.z.nativeEnum(import_client7.OrderStatus).optional(),
-  courier: import_zod7.z.string().trim().max(100).optional(),
-  trackingNumber: import_zod7.z.string().trim().max(100).optional(),
-  adminNotes: import_zod7.z.string().max(5e3).optional(),
-  markCodPaid: import_zod7.z.boolean().optional()
+var updateOrderSchema = import_zod8.z.object({
+  status: import_zod8.z.nativeEnum(import_client7.OrderStatus).optional(),
+  courier: import_zod8.z.string().trim().max(100).optional(),
+  trackingNumber: import_zod8.z.string().trim().max(100).optional(),
+  adminNotes: import_zod8.z.string().max(5e3).optional(),
+  markCodPaid: import_zod8.z.boolean().optional()
 });
 async function updateOrder(req, res) {
   const data2 = updateOrderSchema.parse(req.body);
@@ -1777,39 +1949,39 @@ async function deleteOrder(req, res) {
   await prisma.order.delete({ where: { id: order.id } });
   res.json({ success: true });
 }
-var imageUrl = import_zod7.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), "Each image must be uploaded or be a full https:// link");
-var imageSchema = import_zod7.z.object({
+var imageUrl = import_zod8.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+$/i.test(v), "Each image must be uploaded or be a full https:// link");
+var imageSchema = import_zod8.z.object({
   url: imageUrl,
-  altText: import_zod7.z.string().max(200).optional().nullable(),
-  color: import_zod7.z.string().trim().max(40).optional().nullable(),
-  isCover: import_zod7.z.boolean().optional(),
-  sortOrder: import_zod7.z.number().int().optional()
+  altText: import_zod8.z.string().max(200).optional().nullable(),
+  color: import_zod8.z.string().trim().max(40).optional().nullable(),
+  isCover: import_zod8.z.boolean().optional(),
+  sortOrder: import_zod8.z.number().int().optional()
 });
-var variantSchema = import_zod7.z.object({
-  size: import_zod7.z.string().trim().min(1).max(10),
-  color: import_zod7.z.string().trim().max(40).optional().nullable(),
-  colorHex: import_zod7.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod7.z.literal("")),
-  stockQuantity: import_zod7.z.number().int().min(0).max(1e5),
-  priceDelta: import_zod7.z.number().int().default(0)
+var variantSchema = import_zod8.z.object({
+  size: import_zod8.z.string().trim().min(1).max(10),
+  color: import_zod8.z.string().trim().max(40).optional().nullable(),
+  colorHex: import_zod8.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod8.z.literal("")),
+  stockQuantity: import_zod8.z.number().int().min(0).max(1e5),
+  priceDelta: import_zod8.z.number().int().default(0)
 });
-var productSchema = import_zod7.z.object({
-  name: import_zod7.z.string().trim().min(2).max(190),
-  slug: import_zod7.z.string().trim().max(120).optional(),
-  description: import_zod7.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
-  details: import_zod7.z.string().max(2e4).optional().nullable(),
-  fabricCare: import_zod7.z.string().max(2e4).optional().nullable(),
-  fitGuide: import_zod7.z.string().max(2e4).optional().nullable(),
-  basePrice: import_zod7.z.number().int().positive("Price must be more than 0"),
-  comparePrice: import_zod7.z.number().int().positive().optional().nullable(),
-  categoryId: import_zod7.z.string().max(120).optional().nullable(),
-  categoryName: import_zod7.z.string().max(120).optional().nullable(),
-  isFeatured: import_zod7.z.boolean().default(false),
-  isActive: import_zod7.z.boolean().default(true),
-  colorGroup: import_zod7.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
-  gender: import_zod7.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
-  collectionIds: import_zod7.z.array(import_zod7.z.string().max(64)).max(50).optional(),
-  images: import_zod7.z.array(imageSchema).min(1, "Add at least one product image").max(60),
-  variants: import_zod7.z.array(variantSchema).min(1, "Add at least one size").max(200)
+var productSchema = import_zod8.z.object({
+  name: import_zod8.z.string().trim().min(2).max(190),
+  slug: import_zod8.z.string().trim().max(120).optional(),
+  description: import_zod8.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
+  details: import_zod8.z.string().max(2e4).optional().nullable(),
+  fabricCare: import_zod8.z.string().max(2e4).optional().nullable(),
+  fitGuide: import_zod8.z.string().max(2e4).optional().nullable(),
+  basePrice: import_zod8.z.number().int().positive("Price must be more than 0"),
+  comparePrice: import_zod8.z.number().int().positive().optional().nullable(),
+  categoryId: import_zod8.z.string().max(120).optional().nullable(),
+  categoryName: import_zod8.z.string().max(120).optional().nullable(),
+  isFeatured: import_zod8.z.boolean().default(false),
+  isActive: import_zod8.z.boolean().default(true),
+  colorGroup: import_zod8.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
+  gender: import_zod8.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
+  collectionIds: import_zod8.z.array(import_zod8.z.string().max(64)).max(50).optional(),
+  images: import_zod8.z.array(imageSchema).min(1, "Add at least one product image").max(60),
+  variants: import_zod8.z.array(variantSchema).min(1, "Add at least one size").max(200)
 });
 async function resolveCategoryId(categoryId, categoryName) {
   if (categoryId) {
@@ -2008,12 +2180,12 @@ async function deleteProduct(req, res) {
   await prisma.product.delete({ where: { id } });
   res.json({ success: true, archived: false });
 }
-var categorySchema = import_zod7.z.object({
-  name: import_zod7.z.string().trim().min(2).max(120),
-  group: import_zod7.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
-  description: import_zod7.z.string().max(2e3).optional().nullable(),
-  imageUrl: imageUrl.optional().nullable().or(import_zod7.z.literal("")),
-  sortOrder: import_zod7.z.number().int().optional()
+var categorySchema = import_zod8.z.object({
+  name: import_zod8.z.string().trim().min(2).max(120),
+  group: import_zod8.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
+  description: import_zod8.z.string().max(2e3).optional().nullable(),
+  imageUrl: imageUrl.optional().nullable().or(import_zod8.z.literal("")),
+  sortOrder: import_zod8.z.number().int().optional()
 });
 async function createCategory(req, res) {
   const data2 = categorySchema.parse(req.body);
@@ -2047,35 +2219,35 @@ async function deleteCategory(req, res) {
   await prisma.category.delete({ where: { id: req.params.id } });
   res.json({ success: true });
 }
-var settingsSchema = import_zod7.z.object({
-  announcementText: import_zod7.z.string().max(1e3),
-  heroHeadline: import_zod7.z.string().max(190),
-  heroSubtitle: import_zod7.z.string().max(1e3),
-  supportEmail: import_zod7.z.string().trim().email().or(import_zod7.z.literal("")),
-  supportPhone: import_zod7.z.string().trim().max(30),
-  instagramHandle: import_zod7.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
-  freeShippingThreshold: import_zod7.z.coerce.number().int().min(0).max(1e6),
-  shippingFee: import_zod7.z.coerce.number().int().min(0).max(1e5),
-  announcementEnabled: import_zod7.z.boolean(),
-  heroDesktopImage: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
-  heroMobileImage: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
-  heroDesktopVideo: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
-  heroMobileVideo: import_zod7.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
-  heroLink: import_zod7.z.string().trim().max(500),
-  legalName: import_zod7.z.string().trim().max(190),
-  businessAddress: import_zod7.z.string().trim().max(1e3),
-  grievanceOfficer: import_zod7.z.string().trim().max(190),
-  gstin: import_zod7.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
-  jurisdictionCity: import_zod7.z.string().trim().max(100),
-  codEnabled: import_zod7.z.boolean(),
-  codFee: import_zod7.z.coerce.number().int().min(0).max(1e3),
-  codMaxOrder: import_zod7.z.coerce.number().int().min(0).max(1e6),
-  heroCtaText: import_zod7.z.string().trim().max(60),
-  latestDropTitle: import_zod7.z.string().trim().max(100),
-  seoTitle: import_zod7.z.string().max(300),
-  seoText: import_zod7.z.string().max(2e4),
-  shippingInfo: import_zod7.z.string().max(5e3),
-  careInfo: import_zod7.z.string().max(5e3)
+var settingsSchema = import_zod8.z.object({
+  announcementText: import_zod8.z.string().max(1e3),
+  heroHeadline: import_zod8.z.string().max(190),
+  heroSubtitle: import_zod8.z.string().max(1e3),
+  supportEmail: import_zod8.z.string().trim().email().or(import_zod8.z.literal("")),
+  supportPhone: import_zod8.z.string().trim().max(30),
+  instagramHandle: import_zod8.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
+  freeShippingThreshold: import_zod8.z.coerce.number().int().min(0).max(1e6),
+  shippingFee: import_zod8.z.coerce.number().int().min(0).max(1e5),
+  announcementEnabled: import_zod8.z.boolean(),
+  heroDesktopImage: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroMobileImage: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroDesktopVideo: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroMobileVideo: import_zod8.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroLink: import_zod8.z.string().trim().max(500),
+  legalName: import_zod8.z.string().trim().max(190),
+  businessAddress: import_zod8.z.string().trim().max(1e3),
+  grievanceOfficer: import_zod8.z.string().trim().max(190),
+  gstin: import_zod8.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
+  jurisdictionCity: import_zod8.z.string().trim().max(100),
+  codEnabled: import_zod8.z.boolean(),
+  codFee: import_zod8.z.coerce.number().int().min(0).max(1e3),
+  codMaxOrder: import_zod8.z.coerce.number().int().min(0).max(1e6),
+  heroCtaText: import_zod8.z.string().trim().max(60),
+  latestDropTitle: import_zod8.z.string().trim().max(100),
+  seoTitle: import_zod8.z.string().max(300),
+  seoText: import_zod8.z.string().max(2e4),
+  shippingInfo: import_zod8.z.string().max(5e3),
+  careInfo: import_zod8.z.string().max(5e3)
 }).partial();
 async function getAdminStoreSettings(_req, res) {
   res.json({ settings: await getSettings() });
@@ -2099,14 +2271,14 @@ function toDiscountDto(c) {
     usedCount: c.usedCount
   };
 }
-var discountSchema = import_zod7.z.object({
-  code: import_zod7.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
-  type: import_zod7.z.enum(["PERCENTAGE", "FIXED"]),
-  value: import_zod7.z.coerce.number().positive(),
-  minOrderINR: import_zod7.z.coerce.number().min(0).default(0),
-  expiresAt: import_zod7.z.string().optional().or(import_zod7.z.literal("")),
-  isActive: import_zod7.z.boolean().default(true),
-  maxUses: import_zod7.z.coerce.number().int().positive().optional().nullable()
+var discountSchema = import_zod8.z.object({
+  code: import_zod8.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
+  type: import_zod8.z.enum(["PERCENTAGE", "FIXED"]),
+  value: import_zod8.z.coerce.number().positive(),
+  minOrderINR: import_zod8.z.coerce.number().min(0).default(0),
+  expiresAt: import_zod8.z.string().optional().or(import_zod8.z.literal("")),
+  isActive: import_zod8.z.boolean().default(true),
+  maxUses: import_zod8.z.coerce.number().int().positive().optional().nullable()
 });
 async function getAdminDiscounts(_req, res) {
   const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
@@ -2154,18 +2326,18 @@ async function exportSubscribers(req, res) {
   res.setHeader("Content-Disposition", 'attachment; filename="levix-subscribers.csv"');
   res.send(csv);
 }
-var collectionSchema = import_zod7.z.object({
-  name: import_zod7.z.string().trim().min(2).max(120),
-  slug: import_zod7.z.string().trim().max(120).optional(),
-  description: import_zod7.z.string().max(5e3).optional().nullable(),
-  bannerImageUrl: imageUrl.optional().nullable().or(import_zod7.z.literal("")),
-  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod7.z.literal("")),
-  isActive: import_zod7.z.boolean().default(true),
-  sortOrder: import_zod7.z.coerce.number().int().default(0),
-  homeLayout: import_zod7.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
-  showInGallery: import_zod7.z.boolean().default(false),
-  showInMenu: import_zod7.z.boolean().default(true),
-  productIds: import_zod7.z.array(import_zod7.z.string().max(64)).max(500).optional()
+var collectionSchema = import_zod8.z.object({
+  name: import_zod8.z.string().trim().min(2).max(120),
+  slug: import_zod8.z.string().trim().max(120).optional(),
+  description: import_zod8.z.string().max(5e3).optional().nullable(),
+  bannerImageUrl: imageUrl.optional().nullable().or(import_zod8.z.literal("")),
+  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod8.z.literal("")),
+  isActive: import_zod8.z.boolean().default(true),
+  sortOrder: import_zod8.z.coerce.number().int().default(0),
+  homeLayout: import_zod8.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
+  showInGallery: import_zod8.z.boolean().default(false),
+  showInMenu: import_zod8.z.boolean().default(true),
+  productIds: import_zod8.z.array(import_zod8.z.string().max(64)).max(500).optional()
 });
 async function getAdminCollections(_req, res) {
   const collections = await prisma.collection.findMany({
@@ -2590,7 +2762,7 @@ var adminRoutes_default = router7;
 
 // src/routes/storeRoutes.ts
 var import_express8 = require("express");
-var import_zod8 = require("zod");
+var import_zod9 = require("zod");
 var router8 = (0, import_express8.Router)();
 router8.get(
   "/settings",
@@ -2605,7 +2777,7 @@ router8.post(
   "/subscribe",
   authRateLimiter,
   asyncHandler(async (req, res) => {
-    const { email } = import_zod8.z.object({ email: import_zod8.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
+    const { email } = import_zod9.z.object({ email: import_zod9.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
     await prisma.subscriber.upsert({ where: { email }, update: {}, create: { email } });
     res.json({ success: true });
   })
@@ -2616,7 +2788,7 @@ var storeRoutes_default = router8;
 var import_express9 = require("express");
 
 // src/controllers/wishlistController.ts
-var import_zod9 = require("zod");
+var import_zod10 = require("zod");
 async function getOrCreateWishlist(userId) {
   return prisma.wishlist.upsert({ where: { userId }, update: {}, create: { userId } });
 }
@@ -2651,7 +2823,7 @@ async function toggleWishlist(req, res) {
 }
 async function mergeWishlist(req, res) {
   if (!req.user) throw new AppError("Please sign in", 401);
-  const { productIds } = import_zod9.z.object({ productIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(200) }).parse(req.body);
+  const { productIds } = import_zod10.z.object({ productIds: import_zod10.z.array(import_zod10.z.string().max(64)).max(200) }).parse(req.body);
   const wl = await getOrCreateWishlist(req.user.id);
   if (productIds.length) {
     const valid = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true } });
@@ -2787,6 +2959,7 @@ app.get("/api/health", async (_req, res) => {
     ...databaseProblem ? { databaseProblem } : {},
     payments: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
     signIn: Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID),
+    emails: authMailReady(),
     service: "levix",
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     uptime: Math.round(process.uptime())
@@ -2796,6 +2969,8 @@ app.get("/api/live", liveStream);
 app.get("/api/live/version", liveVersion);
 app.use("/api", apiRateLimiter);
 app.use("/api/store", storeRoutes_default);
+app.post("/api/auth-mail/verify", authRateLimiter, asyncHandler(sendVerification));
+app.post("/api/auth-mail/reset", authRateLimiter, asyncHandler(sendPasswordReset));
 app.use("/api/auth", authRoutes_default);
 app.use("/api/products", productRoutes_default);
 app.use("/api/collections", collectionRoutes_default);
@@ -2833,11 +3008,11 @@ app.get(
       "/policies/privacy-policy",
       "/policies/contact"
     ];
-    const esc = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc2 = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const urls = [
       ...fixed.map((u) => `<url><loc>${base}${u}</loc></url>`),
-      ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc(c.slug)}</loc></url>`),
-      ...products.map((p) => `<url><loc>${base}/products/${esc(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
+      ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc2(c.slug)}</loc></url>`),
+      ...products.map((p) => `<url><loc>${base}/products/${esc2(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
     ];
     res.set("Content-Type", "application/xml; charset=utf-8");
     res.set("Cache-Control", "public, max-age=3600");
