@@ -51,7 +51,7 @@ ${order.codFeePaise ? `<tr><td style="padding:6px 0;color:#555">COD fee</td><td 
   const name = (order.customerName || '').trim().split(' ')[0] || 'there';
   const customerHtml = wrap(
     cod ? 'Order placed' : 'Order confirmed',
-    `Hi ${esc(name)}, thank you for shopping with LEVIX! ${cod ? 'Your Cash on Delivery order is confirmed.' : 'We have received your payment.'} We pack and dispatch within 1–3 business days and will share tracking as soon as it ships.`,
+    `Hi ${esc(name)}, thank you for shopping with LEVIX! ${cod ? 'Your Cash on Delivery order is confirmed.' : 'We have received your payment.'} We pack and dispatch within 2–5 business days and will share tracking as soon as it ships.`,
     'customer'
   );
   const text = `Order ${order.orderNumber} — ${cod ? 'to pay on delivery' : 'paid'} ${rs(order.totalPaise)}\n${order.items.map((i) => `${i.productName} ${[i.color, i.size].filter(Boolean).join('/')} x${i.quantity}`).join('\n')}\nDelivering to: ${formatAddress(order.shippingAddressSnapshot)}\nView: ${link}`;

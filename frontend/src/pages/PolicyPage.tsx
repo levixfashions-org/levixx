@@ -331,7 +331,7 @@ export const PolicyPage: React.FC = () => {
               </p>
             </Section>
             <Section title="3. Processing time">
-              <p>Orders are packed and dispatched within 1–3 business days after payment is confirmed. Orders placed on Sundays or public holidays are processed on the next business day.</p>
+              <p>Orders are packed and dispatched within 2–5 business days after payment is confirmed. Orders placed on Sundays or public holidays are processed on the next business day.</p>
             </Section>
             <Section title="4. Delivery time">
               <p>Delivery usually takes 3–7 business days after dispatch, and up to 10 business days for remote locations. Delays caused by weather, strikes, courier issues or other events outside our control may occasionally extend this.</p>
@@ -453,7 +453,7 @@ export const PolicyPage: React.FC = () => {
                   ['What should I do if my T-shirt arrives damaged?', 'Contact us within 48 hours of delivery with your order number, photos and an unboxing video. We will send a free replacement, or a full refund if the item is out of stock.'],
                   ['Do you offer Cash on Delivery (COD)?', cod ? `Yes. ${codSentence}` : 'No. All orders are prepaid securely through Razorpay — UPI, cards, net banking and wallets.'],
                   ['Do you charge for delivery?', freeAll ? 'No. Delivery is free on every order across India — even if you buy just one T-shirt.' : deliverySentence],
-                  ['How long does delivery take?', 'Orders are dispatched within 1–3 business days and usually delivered within 3–7 business days after that.'],
+                  ['How long does delivery take?', 'Orders are dispatched within 2–5 business days and usually delivered within 3–7 business days after that.'],
                   ['Can I cancel my order?', 'Yes, before it is dispatched — contact us with your order number for a full refund. Dispatched orders cannot be cancelled.'],
                   ['When will I get my refund?', 'We start approved refunds within 2 business days. Your bank or UPI app usually shows the money within 5–7 business days.'],
                   ['Why does my acid-wash tee look slightly different from the photo?', 'Every acid-wash piece is treated by hand, so each one has its own unique wash pattern. This is normal and not a defect.']

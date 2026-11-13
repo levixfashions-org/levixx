@@ -26,7 +26,7 @@ export const StoreLocatorPage: React.FC = () => {
             Pan-India Delivery
           </h3>
           <p className="text-xs text-neutral-600 leading-relaxed">
-            {freeAll ? 'Free delivery on every order. ' : `Free delivery on orders above RS. ${settings.freeShippingThreshold.toLocaleString('en-IN')}. `}Each order is packed and dispatched within 1–3 business days and usually delivered within 3–7 business days across India.
+            {freeAll ? 'Free delivery on every order. ' : `Free delivery on orders above RS. ${settings.freeShippingThreshold.toLocaleString('en-IN')}. `}Each order is packed and dispatched within 2–5 business days and usually delivered within 3–7 business days across India.
           </p>
         </div>
 
