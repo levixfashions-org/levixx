@@ -160,13 +160,27 @@ export async function updateOrder(req: Request, res: Response) {
 }
 
 export async function deleteOrder(req: Request, res: Response) {
-  const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
   if (!order) throw new AppError('Order not found', 404);
-  if (order.paymentStatus === PaymentStatus.PAID) {
-    throw new AppError('Paid orders are kept for your records. Mark it as CANCELLED instead.', 400);
+  // Paid orders are real records — only allow deleting one when the owner confirms it was a TEST order
+  // (paid with Razorpay test keys / fake money).
+  const testConfirmed = req.query.test === '1';
+  if (order.paymentStatus === PaymentStatus.PAID && !testConfirmed) {
+    throw new AppError('Paid orders are kept for your records. If this was a TEST order, confirm it as a test order to delete it.', 400);
   }
-  await prisma.order.delete({ where: { id: order.id } });
-  res.json({ success: true });
+  const shipped = ['SHIPPED', 'DELIVERED'].includes(String(order.status));
+  await prisma.$transaction(async (tx) => {
+    // Put the stock back if this order had taken it (paid orders and COD orders), unless it already shipped.
+    if (order.stockDeducted && !shipped) {
+      for (const it of order.items) {
+        if (it.variantId) {
+          await tx.productVariant.updateMany({ where: { id: it.variantId }, data: { stockQuantity: { increment: it.quantity } } });
+        }
+      }
+    }
+    await tx.order.delete({ where: { id: order.id } });
+  });
+  res.json({ success: true, stockRestored: Boolean(order.stockDeducted && !shipped) });
 }
 
 /* ----------------------------------------------------------------------------------------------

@@ -118,10 +118,18 @@ export const AdminOrdersPage: React.FC = () => {
   };
 
   const handleDeleteOrder = async (orderId: string, orderNumber: string) => {
-    if (!window.confirm(`Delete order ${orderNumber} permanently?`)) return;
+    const ord = orders.find((o: any) => o.id === orderId) as any;
+    const paid = ord?.paymentStatus === 'PAID';
+    const ok = paid
+      ? window.confirm(
+          `Order ${orderNumber} is marked PAID.\n\nDelete it ONLY if it was a TEST order (paid with Razorpay test keys / fake money). ` +
+            `Real paid orders should be kept — mark them Cancelled and refund in Razorpay instead.\n\nDelete this test order and put its stock back?`
+        )
+      : window.confirm(`Delete order ${orderNumber} permanently?`);
+    if (!ok) return;
     try {
-      await apiClient.delete(`/admin/orders/${orderId}`);
-      setActionMsg(`✓ Order ${orderNumber} deleted.`);
+      const res = await apiClient.delete(`/admin/orders/${orderId}${paid ? '?test=1' : ''}`);
+      setActionMsg(`✓ Order ${orderNumber} deleted${res.data?.stockRestored ? ' — stock put back' : ''}.`);
       if (selectedOrder?.id === orderId) setSelectedOrder(null);
       await loadOrders();
       setTimeout(() => setActionMsg(null), 4000);
