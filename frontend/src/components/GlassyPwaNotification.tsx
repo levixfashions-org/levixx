@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { usePwa } from '../context/PwaContext';
 import { Download, X, Sparkles, Smartphone, Check } from 'lucide-react';
 
+const DISMISS_KEY = 'levix_pwa_banner_closed_at';
+const HIDE_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const GlassyPwaNotification: React.FC = () => {
   const { isInstallable, isInstalled, isIOS, promptInstall } = usePwa();
   const [visible, setVisible] = useState(false);
@@ -11,9 +14,14 @@ export const GlassyPwaNotification: React.FC = () => {
     // If already installed in standalone mode, do not show
     if (isInstalled) return;
 
-    // Check if dismissed in this session
-    const isDismissed = sessionStorage.getItem('levix_pwa_banner_dismissed');
-    if (isDismissed) return;
+    // Closed recently? Stay hidden for a week.
+    try {
+      const at = Number(localStorage.getItem(DISMISS_KEY) || 0);
+      if (at && Date.now() - at < HIDE_FOR_MS) return;
+      if (sessionStorage.getItem('levix_pwa_banner_dismissed')) return;
+    } catch {
+      /* storage blocked — just show it */
+    }
 
     // Show after 1.5 seconds delay with smooth animation
     const timer = setTimeout(() => {
@@ -23,9 +31,16 @@ export const GlassyPwaNotification: React.FC = () => {
     return () => clearTimeout(timer);
   }, [isInstalled]);
 
-  const handleDismiss = () => {
+  const handleDismiss = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     setVisible(false);
-    sessionStorage.setItem('levix_pwa_banner_dismissed', 'true');
+    try {
+      localStorage.setItem(DISMISS_KEY, String(Date.now()));
+      sessionStorage.setItem('levix_pwa_banner_dismissed', 'true');
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleInstallClick = async () => {
@@ -57,11 +72,12 @@ export const GlassyPwaNotification: React.FC = () => {
 
         {/* Dismiss Button */}
         <button
+          type="button"
           onClick={handleDismiss}
-          className="absolute top-3 right-3 p-1.5 rounded-full text-white/60 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-          aria-label="Dismiss notification"
+          className="absolute top-2 right-2 z-30 w-10 h-10 flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors cursor-pointer"
+          aria-label="Close"
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
 
         <div className="relative z-10 flex items-start gap-3.5 sm:gap-4">
@@ -108,6 +124,7 @@ export const GlassyPwaNotification: React.FC = () => {
               )}
 
               <button
+                type="button"
                 onClick={handleDismiss}
                 className="px-3 py-2 text-[11px] text-white/60 hover:text-white uppercase tracking-wider font-semibold transition-colors cursor-pointer"
               >
