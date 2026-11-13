@@ -59,6 +59,19 @@ export async function evaluateCoupon(rawCode, subtotalPaise) {
  * Returns true if this call performed the transition.
  */
 export async function markOrderPaid(orderId, info) {
+    const done = await markOrderPaidTx(orderId, info);
+    // Confirmation to the customer + "new order" alert to the owner (only if the store mailbox is set up).
+    if (done)
+        notifyOrder(orderId);
+    return done;
+}
+/** Fire-and-forget order emails; never blocks or fails a payment. */
+export function notifyOrder(orderId) {
+    import('./orderEmails.js')
+        .then((m) => m.sendOrderEmails(orderId))
+        .catch((err) => console.error('Order email error:', err?.message || err));
+}
+async function markOrderPaidTx(orderId, info) {
     return prisma.$transaction(async (tx) => {
         const transition = await tx.order.updateMany({
             where: { id: orderId, paymentStatus: { not: PaymentStatus.PAID } },

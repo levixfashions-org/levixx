@@ -4,6 +4,14 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -26,6 +34,719 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// src/config/env.ts
+function cleanSecret(v) {
+  return String(v ?? "").trim().replace(/^['"`]+|['"`]+$/g, "").trim();
+}
+function isAdminEmail(email) {
+  if (!email) return false;
+  return env.ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
+var import_dotenv, import_zod, envSchema, parsed, data, env, isProduction;
+var init_env = __esm({
+  "src/config/env.ts"() {
+    import_dotenv = __toESM(require("dotenv"), 1);
+    import_zod = require("zod");
+    import_dotenv.default.config();
+    envSchema = import_zod.z.object({
+      NODE_ENV: import_zod.z.string().default("production"),
+      PORT: import_zod.z.union([import_zod.z.string(), import_zod.z.number()]).optional(),
+      DATABASE_URL: import_zod.z.string().optional().default(""),
+      FRONTEND_URL: import_zod.z.string().optional().default("https://thelevix.shop"),
+      // Comma separated list of owner/admin emails (must be Firebase-verified emails)
+      ADMIN_EMAILS: import_zod.z.string().optional().default("levixfashions@gmail.com"),
+      // Firebase Admin (only the project id is required to verify ID tokens)
+      FIREBASE_PROJECT_ID: import_zod.z.string().optional(),
+      VITE_FIREBASE_PROJECT_ID: import_zod.z.string().optional(),
+      FIREBASE_CLIENT_EMAIL: import_zod.z.string().optional(),
+      FIREBASE_PRIVATE_KEY: import_zod.z.string().optional(),
+      FIREBASE_SERVICE_ACCOUNT_PATH: import_zod.z.string().optional(),
+      FIREBASE_SERVICE_ACCOUNT_JSON: import_zod.z.string().optional(),
+      SMTP_HOST: import_zod.z.string().optional(),
+      SMTP_PORT: import_zod.z.string().optional(),
+      SMTP_USER: import_zod.z.string().optional(),
+      SMTP_PASS: import_zod.z.string().optional(),
+      MAIL_FROM_NAME: import_zod.z.string().optional(),
+      // Razorpay
+      RAZORPAY_KEY_ID: import_zod.z.string().optional().default(""),
+      RAZORPAY_KEY_SECRET: import_zod.z.string().optional().default(""),
+      RAZORPAY_WEBHOOK_SECRET: import_zod.z.string().optional().default("")
+    }).passthrough();
+    parsed = envSchema.safeParse(process.env);
+    if (!parsed.success) {
+      console.warn("\u26A0\uFE0F Environment configuration warning:", parsed.error.format());
+    }
+    data = parsed.success ? parsed.data : process.env;
+    env = {
+      NODE_ENV: String(data.NODE_ENV || "production"),
+      DATABASE_URL: String(data.DATABASE_URL || ""),
+      FRONTEND_URL: String(data.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, ""),
+      ADMIN_EMAILS: String(data.ADMIN_EMAILS || "levixfashions@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+      FIREBASE_PROJECT_ID: data.FIREBASE_PROJECT_ID || data.VITE_FIREBASE_PROJECT_ID || "",
+      FIREBASE_CLIENT_EMAIL: data.FIREBASE_CLIENT_EMAIL,
+      FIREBASE_PRIVATE_KEY: data.FIREBASE_PRIVATE_KEY,
+      FIREBASE_SERVICE_ACCOUNT_PATH: data.FIREBASE_SERVICE_ACCOUNT_PATH,
+      FIREBASE_SERVICE_ACCOUNT_JSON: data.FIREBASE_SERVICE_ACCOUNT_JSON,
+      // Outgoing email (Hostinger mailbox by default)
+      SMTP_HOST: String(data.SMTP_HOST || "smtp.hostinger.com"),
+      SMTP_PORT: Number(data.SMTP_PORT || 465),
+      SMTP_USER: String(data.SMTP_USER || ""),
+      SMTP_PASS: String(data.SMTP_PASS || ""),
+      MAIL_FROM_NAME: String(data.MAIL_FROM_NAME || "LEVIX"),
+      // Keys pasted into a hosting panel often pick up spaces or quotes — clean them so Razorpay accepts them.
+      RAZORPAY_KEY_ID: cleanSecret(data.RAZORPAY_KEY_ID),
+      RAZORPAY_KEY_SECRET: cleanSecret(data.RAZORPAY_KEY_SECRET),
+      RAZORPAY_WEBHOOK_SECRET: cleanSecret(data.RAZORPAY_WEBHOOK_SECRET)
+    };
+    isProduction = env.NODE_ENV === "production";
+  }
+});
+
+// src/config/db.ts
+var import_client, globalForPrisma, prisma;
+var init_db = __esm({
+  "src/config/db.ts"() {
+    import_client = require("@prisma/client");
+    globalForPrisma = globalThis;
+    prisma = globalForPrisma.__levixPrisma ?? new import_client.PrismaClient({
+      log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"]
+    });
+    globalForPrisma.__levixPrisma = prisma;
+  }
+});
+
+// src/services/mailer.ts
+function isMailConfigured() {
+  return Boolean(env.SMTP_USER && env.SMTP_PASS);
+}
+function getTransporter() {
+  if (!transporter) {
+    transporter = import_nodemailer.default.createTransport({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_PORT === 465,
+      auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+      pool: true,
+      maxConnections: 3
+    });
+  }
+  return transporter;
+}
+async function sendMail(to, subject, html, text) {
+  await getTransporter().sendMail({
+    from: { name: env.MAIL_FROM_NAME, address: env.SMTP_USER },
+    replyTo: "levixfashions@gmail.com",
+    to,
+    subject,
+    html,
+    text
+  });
+}
+function brandedEmail(opts) {
+  const { preheader, title, greeting, body, button, link, footnote } = opts;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
+<body style="margin:0;padding:0;background:#efefef;font-family:Helvetica,Arial,sans-serif;color:#111">
+<span style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efefef;padding:32px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff">
+<tr><td style="background:#000;padding:22px 28px;text-align:center"><span style="color:#fff;font-size:26px;font-weight:900;letter-spacing:8px">LEVIX</span></td></tr>
+<tr><td style="padding:32px 28px 8px">
+<h1 style="margin:0 0 16px;font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.5px">${esc(title)}</h1>
+<p style="margin:0 0 12px;font-size:15px;line-height:1.6">${esc(greeting)}</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#333">${esc(body)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#000"><a href="${esc(link)}" style="display:inline-block;padding:14px 28px;color:#fff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase">${esc(button)}</a></td></tr></table>
+<p style="margin:24px 0 6px;font-size:12px;color:#666">If the button doesn't work, copy this link into your browser:</p>
+<p style="margin:0 0 20px;font-size:12px;word-break:break-all"><a href="${esc(link)}" style="color:#111">${esc(link)}</a></p>
+<p style="margin:0 0 24px;font-size:12px;color:#666;line-height:1.5">${esc(footnote)}</p>
+</td></tr>
+<tr><td style="border-top:1px solid #eee;padding:18px 28px;font-size:11px;color:#888;text-align:center">LEVIX \xB7 Premium streetwear \xB7 <a href="https://thelevix.shop" style="color:#888">thelevix.shop</a></td></tr>
+</table></td></tr></table></body></html>`;
+  const text = `${title}
+
+${greeting}
+
+${body}
+
+${button}: ${link}
+
+${footnote}
+
+LEVIX \xB7 thelevix.shop`;
+  return { html, text };
+}
+var import_nodemailer, transporter, esc;
+var init_mailer = __esm({
+  "src/services/mailer.ts"() {
+    import_nodemailer = __toESM(require("nodemailer"), 1);
+    init_env();
+    transporter = null;
+    esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+});
+
+// src/middleware/errorHandler.ts
+function notFoundApi(req, res) {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+}
+function errorHandler(err, req, res, _next) {
+  if (err instanceof import_zod3.ZodError) {
+    const first = err.issues[0];
+    res.status(400).json({
+      error: first ? `${first.path.join(".") || "input"}: ${first.message}` : "Validation error",
+      details: err.issues.map((e) => ({ field: e.path.join("."), message: e.message }))
+    });
+    return;
+  }
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({ error: err.message });
+    return;
+  }
+  if (err?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Invalid JSON body" });
+    return;
+  }
+  if (err?.type === "entity.too.large") {
+    res.status(413).json({ error: "Request body too large" });
+    return;
+  }
+  if (err instanceof import_client2.Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2002") {
+      const target = err.meta?.target;
+      res.status(409).json({ error: `A record with this ${Array.isArray(target) ? target.join(", ") : target || "value"} already exists` });
+      return;
+    }
+    if (err.code === "P2025") {
+      res.status(404).json({ error: "The requested record was not found" });
+      return;
+    }
+    if (err.code === "P2003") {
+      res.status(400).json({ error: "This record is linked to other data and cannot be changed that way" });
+      return;
+    }
+  }
+  if (err instanceof import_client2.Prisma.PrismaClientInitializationError) {
+    console.error("Database unavailable:", err.message);
+    res.status(503).json({ error: "Store database is temporarily unavailable. Please try again shortly." });
+    return;
+  }
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  res.status(500).json({
+    error: "Something went wrong on our side. Please try again.",
+    ...process.env.NODE_ENV === "development" ? { message: err?.message } : {}
+  });
+}
+var import_zod3, import_client2, AppError, asyncHandler;
+var init_errorHandler = __esm({
+  "src/middleware/errorHandler.ts"() {
+    import_zod3 = require("zod");
+    import_client2 = require("@prisma/client");
+    AppError = class _AppError extends Error {
+      statusCode;
+      constructor(message, statusCode = 400) {
+        super(message);
+        this.statusCode = statusCode;
+        Object.setPrototypeOf(this, _AppError.prototype);
+      }
+    };
+    asyncHandler = (fn) => (req, res, next) => {
+      fn(req, res, next).catch(next);
+    };
+  }
+});
+
+// src/services/store.ts
+function toPublic(row) {
+  const out = {};
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    const v = row?.[key];
+    out[key] = v === null || v === void 0 ? DEFAULT_SETTINGS[key] : v;
+  }
+  return out;
+}
+function invalidateSettingsCache() {
+  cache = null;
+}
+async function getSettings() {
+  if (cache && cache.expires > Date.now()) return cache.value;
+  const row = await prisma.storeSetting.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { id: "default", ...DEFAULT_SETTINGS }
+  });
+  const value = toPublic(row);
+  cache = { value, expires: Date.now() + CACHE_MS };
+  return value;
+}
+async function saveSettings(data2) {
+  const row = await prisma.storeSetting.upsert({
+    where: { id: "default" },
+    update: data2,
+    create: { id: "default", ...DEFAULT_SETTINGS, ...data2 }
+  });
+  const value = toPublic(row);
+  cache = { value, expires: Date.now() + CACHE_MS };
+  return value;
+}
+function calculateShippingPaise(subtotalPaise, settings) {
+  if (subtotalPaise <= 0) return 0;
+  const threshold = Math.max(0, settings.freeShippingThreshold) * 100;
+  if (threshold === 0 || subtotalPaise >= threshold) return 0;
+  return Math.max(0, settings.shippingFee) * 100;
+}
+async function ensureStoreDefaults() {
+  for (const c of DEFAULT_CATEGORIES) {
+    await prisma.category.upsert({ where: { slug: c.slug }, update: {}, create: c });
+  }
+  await getSettings();
+  const row = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { defaultsVersion: true } });
+  if ((row?.defaultsVersion ?? 0) < 1) {
+    for (const d of DEFAULT_DROPS) {
+      const exists = await prisma.collection.findUnique({ where: { slug: d.slug } });
+      if (!exists) {
+        await prisma.collection.create({
+          data: { ...d, homeLayout: "CAROUSEL", showInMenu: true, showInGallery: false, isActive: true }
+        });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 1 } });
+    console.log("\u2713 Created default drop collections (1st, 2nd, 3rd Drop).");
+  }
+  if ((row?.defaultsVersion ?? 0) < 2) {
+    const current = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { announcementText: true } });
+    const text = current?.announcementText || "";
+    if (/EXCHANGE/i.test(text)) {
+      const cleaned = text.split("\u2022").map((part) => part.trim()).filter((part) => part && !/EXCHANGE/i.test(part)).join(" \u2022 ");
+      await prisma.storeSetting.update({ where: { id: "default" }, data: { announcementText: cleaned ? `${cleaned} \u2022 ` : "" } });
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 2 } });
+  }
+  if ((row?.defaultsVersion ?? 0) < 3) {
+    const cur = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { announcementText: true, shippingInfo: true } });
+    const ann = (cur?.announcementText || "").split("\u2022").map((part) => part.trim()).filter((part) => part && !/(SHIPPING|DELIVERY)/i.test(part));
+    const info = (cur?.shippingInfo || "").split("\n").map((l) => l.trim()).filter((l) => l && !/free[- ](delivery|shipping)/i.test(l));
+    await prisma.storeSetting.update({
+      where: { id: "default" },
+      data: {
+        freeShippingThreshold: 0,
+        announcementText: ["FREE DELIVERY ON ALL ORDERS", ...ann].join(" \u2022 ") + " \u2022 ",
+        shippingInfo: ["Free delivery pan-India on every order, no minimum.", ...info].join("\n"),
+        defaultsVersion: 3
+      }
+    });
+    cache = null;
+    console.log("\u2713 Free delivery on all orders switched on.");
+  }
+  if ((row?.defaultsVersion ?? 0) < 4) {
+    const MRP = 79900;
+    const updated = await prisma.product.updateMany({
+      where: { basePrice: { lt: MRP }, OR: [{ comparePrice: null }, { comparePrice: { lte: MRP } }] },
+      data: { comparePrice: MRP }
+    });
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 4 } });
+    console.log(`\u2713 Set MRP \u20B9799 on ${updated.count} products (selling prices unchanged).`);
+  }
+  if ((row?.defaultsVersion ?? 0) < 5) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const slug = "shri-ram-overlength-tee-beige";
+    if (!await prisma.product.findUnique({ where: { slug } })) {
+      const category = await prisma.category.findUnique({ where: { slug: "overlength-t-shirts" } });
+      const ref = category ? await prisma.product.findFirst({ where: { categoryId: category.id, NOT: { details: null } }, orderBy: { createdAt: "asc" } }) : null;
+      const drop = await prisma.collection.findUnique({ where: { slug: "first-drop" } });
+      const sizes = ["S", "M", "L", "XL", "XXL"];
+      await prisma.product.create({
+        data: {
+          name: "Shri Ram Overlength Tee \u2013 Beige",
+          slug,
+          description: 'Carry the calm before the arrow. A hand-inked back print of Shri Ram standing tall with his bow against a rising sun, with "\u0936\u094D\u0930\u0940 \u0930\u093E\u092E" in Devanagari \u2014 and a smaller archer print on the front chest. Printed in deep brown on a soft beige base, cut in our signature overlength, drop-shoulder fit. Unisex.',
+          details: ref?.details ?? null,
+          fabricCare: ref?.fabricCare ?? null,
+          fitGuide: ref?.fitGuide ?? null,
+          basePrice: 54900,
+          comparePrice: 79900,
+          categoryId: category?.id ?? null,
+          gender: "UNISEX",
+          colorGroup: "NEUTRALS",
+          isActive: true,
+          images: {
+            create: [1, 2, 3, 4].map((n, i) => ({
+              url: `${SITE2}/catalog/shri-ram-overlength-${n}.jpg`,
+              altText: ["Front on him", "Back on him", "Front on her", "Back on her"][i],
+              sortOrder: i,
+              isCover: i === 0
+            }))
+          },
+          variants: {
+            create: sizes.map((size) => ({
+              size,
+              color: "Beige",
+              colorHex: "#E6D7BD",
+              sku: `${slug.toUpperCase()}-BEIGE-${size}`,
+              stockQuantity: 10
+            }))
+          },
+          ...drop ? { collections: { create: [{ collectionId: drop.id, sortOrder: 0 }] } } : {}
+        }
+      });
+      console.log("\u2713 Added Shri Ram Overlength Tee \u2013 Beige.");
+    }
+    await prisma.storeSetting.update({
+      where: { id: "default" },
+      data: {
+        heroDesktopVideo: `${SITE2}/videos/hero-offer-desktop-sound.mp4`,
+        heroMobileVideo: `${SITE2}/videos/hero-offer-mobile-sound.mp4`,
+        defaultsVersion: 5
+      }
+    });
+    cache = null;
+    console.log("\u2713 Homepage videos switched to the offer-price versions.");
+  }
+  if ((row?.defaultsVersion ?? 0) < 6) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const cur = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { heroDesktopVideo: true, heroMobileVideo: true } });
+    const swap = (v, kind) => !v || /\/videos\/hero-offer-(desktop|mobile)\.mp4$/.test(v) ? `${SITE2}/videos/hero-offer-${kind}-sound.mp4` : v;
+    await prisma.storeSetting.update({
+      where: { id: "default" },
+      data: {
+        heroDesktopVideo: swap(cur?.heroDesktopVideo, "desktop"),
+        heroMobileVideo: swap(cur?.heroMobileVideo, "mobile"),
+        defaultsVersion: 6
+      }
+    });
+    cache = null;
+    console.log("\u2713 Homepage videos now include sound.");
+  }
+  if ((row?.defaultsVersion ?? 0) < 7) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const covers = {
+      "overlength-t-shirts": "/media/00824b88-6976-4cc6-b171-4ae02c086404.jpg",
+      // Hare Krishna – blue Krishna back print
+      "waffle-boxy-fit-full-sleeves": "/media/d00265fc-31ed-4a0b-bc96-7515bccbcd52.jpg",
+      // Sacred Vine – off white
+      "acid-wash-t-shirts": "/media/d91fcd40-184c-43b1-a7b1-6645545e3e15.jpg"
+      // Lone Wolf – acid red
+    };
+    for (const [slug, path4] of Object.entries(covers)) {
+      const [cat, file] = await Promise.all([
+        prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } }),
+        prisma.mediaFile.findUnique({ where: { id: path4.slice(7, 43) }, select: { id: true } }).catch(() => null)
+      ]);
+      if (cat && file && (!cat.imageUrl || cat.imageUrl.includes("images.unsplash.com"))) {
+        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE2}${path4}` } });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 7 } });
+    console.log("\u2713 Category covers set to LEVIX product photos.");
+  }
+  if ((row?.defaultsVersion ?? 0) < 8) {
+    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+    const banners = {
+      "overlength-t-shirts": "cat-overlength.jpg",
+      "waffle-boxy-fit-full-sleeves": "cat-waffle.jpg",
+      "acid-wash-t-shirts": "cat-acid.jpg"
+    };
+    const v7 = ["00824b88-6976-4cc6-b171-4ae02c086404", "d00265fc-31ed-4a0b-bc96-7515bccbcd52", "d91fcd40-184c-43b1-a7b1-6645545e3e15"];
+    for (const [slug, file] of Object.entries(banners)) {
+      const cat = await prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } });
+      const cur = cat?.imageUrl || "";
+      if (cat && (!cur || cur.includes("images.unsplash.com") || v7.some((id) => cur.includes(id)))) {
+        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE2}/catalog/${file}` } });
+      }
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 8 } });
+    console.log("\u2713 Category banners updated (full-length, no cropping).");
+  }
+  if ((row?.defaultsVersion ?? 0) < 9) {
+    const cats = await prisma.category.findMany({ where: { imageUrl: { contains: "/catalog/cat-" } }, select: { id: true, imageUrl: true } });
+    for (const c of cats) {
+      const next = (c.imageUrl || "").replace(/\/catalog\/cat-(overlength|waffle|acid)\.jpg(#lx=[\d.,]+)?$/, "/catalog/cat-$1-v2.jpg$2");
+      if (next !== c.imageUrl) await prisma.category.update({ where: { id: c.id }, data: { imageUrl: next } });
+    }
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 9 } });
+    cache = null;
+    console.log("\u2713 Category banners sharpened.");
+  }
+}
+var DEFAULT_SETTINGS, DEFAULT_CATEGORIES, cache, CACHE_MS, DEFAULT_DROPS;
+var init_store = __esm({
+  "src/services/store.ts"() {
+    init_db();
+    DEFAULT_SETTINGS = {
+      announcementText: "FREE DELIVERY ON ALL ORDERS \u2022 THE 1ST DROP IS LIVE \u2022 SECURE CHECKOUT \u2022 ",
+      heroHeadline: "STREETWEAR ARCHITECTURE",
+      heroSubtitle: "Heavyweight Custom-Milled Silhouettes & Limited Private Drops.",
+      supportEmail: "levixfashions@gmail.com",
+      supportPhone: "",
+      instagramHandle: "thelevix.shop",
+      freeShippingThreshold: 0,
+      shippingFee: 150,
+      announcementEnabled: false,
+      menCoverImage: "",
+      womenCoverImage: "",
+      heroDesktopImage: "",
+      heroMobileImage: "",
+      heroDesktopVideo: "",
+      heroMobileVideo: "",
+      legalName: "LEVIX",
+      businessAddress: "",
+      grievanceOfficer: "",
+      gstin: "",
+      jurisdictionCity: "",
+      codEnabled: false,
+      codFee: 0,
+      codMaxOrder: 0,
+      heroLink: "/collections/all-products",
+      heroCtaText: "Shop now",
+      latestDropTitle: "Latest drop",
+      seoTitle: "Feel the Luxury of Premium Streetwear with LEVIX",
+      seoText: "LEVIX is an independent streetwear label built around heavyweight fabrics, oversized silhouettes and limited drops. Every piece is designed to drape well, last long and look better with every wear.",
+      shippingInfo: "Free delivery pan-India on every order, no minimum.\nDispatched within 1\u20133 business days.\nTracking shared as soon as your order ships.",
+      careInfo: "Wash cold, inside out.\nDo not bleach.\nDo not tumble dry.\nIron on reverse, avoiding prints."
+    };
+    DEFAULT_CATEGORIES = [
+      {
+        name: "Overlength T-Shirts",
+        slug: "overlength-t-shirts",
+        description: "Elongated drape and dropped-shoulder streetwear silhouettes cut from heavyweight combed cotton.",
+        imageUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80",
+        sortOrder: 0,
+        group: "TOP"
+      },
+      {
+        name: "Waffle Boxy Fit Full Sleeves",
+        slug: "waffle-boxy-fit-full-sleeves",
+        description: "Heavyweight thermal waffle-knit long sleeves with an exaggerated boxy fit.",
+        imageUrl: "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1400&q=80",
+        sortOrder: 1,
+        group: "TOP"
+      },
+      {
+        name: "Acid Wash T-Shirts",
+        slug: "acid-wash-t-shirts",
+        description: "Vintage hand-treated mineral and acid wash tees with a lived-in finish.",
+        imageUrl: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1400&q=80",
+        sortOrder: 2,
+        group: "TOP"
+      }
+    ];
+    cache = null;
+    CACHE_MS = 30 * 1e3;
+    DEFAULT_DROPS = [
+      { slug: "first-drop", name: "1st Drop", sortOrder: 0 },
+      { slug: "second-drop", name: "2nd Drop", sortOrder: 1 },
+      { slug: "third-drop", name: "3rd Drop", sortOrder: 2 }
+    ];
+  }
+});
+
+// src/services/orderEmails.ts
+var orderEmails_exports = {};
+__export(orderEmails_exports, {
+  sendOrderEmails: () => sendOrderEmails
+});
+async function sendOrderEmails(orderId) {
+  if (!isMailConfigured()) return;
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+  if (!order) return;
+  const settings = await getSettings();
+  const SITE2 = env.FRONTEND_URL || "https://thelevix.shop";
+  const link = `${SITE2}/order-success/${encodeURIComponent(order.orderNumber)}${order.accessKey ? `?key=${encodeURIComponent(order.accessKey)}` : ""}`;
+  const cod = order.paymentMethod === "COD";
+  const rows = order.items.map(
+    (i) => `<tr><td style="padding:8px 0;font-size:14px;border-bottom:1px solid #eee">${esc2(i.productName)}<br><span style="color:#777;font-size:12px">${esc2([i.color, i.size].filter(Boolean).join(" / "))} \xD7 ${i.quantity}</span></td><td style="padding:8px 0;font-size:14px;text-align:right;border-bottom:1px solid #eee">${rs(i.subtotalPaise)}</td></tr>`
+  ).join("");
+  const totals = `
+<tr><td style="padding:6px 0;color:#555">Subtotal</td><td style="padding:6px 0;text-align:right">${rs(order.subtotalPaise)}</td></tr>
+${order.discountPaise ? `<tr><td style="padding:6px 0;color:#555">Discount${order.couponCode ? ` (${esc2(order.couponCode)})` : ""}</td><td style="padding:6px 0;text-align:right">\u2212${rs(order.discountPaise)}</td></tr>` : ""}
+<tr><td style="padding:6px 0;color:#555">Delivery</td><td style="padding:6px 0;text-align:right">${order.shippingPaise ? rs(order.shippingPaise) : "FREE"}</td></tr>
+${order.codFeePaise ? `<tr><td style="padding:6px 0;color:#555">COD fee</td><td style="padding:6px 0;text-align:right">${rs(order.codFeePaise)}</td></tr>` : ""}
+<tr><td style="padding:10px 0;font-weight:900;font-size:16px">${cod ? "To pay on delivery" : "Total paid"}</td><td style="padding:10px 0;text-align:right;font-weight:900;font-size:16px">${rs(order.totalPaise)}</td></tr>`;
+  const address = esc2(formatAddress(order.shippingAddressSnapshot));
+  const wrap = (title, intro, button) => `<!doctype html><html><body style="margin:0;background:#efefef;font-family:Helvetica,Arial,sans-serif;color:#111">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:28px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff">
+<tr><td style="background:#000;padding:20px;text-align:center"><span style="color:#fff;font-size:24px;font-weight:900;letter-spacing:8px">LEVIX</span></td></tr>
+<tr><td style="padding:28px">
+<h1 style="margin:0 0 6px;font-size:20px;text-transform:uppercase">${esc2(title)}</h1>
+<p style="margin:0 0 18px;font-size:14px;color:#444;line-height:1.6">${intro}</p>
+<p style="margin:0 0 4px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px">Order ${esc2(order.orderNumber)}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;font-size:14px">${totals}</table>
+<p style="margin:18px 0 4px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px">Delivering to</p>
+<p style="margin:0 0 22px;font-size:14px;line-height:1.5">${address}</p>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#000"><a href="${esc2(button === "admin" ? `${SITE2}/admin/orders` : link)}" style="display:inline-block;padding:13px 26px;color:#fff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase">${button === "admin" ? "Open in admin" : "View your order"}</a></td></tr></table>
+</td></tr>
+<tr><td style="border-top:1px solid #eee;padding:16px 28px;font-size:11px;color:#888;text-align:center">LEVIX \xB7 <a href="${SITE2}" style="color:#888">thelevix.shop</a> \xB7 Damaged item? Reply within 48 hours of delivery with photos and an unboxing video.</td></tr>
+</table></td></tr></table></body></html>`;
+  const name = (order.customerName || "").trim().split(" ")[0] || "there";
+  const customerHtml = wrap(
+    cod ? "Order placed" : "Order confirmed",
+    `Hi ${esc2(name)}, thank you for shopping with LEVIX! ${cod ? "Your Cash on Delivery order is confirmed." : "We have received your payment."} We pack and dispatch within 1\u20133 business days and will share tracking as soon as it ships.`,
+    "customer"
+  );
+  const text = `Order ${order.orderNumber} \u2014 ${cod ? "to pay on delivery" : "paid"} ${rs(order.totalPaise)}
+${order.items.map((i) => `${i.productName} ${[i.color, i.size].filter(Boolean).join("/")} x${i.quantity}`).join("\n")}
+Delivering to: ${formatAddress(order.shippingAddressSnapshot)}
+View: ${link}`;
+  const jobs = [
+    sendMail(order.customerEmail, `${cod ? "Order placed" : "Order confirmed"} \u2014 ${order.orderNumber} | LEVIX`, customerHtml, text)
+  ];
+  const owner = settings.supportEmail || env.ADMIN_EMAILS[0];
+  if (owner) {
+    const adminHtml = wrap(
+      `New order \u2014 ${rs(order.totalPaise)}`,
+      `${esc2(order.customerName)} \xB7 ${esc2(order.customerEmail)} \xB7 ${esc2(order.customerPhone || "")}<br>${cod ? "<b>Cash on Delivery</b>" : "<b>Paid online</b>"}`,
+      "admin"
+    );
+    jobs.push(sendMail(owner, `\u{1F6CD} New order ${order.orderNumber} \u2014 ${rs(order.totalPaise)}${cod ? " (COD)" : ""}`, adminHtml, text));
+  }
+  const results = await Promise.allSettled(jobs);
+  results.forEach((r) => r.status === "rejected" && console.error("Order email failed:", r.reason?.message));
+}
+var esc2, rs;
+var init_orderEmails = __esm({
+  "src/services/orderEmails.ts"() {
+    init_db();
+    init_env();
+    init_mailer();
+    init_store();
+    init_orders();
+    esc2 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    rs = (p) => `\u20B9${Math.round(p / 100).toLocaleString("en-IN")}`;
+  }
+});
+
+// src/services/orders.ts
+function randomCode(length) {
+  const bytes = import_crypto2.default.randomBytes(length);
+  let out = "";
+  for (let i = 0; i < length; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
+  return out;
+}
+function generateOrderNumber() {
+  const d = /* @__PURE__ */ new Date();
+  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1e3);
+  const ymd = ist.toISOString().slice(2, 10).replace(/-/g, "");
+  return `LVX-${ymd}-${randomCode(6)}`;
+}
+function generateAccessKey() {
+  return import_crypto2.default.randomBytes(24).toString("base64url");
+}
+function safeEqual(a, b) {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && import_crypto2.default.timingSafeEqual(ab, bb);
+}
+async function evaluateCoupon(rawCode, subtotalPaise) {
+  const code = rawCode.trim().toUpperCase();
+  if (!code) throw new AppError("Enter a coupon code", 400);
+  const coupon = await prisma.coupon.findUnique({ where: { code } });
+  if (!coupon || !coupon.isActive) throw new AppError("This coupon code is not valid", 400);
+  if (coupon.validUntil && coupon.validUntil.getTime() < Date.now()) {
+    throw new AppError("This coupon has expired", 400);
+  }
+  if (coupon.maxUses !== null && coupon.maxUses !== void 0 && coupon.usedCount >= coupon.maxUses) {
+    throw new AppError("This coupon has reached its usage limit", 400);
+  }
+  if (subtotalPaise < coupon.minOrderPaise) {
+    throw new AppError(
+      `Add items worth Rs. ${Math.ceil((coupon.minOrderPaise - subtotalPaise) / 100).toLocaleString("en-IN")} more to use ${code}`,
+      400
+    );
+  }
+  let discountPaise = coupon.discountType === import_client4.DiscountType.PERCENTAGE ? Math.round(subtotalPaise * Math.min(100, coupon.discountValue) / 100) : coupon.discountValue;
+  discountPaise = Math.max(0, Math.min(discountPaise, subtotalPaise));
+  const description = coupon.discountType === import_client4.DiscountType.PERCENTAGE ? `${coupon.discountValue}% off` : `Rs. ${(coupon.discountValue / 100).toLocaleString("en-IN")} off`;
+  return { code, discountPaise, description };
+}
+async function markOrderPaid(orderId, info) {
+  const done = await markOrderPaidTx(orderId, info);
+  if (done) notifyOrder(orderId);
+  return done;
+}
+function notifyOrder(orderId) {
+  Promise.resolve().then(() => (init_orderEmails(), orderEmails_exports)).then((m) => m.sendOrderEmails(orderId)).catch((err) => console.error("Order email error:", err?.message || err));
+}
+async function markOrderPaidTx(orderId, info) {
+  return prisma.$transaction(
+    async (tx) => {
+      const transition = await tx.order.updateMany({
+        where: { id: orderId, paymentStatus: { not: import_client4.PaymentStatus.PAID } },
+        data: {
+          status: import_client4.OrderStatus.PAID,
+          paymentStatus: import_client4.PaymentStatus.PAID,
+          paidAt: /* @__PURE__ */ new Date(),
+          stockDeducted: true
+        }
+      });
+      if (transition.count === 0) return false;
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
+      await tx.payment.upsert({
+        where: { orderId },
+        update: {
+          status: import_client4.PaymentStatus.PAID,
+          razorpayOrderId: info.razorpayOrderId,
+          razorpayPaymentId: info.razorpayPaymentId,
+          razorpaySignature: info.razorpaySignature ?? void 0,
+          ...info.rawPayload ? { rawPayload: info.rawPayload } : {}
+        },
+        create: {
+          orderId,
+          amountPaise: info.amountPaise ?? order.totalPaise,
+          razorpayOrderId: info.razorpayOrderId,
+          razorpayPaymentId: info.razorpayPaymentId,
+          razorpaySignature: info.razorpaySignature ?? null,
+          status: import_client4.PaymentStatus.PAID,
+          ...info.rawPayload ? { rawPayload: info.rawPayload } : {}
+        }
+      });
+      const oversold = [];
+      for (const item of order.items) {
+        if (!item.variantId) continue;
+        const dec = await tx.productVariant.updateMany({
+          where: { id: item.variantId, stockQuantity: { gte: item.quantity } },
+          data: { stockQuantity: { decrement: item.quantity } }
+        });
+        if (dec.count === 0) {
+          await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: 0 } });
+          oversold.push(`${item.productName} (${[item.color, item.size].filter(Boolean).join(" / ")}) x${item.quantity}`);
+        }
+      }
+      if (oversold.length) {
+        console.warn(`\u26A0\uFE0F Order ${order.orderNumber} paid but stock was short for: ${oversold.join(", ")}`);
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            adminNotes: `${order.adminNotes ? order.adminNotes + "\n" : ""}\u26A0\uFE0F Stock was short when payment completed: ${oversold.join(", ")}`
+          }
+        });
+      }
+      if (order.couponCode) {
+        await tx.coupon.updateMany({ where: { code: order.couponCode }, data: { usedCount: { increment: 1 } } });
+      }
+      if (order.cartId) {
+        await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
+      }
+      return true;
+    },
+    { timeout: 2e4, maxWait: 1e4 }
+  );
+}
+function formatAddress(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return "";
+  return [snapshot.fullName, snapshot.line1, snapshot.line2, snapshot.city, snapshot.state, snapshot.postalCode, snapshot.country].filter(Boolean).join(", ");
+}
+var import_crypto2, import_client4, ALPHABET;
+var init_orders = __esm({
+  "src/services/orders.ts"() {
+    import_crypto2 = __toESM(require("crypto"), 1);
+    import_client4 = require("@prisma/client");
+    init_db();
+    init_errorHandler();
+    ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  }
+});
+
 // src/server.ts
 var server_exports = {};
 __export(server_exports, {
@@ -42,73 +763,8 @@ var import_helmet = __toESM(require("helmet"), 1);
 var import_compression = __toESM(require("compression"), 1);
 var import_path2 = __toESM(require("path"), 1);
 var import_fs3 = __toESM(require("fs"), 1);
-
-// src/config/env.ts
-var import_dotenv = __toESM(require("dotenv"), 1);
-var import_zod = require("zod");
-import_dotenv.default.config();
-var envSchema = import_zod.z.object({
-  NODE_ENV: import_zod.z.string().default("production"),
-  PORT: import_zod.z.union([import_zod.z.string(), import_zod.z.number()]).optional(),
-  DATABASE_URL: import_zod.z.string().optional().default(""),
-  FRONTEND_URL: import_zod.z.string().optional().default("https://thelevix.shop"),
-  // Comma separated list of owner/admin emails (must be Firebase-verified emails)
-  ADMIN_EMAILS: import_zod.z.string().optional().default("levixfashions@gmail.com"),
-  // Firebase Admin (only the project id is required to verify ID tokens)
-  FIREBASE_PROJECT_ID: import_zod.z.string().optional(),
-  VITE_FIREBASE_PROJECT_ID: import_zod.z.string().optional(),
-  FIREBASE_CLIENT_EMAIL: import_zod.z.string().optional(),
-  FIREBASE_PRIVATE_KEY: import_zod.z.string().optional(),
-  FIREBASE_SERVICE_ACCOUNT_PATH: import_zod.z.string().optional(),
-  FIREBASE_SERVICE_ACCOUNT_JSON: import_zod.z.string().optional(),
-  SMTP_HOST: import_zod.z.string().optional(),
-  SMTP_PORT: import_zod.z.string().optional(),
-  SMTP_USER: import_zod.z.string().optional(),
-  SMTP_PASS: import_zod.z.string().optional(),
-  MAIL_FROM_NAME: import_zod.z.string().optional(),
-  // Razorpay
-  RAZORPAY_KEY_ID: import_zod.z.string().optional().default(""),
-  RAZORPAY_KEY_SECRET: import_zod.z.string().optional().default(""),
-  RAZORPAY_WEBHOOK_SECRET: import_zod.z.string().optional().default("")
-}).passthrough();
-var parsed = envSchema.safeParse(process.env);
-if (!parsed.success) {
-  console.warn("\u26A0\uFE0F Environment configuration warning:", parsed.error.format());
-}
-var data = parsed.success ? parsed.data : process.env;
-var env = {
-  NODE_ENV: String(data.NODE_ENV || "production"),
-  DATABASE_URL: String(data.DATABASE_URL || ""),
-  FRONTEND_URL: String(data.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, ""),
-  ADMIN_EMAILS: String(data.ADMIN_EMAILS || "levixfashions@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
-  FIREBASE_PROJECT_ID: data.FIREBASE_PROJECT_ID || data.VITE_FIREBASE_PROJECT_ID || "",
-  FIREBASE_CLIENT_EMAIL: data.FIREBASE_CLIENT_EMAIL,
-  FIREBASE_PRIVATE_KEY: data.FIREBASE_PRIVATE_KEY,
-  FIREBASE_SERVICE_ACCOUNT_PATH: data.FIREBASE_SERVICE_ACCOUNT_PATH,
-  FIREBASE_SERVICE_ACCOUNT_JSON: data.FIREBASE_SERVICE_ACCOUNT_JSON,
-  // Outgoing email (Hostinger mailbox by default)
-  SMTP_HOST: String(data.SMTP_HOST || "smtp.hostinger.com"),
-  SMTP_PORT: Number(data.SMTP_PORT || 465),
-  SMTP_USER: String(data.SMTP_USER || ""),
-  SMTP_PASS: String(data.SMTP_PASS || ""),
-  MAIL_FROM_NAME: String(data.MAIL_FROM_NAME || "LEVIX"),
-  RAZORPAY_KEY_ID: String(data.RAZORPAY_KEY_ID || ""),
-  RAZORPAY_KEY_SECRET: String(data.RAZORPAY_KEY_SECRET || ""),
-  RAZORPAY_WEBHOOK_SECRET: String(data.RAZORPAY_WEBHOOK_SECRET || "")
-};
-var isProduction = env.NODE_ENV === "production";
-function isAdminEmail(email) {
-  if (!email) return false;
-  return env.ADMIN_EMAILS.includes(email.trim().toLowerCase());
-}
-
-// src/config/db.ts
-var import_client = require("@prisma/client");
-var globalForPrisma = globalThis;
-var prisma = globalForPrisma.__levixPrisma ?? new import_client.PrismaClient({
-  log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"]
-});
-globalForPrisma.__levixPrisma = prisma;
+init_env();
+init_db();
 
 // src/middleware/rateLimiter.ts
 var import_express_rate_limit = __toESM(require("express-rate-limit"), 1);
@@ -201,6 +857,68 @@ function broadcastChange(scope = "all") {
   }, 60);
 }
 
+// src/config/razorpay.ts
+var import_razorpay = __toESM(require("razorpay"), 1);
+var import_crypto = __toESM(require("crypto"), 1);
+init_env();
+var instance = null;
+function isRazorpayConfigured() {
+  return Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
+}
+function getRazorpay() {
+  if (!isRazorpayConfigured()) {
+    throw new Error("Razorpay keys are not configured");
+  }
+  if (!instance) {
+    instance = new import_razorpay.default({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET });
+  }
+  return instance;
+}
+function razorpayMode() {
+  const id = env.RAZORPAY_KEY_ID;
+  if (!id) return "missing";
+  if (/^rzp_test_[A-Za-z0-9]+$/.test(id)) return "test";
+  if (/^rzp_live_[A-Za-z0-9]+$/.test(id)) return "live";
+  return "invalid";
+}
+var check = null;
+async function razorpayKeyCheck() {
+  if (!isRazorpayConfigured()) return "missing";
+  if (check && Date.now() - check.at < 10 * 60 * 1e3) return check.result;
+  let result = "ok";
+  try {
+    await Promise.race([
+      getRazorpay().orders.all({ count: 1 }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6e3))
+    ]);
+  } catch (err) {
+    const code = err?.statusCode || err?.error?.code;
+    result = code === 401 || /auth/i.test(String(err?.error?.description || err?.message || "")) ? "keys-rejected" : "unreachable";
+  }
+  check = { at: Date.now(), result };
+  return result;
+}
+function safeEqualHex(a, b) {
+  try {
+    const ab = Buffer.from(a, "hex");
+    const bb = Buffer.from(b, "hex");
+    if (ab.length === 0 || ab.length !== bb.length) return false;
+    return import_crypto.default.timingSafeEqual(ab, bb);
+  } catch {
+    return false;
+  }
+}
+function verifyPaymentSignature(orderId, paymentId, signature) {
+  if (!env.RAZORPAY_KEY_SECRET) return false;
+  const expected = import_crypto.default.createHmac("sha256", env.RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
+  return safeEqualHex(expected, signature);
+}
+function verifyWebhookSignature(rawBody, signature) {
+  if (!env.RAZORPAY_WEBHOOK_SECRET) return false;
+  const expected = import_crypto.default.createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest("hex");
+  return safeEqualHex(expected, signature);
+}
+
 // src/controllers/authMailController.ts
 var import_zod2 = require("zod");
 
@@ -208,6 +926,7 @@ var import_zod2 = require("zod");
 var import_app = require("firebase-admin/app");
 var import_auth = require("firebase-admin/auth");
 var import_fs = __toESM(require("fs"), 1);
+init_env();
 var firebaseApp = null;
 var hasServiceAccount = false;
 function getFirebaseAdmin() {
@@ -269,70 +988,9 @@ function firebaseHasServiceAccount() {
   return hasServiceAccount;
 }
 
-// src/services/mailer.ts
-var import_nodemailer = __toESM(require("nodemailer"), 1);
-var transporter = null;
-function isMailConfigured() {
-  return Boolean(env.SMTP_USER && env.SMTP_PASS);
-}
-function getTransporter() {
-  if (!transporter) {
-    transporter = import_nodemailer.default.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_PORT === 465,
-      auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
-      pool: true,
-      maxConnections: 3
-    });
-  }
-  return transporter;
-}
-async function sendMail(to, subject, html, text) {
-  await getTransporter().sendMail({
-    from: { name: env.MAIL_FROM_NAME, address: env.SMTP_USER },
-    replyTo: "levixfashions@gmail.com",
-    to,
-    subject,
-    html,
-    text
-  });
-}
-var esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-function brandedEmail(opts) {
-  const { preheader, title, greeting, body, button, link, footnote } = opts;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
-<body style="margin:0;padding:0;background:#efefef;font-family:Helvetica,Arial,sans-serif;color:#111">
-<span style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</span>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efefef;padding:32px 12px"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff">
-<tr><td style="background:#000;padding:22px 28px;text-align:center"><span style="color:#fff;font-size:26px;font-weight:900;letter-spacing:8px">LEVIX</span></td></tr>
-<tr><td style="padding:32px 28px 8px">
-<h1 style="margin:0 0 16px;font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.5px">${esc(title)}</h1>
-<p style="margin:0 0 12px;font-size:15px;line-height:1.6">${esc(greeting)}</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#333">${esc(body)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:#000"><a href="${esc(link)}" style="display:inline-block;padding:14px 28px;color:#fff;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase">${esc(button)}</a></td></tr></table>
-<p style="margin:24px 0 6px;font-size:12px;color:#666">If the button doesn't work, copy this link into your browser:</p>
-<p style="margin:0 0 20px;font-size:12px;word-break:break-all"><a href="${esc(link)}" style="color:#111">${esc(link)}</a></p>
-<p style="margin:0 0 24px;font-size:12px;color:#666;line-height:1.5">${esc(footnote)}</p>
-</td></tr>
-<tr><td style="border-top:1px solid #eee;padding:18px 28px;font-size:11px;color:#888;text-align:center">LEVIX \xB7 Premium streetwear \xB7 <a href="https://thelevix.shop" style="color:#888">thelevix.shop</a></td></tr>
-</table></td></tr></table></body></html>`;
-  const text = `${title}
-
-${greeting}
-
-${body}
-
-${button}: ${link}
-
-${footnote}
-
-LEVIX \xB7 thelevix.shop`;
-  return { html, text };
-}
-
 // src/controllers/authMailController.ts
+init_env();
+init_mailer();
 var SITE = env.FRONTEND_URL || "https://thelevix.shop";
 function onOurDomain(link) {
   try {
@@ -404,76 +1062,16 @@ async function sendPasswordReset(req, res) {
   res.json({ success: true });
 }
 
-// src/middleware/errorHandler.ts
-var import_zod3 = require("zod");
-var import_client2 = require("@prisma/client");
-var AppError = class _AppError extends Error {
-  statusCode;
-  constructor(message, statusCode = 400) {
-    super(message);
-    this.statusCode = statusCode;
-    Object.setPrototypeOf(this, _AppError.prototype);
-  }
-};
-function notFoundApi(req, res) {
-  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
-}
-function errorHandler(err, req, res, _next) {
-  if (err instanceof import_zod3.ZodError) {
-    const first = err.issues[0];
-    res.status(400).json({
-      error: first ? `${first.path.join(".") || "input"}: ${first.message}` : "Validation error",
-      details: err.issues.map((e) => ({ field: e.path.join("."), message: e.message }))
-    });
-    return;
-  }
-  if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.message });
-    return;
-  }
-  if (err?.type === "entity.parse.failed") {
-    res.status(400).json({ error: "Invalid JSON body" });
-    return;
-  }
-  if (err?.type === "entity.too.large") {
-    res.status(413).json({ error: "Request body too large" });
-    return;
-  }
-  if (err instanceof import_client2.Prisma.PrismaClientKnownRequestError) {
-    if (err.code === "P2002") {
-      const target = err.meta?.target;
-      res.status(409).json({ error: `A record with this ${Array.isArray(target) ? target.join(", ") : target || "value"} already exists` });
-      return;
-    }
-    if (err.code === "P2025") {
-      res.status(404).json({ error: "The requested record was not found" });
-      return;
-    }
-    if (err.code === "P2003") {
-      res.status(400).json({ error: "This record is linked to other data and cannot be changed that way" });
-      return;
-    }
-  }
-  if (err instanceof import_client2.Prisma.PrismaClientInitializationError) {
-    console.error("Database unavailable:", err.message);
-    res.status(503).json({ error: "Store database is temporarily unavailable. Please try again shortly." });
-    return;
-  }
-  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
-  res.status(500).json({
-    error: "Something went wrong on our side. Please try again.",
-    ...process.env.NODE_ENV === "development" ? { message: err?.message } : {}
-  });
-}
-var asyncHandler = (fn) => (req, res, next) => {
-  fn(req, res, next).catch(next);
-};
+// src/app.ts
+init_errorHandler();
 
 // src/routes/authRoutes.ts
 var import_express = require("express");
 
 // src/middleware/verifyFirebaseToken.ts
 var import_client3 = require("@prisma/client");
+init_db();
+init_env();
 var USER_CACHE_TTL_MS = 5 * 60 * 1e3;
 var userCache = /* @__PURE__ */ new Map();
 function extractBearer(req) {
@@ -566,8 +1164,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// src/routes/authRoutes.ts
+init_errorHandler();
+
 // src/controllers/authController.ts
 var import_zod4 = require("zod");
+init_db();
+init_errorHandler();
 var phoneSchema = import_zod4.z.string().trim().transform((v) => v.replace(/[\s-]/g, "")).refine((v) => /^(\+91)?[6-9]\d{9}$/.test(v), "Enter a valid 10-digit Indian mobile number");
 var addressSchema = import_zod4.z.object({
   fullName: import_zod4.z.string().trim().min(2).max(100),
@@ -672,6 +1275,11 @@ var authRoutes_default = router;
 
 // src/routes/productRoutes.ts
 var import_express2 = require("express");
+init_errorHandler();
+
+// src/controllers/productController.ts
+init_db();
+init_errorHandler();
 
 // src/utils/serialize.ts
 var SIZE_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "3XL", "4XL"];
@@ -852,8 +1460,11 @@ var productRoutes_default = router2;
 
 // src/routes/collectionRoutes.ts
 var import_express3 = require("express");
+init_errorHandler();
 
 // src/controllers/collectionController.ts
+init_db();
+init_errorHandler();
 function orderByFor(sort) {
   switch (sort) {
     case "price-asc":
@@ -980,289 +1591,13 @@ var collectionRoutes_default = router3;
 
 // src/routes/cartRoutes.ts
 var import_express4 = require("express");
+init_errorHandler();
 
 // src/controllers/cartController.ts
 var import_zod5 = require("zod");
-
-// src/services/store.ts
-var DEFAULT_SETTINGS = {
-  announcementText: "FREE DELIVERY ON ALL ORDERS \u2022 THE 1ST DROP IS LIVE \u2022 SECURE CHECKOUT \u2022 ",
-  heroHeadline: "STREETWEAR ARCHITECTURE",
-  heroSubtitle: "Heavyweight Custom-Milled Silhouettes & Limited Private Drops.",
-  supportEmail: "levixfashions@gmail.com",
-  supportPhone: "",
-  instagramHandle: "thelevix.shop",
-  freeShippingThreshold: 0,
-  shippingFee: 150,
-  announcementEnabled: false,
-  menCoverImage: "",
-  womenCoverImage: "",
-  heroDesktopImage: "",
-  heroMobileImage: "",
-  heroDesktopVideo: "",
-  heroMobileVideo: "",
-  legalName: "LEVIX",
-  businessAddress: "",
-  grievanceOfficer: "",
-  gstin: "",
-  jurisdictionCity: "",
-  codEnabled: false,
-  codFee: 0,
-  codMaxOrder: 0,
-  heroLink: "/collections/all-products",
-  heroCtaText: "Shop now",
-  latestDropTitle: "Latest drop",
-  seoTitle: "Feel the Luxury of Premium Streetwear with LEVIX",
-  seoText: "LEVIX is an independent streetwear label built around heavyweight fabrics, oversized silhouettes and limited drops. Every piece is designed to drape well, last long and look better with every wear.",
-  shippingInfo: "Free delivery pan-India on every order, no minimum.\nDispatched within 1\u20133 business days.\nTracking shared as soon as your order ships.",
-  careInfo: "Wash cold, inside out.\nDo not bleach.\nDo not tumble dry.\nIron on reverse, avoiding prints."
-};
-var DEFAULT_CATEGORIES = [
-  {
-    name: "Overlength T-Shirts",
-    slug: "overlength-t-shirts",
-    description: "Elongated drape and dropped-shoulder streetwear silhouettes cut from heavyweight combed cotton.",
-    imageUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1400&q=80",
-    sortOrder: 0,
-    group: "TOP"
-  },
-  {
-    name: "Waffle Boxy Fit Full Sleeves",
-    slug: "waffle-boxy-fit-full-sleeves",
-    description: "Heavyweight thermal waffle-knit long sleeves with an exaggerated boxy fit.",
-    imageUrl: "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=1400&q=80",
-    sortOrder: 1,
-    group: "TOP"
-  },
-  {
-    name: "Acid Wash T-Shirts",
-    slug: "acid-wash-t-shirts",
-    description: "Vintage hand-treated mineral and acid wash tees with a lived-in finish.",
-    imageUrl: "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?auto=format&fit=crop&w=1400&q=80",
-    sortOrder: 2,
-    group: "TOP"
-  }
-];
-var cache = null;
-var CACHE_MS = 30 * 1e3;
-function toPublic(row) {
-  const out = {};
-  for (const key of Object.keys(DEFAULT_SETTINGS)) {
-    const v = row?.[key];
-    out[key] = v === null || v === void 0 ? DEFAULT_SETTINGS[key] : v;
-  }
-  return out;
-}
-function invalidateSettingsCache() {
-  cache = null;
-}
-async function getSettings() {
-  if (cache && cache.expires > Date.now()) return cache.value;
-  const row = await prisma.storeSetting.upsert({
-    where: { id: "default" },
-    update: {},
-    create: { id: "default", ...DEFAULT_SETTINGS }
-  });
-  const value = toPublic(row);
-  cache = { value, expires: Date.now() + CACHE_MS };
-  return value;
-}
-async function saveSettings(data2) {
-  const row = await prisma.storeSetting.upsert({
-    where: { id: "default" },
-    update: data2,
-    create: { id: "default", ...DEFAULT_SETTINGS, ...data2 }
-  });
-  const value = toPublic(row);
-  cache = { value, expires: Date.now() + CACHE_MS };
-  return value;
-}
-function calculateShippingPaise(subtotalPaise, settings) {
-  if (subtotalPaise <= 0) return 0;
-  const threshold = Math.max(0, settings.freeShippingThreshold) * 100;
-  if (threshold === 0 || subtotalPaise >= threshold) return 0;
-  return Math.max(0, settings.shippingFee) * 100;
-}
-var DEFAULT_DROPS = [
-  { slug: "first-drop", name: "1st Drop", sortOrder: 0 },
-  { slug: "second-drop", name: "2nd Drop", sortOrder: 1 },
-  { slug: "third-drop", name: "3rd Drop", sortOrder: 2 }
-];
-async function ensureStoreDefaults() {
-  for (const c of DEFAULT_CATEGORIES) {
-    await prisma.category.upsert({ where: { slug: c.slug }, update: {}, create: c });
-  }
-  await getSettings();
-  const row = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { defaultsVersion: true } });
-  if ((row?.defaultsVersion ?? 0) < 1) {
-    for (const d of DEFAULT_DROPS) {
-      const exists = await prisma.collection.findUnique({ where: { slug: d.slug } });
-      if (!exists) {
-        await prisma.collection.create({
-          data: { ...d, homeLayout: "CAROUSEL", showInMenu: true, showInGallery: false, isActive: true }
-        });
-      }
-    }
-    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 1 } });
-    console.log("\u2713 Created default drop collections (1st, 2nd, 3rd Drop).");
-  }
-  if ((row?.defaultsVersion ?? 0) < 2) {
-    const current = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { announcementText: true } });
-    const text = current?.announcementText || "";
-    if (/EXCHANGE/i.test(text)) {
-      const cleaned = text.split("\u2022").map((part) => part.trim()).filter((part) => part && !/EXCHANGE/i.test(part)).join(" \u2022 ");
-      await prisma.storeSetting.update({ where: { id: "default" }, data: { announcementText: cleaned ? `${cleaned} \u2022 ` : "" } });
-    }
-    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 2 } });
-  }
-  if ((row?.defaultsVersion ?? 0) < 3) {
-    const cur = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { announcementText: true, shippingInfo: true } });
-    const ann = (cur?.announcementText || "").split("\u2022").map((part) => part.trim()).filter((part) => part && !/(SHIPPING|DELIVERY)/i.test(part));
-    const info = (cur?.shippingInfo || "").split("\n").map((l) => l.trim()).filter((l) => l && !/free[- ](delivery|shipping)/i.test(l));
-    await prisma.storeSetting.update({
-      where: { id: "default" },
-      data: {
-        freeShippingThreshold: 0,
-        announcementText: ["FREE DELIVERY ON ALL ORDERS", ...ann].join(" \u2022 ") + " \u2022 ",
-        shippingInfo: ["Free delivery pan-India on every order, no minimum.", ...info].join("\n"),
-        defaultsVersion: 3
-      }
-    });
-    cache = null;
-    console.log("\u2713 Free delivery on all orders switched on.");
-  }
-  if ((row?.defaultsVersion ?? 0) < 4) {
-    const MRP = 79900;
-    const updated = await prisma.product.updateMany({
-      where: { basePrice: { lt: MRP }, OR: [{ comparePrice: null }, { comparePrice: { lte: MRP } }] },
-      data: { comparePrice: MRP }
-    });
-    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 4 } });
-    console.log(`\u2713 Set MRP \u20B9799 on ${updated.count} products (selling prices unchanged).`);
-  }
-  if ((row?.defaultsVersion ?? 0) < 5) {
-    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
-    const slug = "shri-ram-overlength-tee-beige";
-    if (!await prisma.product.findUnique({ where: { slug } })) {
-      const category = await prisma.category.findUnique({ where: { slug: "overlength-t-shirts" } });
-      const ref = category ? await prisma.product.findFirst({ where: { categoryId: category.id, NOT: { details: null } }, orderBy: { createdAt: "asc" } }) : null;
-      const drop = await prisma.collection.findUnique({ where: { slug: "first-drop" } });
-      const sizes = ["S", "M", "L", "XL", "XXL"];
-      await prisma.product.create({
-        data: {
-          name: "Shri Ram Overlength Tee \u2013 Beige",
-          slug,
-          description: 'Carry the calm before the arrow. A hand-inked back print of Shri Ram standing tall with his bow against a rising sun, with "\u0936\u094D\u0930\u0940 \u0930\u093E\u092E" in Devanagari \u2014 and a smaller archer print on the front chest. Printed in deep brown on a soft beige base, cut in our signature overlength, drop-shoulder fit. Unisex.',
-          details: ref?.details ?? null,
-          fabricCare: ref?.fabricCare ?? null,
-          fitGuide: ref?.fitGuide ?? null,
-          basePrice: 54900,
-          comparePrice: 79900,
-          categoryId: category?.id ?? null,
-          gender: "UNISEX",
-          colorGroup: "NEUTRALS",
-          isActive: true,
-          images: {
-            create: [1, 2, 3, 4].map((n, i) => ({
-              url: `${SITE2}/catalog/shri-ram-overlength-${n}.jpg`,
-              altText: ["Front on him", "Back on him", "Front on her", "Back on her"][i],
-              sortOrder: i,
-              isCover: i === 0
-            }))
-          },
-          variants: {
-            create: sizes.map((size) => ({
-              size,
-              color: "Beige",
-              colorHex: "#E6D7BD",
-              sku: `${slug.toUpperCase()}-BEIGE-${size}`,
-              stockQuantity: 10
-            }))
-          },
-          ...drop ? { collections: { create: [{ collectionId: drop.id, sortOrder: 0 }] } } : {}
-        }
-      });
-      console.log("\u2713 Added Shri Ram Overlength Tee \u2013 Beige.");
-    }
-    await prisma.storeSetting.update({
-      where: { id: "default" },
-      data: {
-        heroDesktopVideo: `${SITE2}/videos/hero-offer-desktop-sound.mp4`,
-        heroMobileVideo: `${SITE2}/videos/hero-offer-mobile-sound.mp4`,
-        defaultsVersion: 5
-      }
-    });
-    cache = null;
-    console.log("\u2713 Homepage videos switched to the offer-price versions.");
-  }
-  if ((row?.defaultsVersion ?? 0) < 6) {
-    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
-    const cur = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { heroDesktopVideo: true, heroMobileVideo: true } });
-    const swap = (v, kind) => !v || /\/videos\/hero-offer-(desktop|mobile)\.mp4$/.test(v) ? `${SITE2}/videos/hero-offer-${kind}-sound.mp4` : v;
-    await prisma.storeSetting.update({
-      where: { id: "default" },
-      data: {
-        heroDesktopVideo: swap(cur?.heroDesktopVideo, "desktop"),
-        heroMobileVideo: swap(cur?.heroMobileVideo, "mobile"),
-        defaultsVersion: 6
-      }
-    });
-    cache = null;
-    console.log("\u2713 Homepage videos now include sound.");
-  }
-  if ((row?.defaultsVersion ?? 0) < 7) {
-    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
-    const covers = {
-      "overlength-t-shirts": "/media/00824b88-6976-4cc6-b171-4ae02c086404.jpg",
-      // Hare Krishna – blue Krishna back print
-      "waffle-boxy-fit-full-sleeves": "/media/d00265fc-31ed-4a0b-bc96-7515bccbcd52.jpg",
-      // Sacred Vine – off white
-      "acid-wash-t-shirts": "/media/d91fcd40-184c-43b1-a7b1-6645545e3e15.jpg"
-      // Lone Wolf – acid red
-    };
-    for (const [slug, path4] of Object.entries(covers)) {
-      const [cat, file] = await Promise.all([
-        prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } }),
-        prisma.mediaFile.findUnique({ where: { id: path4.slice(7, 43) }, select: { id: true } }).catch(() => null)
-      ]);
-      if (cat && file && (!cat.imageUrl || cat.imageUrl.includes("images.unsplash.com"))) {
-        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE2}${path4}` } });
-      }
-    }
-    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 7 } });
-    console.log("\u2713 Category covers set to LEVIX product photos.");
-  }
-  if ((row?.defaultsVersion ?? 0) < 8) {
-    const SITE2 = (process.env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
-    const banners = {
-      "overlength-t-shirts": "cat-overlength.jpg",
-      "waffle-boxy-fit-full-sleeves": "cat-waffle.jpg",
-      "acid-wash-t-shirts": "cat-acid.jpg"
-    };
-    const v7 = ["00824b88-6976-4cc6-b171-4ae02c086404", "d00265fc-31ed-4a0b-bc96-7515bccbcd52", "d91fcd40-184c-43b1-a7b1-6645545e3e15"];
-    for (const [slug, file] of Object.entries(banners)) {
-      const cat = await prisma.category.findUnique({ where: { slug }, select: { id: true, imageUrl: true } });
-      const cur = cat?.imageUrl || "";
-      if (cat && (!cur || cur.includes("images.unsplash.com") || v7.some((id) => cur.includes(id)))) {
-        await prisma.category.update({ where: { id: cat.id }, data: { imageUrl: `${SITE2}/catalog/${file}` } });
-      }
-    }
-    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 8 } });
-    console.log("\u2713 Category banners updated (full-length, no cropping).");
-  }
-  if ((row?.defaultsVersion ?? 0) < 9) {
-    const cats = await prisma.category.findMany({ where: { imageUrl: { contains: "/catalog/cat-" } }, select: { id: true, imageUrl: true } });
-    for (const c of cats) {
-      const next = (c.imageUrl || "").replace(/\/catalog\/cat-(overlength|waffle|acid)\.jpg(#lx=[\d.,]+)?$/, "/catalog/cat-$1-v2.jpg$2");
-      if (next !== c.imageUrl) await prisma.category.update({ where: { id: c.id }, data: { imageUrl: next } });
-    }
-    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 9 } });
-    cache = null;
-    console.log("\u2713 Category banners sharpened.");
-  }
-}
-
-// src/controllers/cartController.ts
+init_db();
+init_errorHandler();
+init_store();
 var cartInclude = {
   items: {
     orderBy: { createdAt: "asc" },
@@ -1432,166 +1767,16 @@ var cartRoutes_default = router4;
 
 // src/routes/orderRoutes.ts
 var import_express5 = require("express");
+init_errorHandler();
 
 // src/controllers/orderController.ts
 var import_zod6 = require("zod");
 var import_client5 = require("@prisma/client");
-
-// src/config/razorpay.ts
-var import_razorpay = __toESM(require("razorpay"), 1);
-var import_crypto = __toESM(require("crypto"), 1);
-var instance = null;
-function isRazorpayConfigured() {
-  return Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET);
-}
-function getRazorpay() {
-  if (!isRazorpayConfigured()) {
-    throw new Error("Razorpay keys are not configured");
-  }
-  if (!instance) {
-    instance = new import_razorpay.default({ key_id: env.RAZORPAY_KEY_ID, key_secret: env.RAZORPAY_KEY_SECRET });
-  }
-  return instance;
-}
-function safeEqualHex(a, b) {
-  try {
-    const ab = Buffer.from(a, "hex");
-    const bb = Buffer.from(b, "hex");
-    if (ab.length === 0 || ab.length !== bb.length) return false;
-    return import_crypto.default.timingSafeEqual(ab, bb);
-  } catch {
-    return false;
-  }
-}
-function verifyPaymentSignature(orderId, paymentId, signature) {
-  if (!env.RAZORPAY_KEY_SECRET) return false;
-  const expected = import_crypto.default.createHmac("sha256", env.RAZORPAY_KEY_SECRET).update(`${orderId}|${paymentId}`).digest("hex");
-  return safeEqualHex(expected, signature);
-}
-function verifyWebhookSignature(rawBody, signature) {
-  if (!env.RAZORPAY_WEBHOOK_SECRET) return false;
-  const expected = import_crypto.default.createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest("hex");
-  return safeEqualHex(expected, signature);
-}
-
-// src/services/orders.ts
-var import_crypto2 = __toESM(require("crypto"), 1);
-var import_client4 = require("@prisma/client");
-var ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-function randomCode(length) {
-  const bytes = import_crypto2.default.randomBytes(length);
-  let out = "";
-  for (let i = 0; i < length; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
-  return out;
-}
-function generateOrderNumber() {
-  const d = /* @__PURE__ */ new Date();
-  const ist = new Date(d.getTime() + 5.5 * 60 * 60 * 1e3);
-  const ymd = ist.toISOString().slice(2, 10).replace(/-/g, "");
-  return `LVX-${ymd}-${randomCode(6)}`;
-}
-function generateAccessKey() {
-  return import_crypto2.default.randomBytes(24).toString("base64url");
-}
-function safeEqual(a, b) {
-  if (!a || !b) return false;
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && import_crypto2.default.timingSafeEqual(ab, bb);
-}
-async function evaluateCoupon(rawCode, subtotalPaise) {
-  const code = rawCode.trim().toUpperCase();
-  if (!code) throw new AppError("Enter a coupon code", 400);
-  const coupon = await prisma.coupon.findUnique({ where: { code } });
-  if (!coupon || !coupon.isActive) throw new AppError("This coupon code is not valid", 400);
-  if (coupon.validUntil && coupon.validUntil.getTime() < Date.now()) {
-    throw new AppError("This coupon has expired", 400);
-  }
-  if (coupon.maxUses !== null && coupon.maxUses !== void 0 && coupon.usedCount >= coupon.maxUses) {
-    throw new AppError("This coupon has reached its usage limit", 400);
-  }
-  if (subtotalPaise < coupon.minOrderPaise) {
-    throw new AppError(
-      `Add items worth Rs. ${Math.ceil((coupon.minOrderPaise - subtotalPaise) / 100).toLocaleString("en-IN")} more to use ${code}`,
-      400
-    );
-  }
-  let discountPaise = coupon.discountType === import_client4.DiscountType.PERCENTAGE ? Math.round(subtotalPaise * Math.min(100, coupon.discountValue) / 100) : coupon.discountValue;
-  discountPaise = Math.max(0, Math.min(discountPaise, subtotalPaise));
-  const description = coupon.discountType === import_client4.DiscountType.PERCENTAGE ? `${coupon.discountValue}% off` : `Rs. ${(coupon.discountValue / 100).toLocaleString("en-IN")} off`;
-  return { code, discountPaise, description };
-}
-async function markOrderPaid(orderId, info) {
-  return prisma.$transaction(
-    async (tx) => {
-      const transition = await tx.order.updateMany({
-        where: { id: orderId, paymentStatus: { not: import_client4.PaymentStatus.PAID } },
-        data: {
-          status: import_client4.OrderStatus.PAID,
-          paymentStatus: import_client4.PaymentStatus.PAID,
-          paidAt: /* @__PURE__ */ new Date(),
-          stockDeducted: true
-        }
-      });
-      if (transition.count === 0) return false;
-      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
-      await tx.payment.upsert({
-        where: { orderId },
-        update: {
-          status: import_client4.PaymentStatus.PAID,
-          razorpayOrderId: info.razorpayOrderId,
-          razorpayPaymentId: info.razorpayPaymentId,
-          razorpaySignature: info.razorpaySignature ?? void 0,
-          ...info.rawPayload ? { rawPayload: info.rawPayload } : {}
-        },
-        create: {
-          orderId,
-          amountPaise: info.amountPaise ?? order.totalPaise,
-          razorpayOrderId: info.razorpayOrderId,
-          razorpayPaymentId: info.razorpayPaymentId,
-          razorpaySignature: info.razorpaySignature ?? null,
-          status: import_client4.PaymentStatus.PAID,
-          ...info.rawPayload ? { rawPayload: info.rawPayload } : {}
-        }
-      });
-      const oversold = [];
-      for (const item of order.items) {
-        if (!item.variantId) continue;
-        const dec = await tx.productVariant.updateMany({
-          where: { id: item.variantId, stockQuantity: { gte: item.quantity } },
-          data: { stockQuantity: { decrement: item.quantity } }
-        });
-        if (dec.count === 0) {
-          await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: 0 } });
-          oversold.push(`${item.productName} (${[item.color, item.size].filter(Boolean).join(" / ")}) x${item.quantity}`);
-        }
-      }
-      if (oversold.length) {
-        console.warn(`\u26A0\uFE0F Order ${order.orderNumber} paid but stock was short for: ${oversold.join(", ")}`);
-        await tx.order.update({
-          where: { id: orderId },
-          data: {
-            adminNotes: `${order.adminNotes ? order.adminNotes + "\n" : ""}\u26A0\uFE0F Stock was short when payment completed: ${oversold.join(", ")}`
-          }
-        });
-      }
-      if (order.couponCode) {
-        await tx.coupon.updateMany({ where: { code: order.couponCode }, data: { usedCount: { increment: 1 } } });
-      }
-      if (order.cartId) {
-        await tx.cartItem.deleteMany({ where: { cartId: order.cartId } });
-      }
-      return true;
-    },
-    { timeout: 2e4, maxWait: 1e4 }
-  );
-}
-function formatAddress(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") return "";
-  return [snapshot.fullName, snapshot.line1, snapshot.line2, snapshot.city, snapshot.state, snapshot.postalCode, snapshot.country].filter(Boolean).join(", ");
-}
-
-// src/controllers/orderController.ts
+init_db();
+init_env();
+init_errorHandler();
+init_store();
+init_orders();
 var createOrderSchema = import_zod6.z.object({
   customerEmail: import_zod6.z.string().trim().toLowerCase().email("Enter a valid email address"),
   customerName: import_zod6.z.string().trim().min(2, "Enter your full name").max(100),
@@ -1721,6 +1906,7 @@ async function createOrder(req, res) {
       { timeout: 2e4, maxWait: 1e4 }
     );
     await saveCheckoutAddress(req, data2);
+    notifyOrder(order2.id);
     res.status(201).json({
       order: { id: order2.id, orderNumber: order2.orderNumber, totalPaise: order2.totalPaise, customerEmail: order2.customerEmail, customerName: order2.customerName },
       accessKey,
@@ -1737,8 +1923,12 @@ async function createOrder(req, res) {
       notes: { orderNumber, customerEmail: data2.customerEmail }
     });
   } catch (err) {
-    console.error("Razorpay order creation failed:", err?.error || err?.message || err);
-    throw new AppError("Could not start the payment. Please try again in a moment.", 502);
+    console.error("Razorpay order creation failed:", err?.statusCode, err?.error || err?.message || err);
+    const rejected = err?.statusCode === 401;
+    throw new AppError(
+      rejected ? "Online payments are being set up and are not available right now. Please try again later. (code RZP-401)" : "Could not start the payment. Please try again in a moment.",
+      rejected ? 503 : 502
+    );
   }
   const order = await prisma.order.create({
     data: {
@@ -1831,10 +2021,15 @@ var orderRoutes_default = router5;
 
 // src/routes/paymentRoutes.ts
 var import_express6 = require("express");
+init_errorHandler();
 
 // src/controllers/paymentController.ts
 var import_zod7 = require("zod");
 var import_client6 = require("@prisma/client");
+init_db();
+init_env();
+init_errorHandler();
+init_orders();
 var verifySchema = import_zod7.z.object({
   orderNumber: import_zod7.z.string().min(5).max(40),
   razorpayOrderId: import_zod7.z.string().min(5).max(60),
@@ -1939,6 +2134,7 @@ var paymentRoutes_default = router6;
 
 // src/routes/adminRoutes.ts
 var import_express7 = __toESM(require("express"), 1);
+init_errorHandler();
 
 // src/utils/zodPatch.ts
 var import_zod8 = require("zod");
@@ -1955,6 +2151,10 @@ function patchSchema(schema) {
 // src/controllers/adminController.ts
 var import_zod9 = require("zod");
 var import_client7 = require("@prisma/client");
+init_db();
+init_errorHandler();
+init_store();
+init_orders();
 async function getDashboardMetrics(_req, res) {
   const startOfToday = /* @__PURE__ */ new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -2570,6 +2770,8 @@ async function deleteCollection(req, res) {
 }
 
 // src/controllers/homeController.ts
+init_db();
+init_store();
 var cache2 = null;
 function invalidateHomeCache() {
   cache2 = null;
@@ -2673,10 +2875,15 @@ async function getHome(_req, res) {
   res.json(body);
 }
 
+// src/routes/adminRoutes.ts
+init_store();
+
 // src/controllers/mediaController.ts
 var import_fs2 = __toESM(require("fs"), 1);
 var import_os = __toESM(require("os"), 1);
 var import_path = __toESM(require("path"), 1);
+init_db();
+init_errorHandler();
 var MAX_BYTES = 8 * 1024 * 1024;
 function sniff(buf) {
   if (buf.length < 12) return null;
@@ -2922,7 +3129,10 @@ var adminRoutes_default = router7;
 
 // src/routes/storeRoutes.ts
 var import_express8 = require("express");
+init_errorHandler();
+init_store();
 var import_zod10 = require("zod");
+init_db();
 var router8 = (0, import_express8.Router)();
 router8.get(
   "/settings",
@@ -2944,11 +3154,17 @@ router8.post(
 );
 var storeRoutes_default = router8;
 
+// src/app.ts
+init_errorHandler();
+
 // src/routes/wishlistRoutes.ts
 var import_express9 = require("express");
+init_errorHandler();
 
 // src/controllers/wishlistController.ts
 var import_zod11 = require("zod");
+init_db();
+init_errorHandler();
 async function getOrCreateWishlist(userId) {
   return prisma.wishlist.upsert({ where: { userId }, update: {}, create: { userId } });
 }
@@ -3112,12 +3328,19 @@ app.get("/api/health", async (_req, res) => {
     const msg = String(err?.message || "");
     databaseProblem = !process.env.DATABASE_URL ? "DATABASE_URL is not set" : /P1000|Authentication failed|Access denied/i.test(msg) ? "wrong database username or password in DATABASE_URL" : /P1001|Can't reach|ECONNREFUSED|ETIMEDOUT/i.test(msg) ? "database server not reachable at the host in DATABASE_URL" : /P1003|does not exist/i.test(msg) ? "database name in DATABASE_URL does not exist" : "database error";
   }
+  const paymentsMode = razorpayMode();
+  const paymentsKeys = paymentsMode === "missing" ? "missing" : await razorpayKeyCheck();
   res.set("Cache-Control", "no-store");
   res.status(database === "ok" ? 200 : 503).json({
     status: database === "ok" ? "ok" : "degraded",
     database,
     ...databaseProblem ? { databaseProblem } : {},
-    payments: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    payments: paymentsKeys === "ok",
+    paymentsMode,
+    // test | live | invalid | missing
+    paymentsKeys,
+    // ok | keys-rejected | unreachable | missing
+    webhook: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
     signIn: Boolean(process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID),
     emails: authMailReady(),
     service: "levix",
@@ -3168,11 +3391,11 @@ app.get(
       "/policies/privacy-policy",
       "/policies/contact"
     ];
-    const esc2 = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc3 = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const urls = [
       ...fixed.map((u) => `<url><loc>${base}${u}</loc></url>`),
-      ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc2(c.slug)}</loc></url>`),
-      ...products.map((p) => `<url><loc>${base}/products/${esc2(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
+      ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc3(c.slug)}</loc></url>`),
+      ...products.map((p) => `<url><loc>${base}/products/${esc3(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
     ];
     res.set("Content-Type", "application/xml; charset=utf-8");
     res.set("Cache-Control", "public, max-age=3600");
@@ -3230,6 +3453,9 @@ if (frontendDist) {
 app.use(errorHandler);
 
 // src/server.ts
+init_env();
+init_db();
+init_store();
 var import_child_process = require("child_process");
 var import_path3 = __toESM(require("path"), 1);
 var import_fs4 = __toESM(require("fs"), 1);

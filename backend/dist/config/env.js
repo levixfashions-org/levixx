@@ -30,6 +30,12 @@ if (!parsed.success) {
     console.warn('⚠️ Environment configuration warning:', parsed.error.format());
 }
 const data = parsed.success ? parsed.data : process.env;
+function cleanSecret(v) {
+    return String(v ?? '')
+        .trim()
+        .replace(/^['"`]+|['"`]+$/g, '')
+        .trim();
+}
 export const env = {
     NODE_ENV: String(data.NODE_ENV || 'production'),
     DATABASE_URL: String(data.DATABASE_URL || ''),
@@ -49,9 +55,10 @@ export const env = {
     SMTP_USER: String(data.SMTP_USER || ''),
     SMTP_PASS: String(data.SMTP_PASS || ''),
     MAIL_FROM_NAME: String(data.MAIL_FROM_NAME || 'LEVIX'),
-    RAZORPAY_KEY_ID: String(data.RAZORPAY_KEY_ID || ''),
-    RAZORPAY_KEY_SECRET: String(data.RAZORPAY_KEY_SECRET || ''),
-    RAZORPAY_WEBHOOK_SECRET: String(data.RAZORPAY_WEBHOOK_SECRET || '')
+    // Keys pasted into a hosting panel often pick up spaces or quotes — clean them so Razorpay accepts them.
+    RAZORPAY_KEY_ID: cleanSecret(data.RAZORPAY_KEY_ID),
+    RAZORPAY_KEY_SECRET: cleanSecret(data.RAZORPAY_KEY_SECRET),
+    RAZORPAY_WEBHOOK_SECRET: cleanSecret(data.RAZORPAY_WEBHOOK_SECRET)
 };
 export const isProduction = env.NODE_ENV === 'production';
 export function isAdminEmail(email) {
