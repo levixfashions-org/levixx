@@ -2286,13 +2286,24 @@ async function updateOrder(req, res) {
   res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }
 async function deleteOrder(req, res) {
-  const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
   if (!order) throw new AppError("Order not found", 404);
-  if (order.paymentStatus === import_client7.PaymentStatus.PAID) {
-    throw new AppError("Paid orders are kept for your records. Mark it as CANCELLED instead.", 400);
+  const testConfirmed = req.query.test === "1";
+  if (order.paymentStatus === import_client7.PaymentStatus.PAID && !testConfirmed) {
+    throw new AppError("Paid orders are kept for your records. If this was a TEST order, confirm it as a test order to delete it.", 400);
   }
-  await prisma.order.delete({ where: { id: order.id } });
-  res.json({ success: true });
+  const shipped = ["SHIPPED", "DELIVERED"].includes(String(order.status));
+  await prisma.$transaction(async (tx) => {
+    if (order.stockDeducted && !shipped) {
+      for (const it of order.items) {
+        if (it.variantId) {
+          await tx.productVariant.updateMany({ where: { id: it.variantId }, data: { stockQuantity: { increment: it.quantity } } });
+        }
+      }
+    }
+    await tx.order.delete({ where: { id: order.id } });
+  });
+  res.json({ success: true, stockRestored: Boolean(order.stockDeducted && !shipped) });
 }
 var imageUrl = import_zod9.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+(#lx=[\d.,]+)?$/i.test(v), "Each image must be uploaded or be a full https:// link");
 var imageSchema = import_zod9.z.object({
