@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { productListInclude, serializeProduct, genderFilter } from '../utils/serialize.js';
+import { sortBestSellers } from '../services/bestsellers.js';
 
 function orderByFor(sort: string): any {
   switch (sort) {
@@ -112,12 +113,14 @@ export async function getCollectionBySlug(req: Request, res: Response) {
     return;
   }
   if (!category) throw new AppError('Collection not found', 404);
-  const products = await prisma.product.findMany({
+  let products = await prisma.product.findMany({
     where: { isActive: true, categoryId: category.id, ...(g || {}) },
     orderBy: orderByFor(sort),
     take: 200,
     include: productListInclude
   });
+  // Default order: best sellers first (pinned products stay on top) when the category has auto-sort on.
+  if (category.autoSort && !['price-asc', 'price-desc', 'newest'].includes(sort)) products = sortBestSellers(products);
   res.json({
     collection: {
       id: category.id,

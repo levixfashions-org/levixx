@@ -3,6 +3,10 @@ import { env } from './config/env.js';
 import { prisma } from './config/db.js';
 import { ensureStoreDefaults } from './services/store.js';
 import { isRazorpayConfigured } from './config/razorpay.js';
+import { startSalesScoreJob, onSalesScoresUpdated } from './services/bestsellers.js';
+import { invalidateHomeCache } from './controllers/homeController.js';
+import { clearSeoCache } from './services/seo.js';
+import { broadcastChange } from './services/live.js';
 import { execFile } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -56,6 +60,13 @@ function bootstrap() {
     .$connect()
     .then(async () => {
       console.log('✓ Connected to MySQL.');
+      // Best sellers: recount now and every hour; new scores refresh the shop for everyone.
+      onSalesScoresUpdated(() => {
+        invalidateHomeCache();
+        clearSeoCache();
+        broadcastChange('products');
+      });
+      startSalesScoreJob();
       try {
         await ensureStoreDefaults();
         console.log('✓ Store defaults ready.');

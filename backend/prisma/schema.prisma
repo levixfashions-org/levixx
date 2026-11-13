@@ -80,6 +80,7 @@ model Category {
   imageUrl    String?   @db.Text
   sortOrder   Int       @default(0)
   group       String?   // TOP | BOTTOM | ACCESSORIES (used by the mega menu)
+  autoSort    Boolean   @default(true) // Order this category's products by best sellers (pinned products first)
   products    Product[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -124,6 +125,8 @@ model Product {
   orderItems   OrderItem[]
   wishlistItems WishlistItem[]
   reviews      Review[]
+  salesScore   Int                 @default(0) // Units sold in the last 30 days (paid / COD, not cancelled or refunded) — powers best-seller sorting
+  pinned       Boolean             @default(false) // Pinned products stay on top of their category even when it auto-sorts by best sellers
   position     Int                 @default(0) // Manual display order set in Admin → Products (lower shows first; 0 = new, shows on top)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt

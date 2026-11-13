@@ -317,6 +317,20 @@ export async function reorderProducts(req: Request, res: Response) {
   res.json({ success: true, count: unique.length });
 }
 
+/** PUT /admin/products/:id/pin — body { pinned }: pinned products stay on top of auto-sorted categories. */
+export async function pinProduct(req: Request, res: Response) {
+  const { pinned } = z.object({ pinned: z.boolean() }).parse(req.body);
+  const product = await prisma.product.update({ where: { id: req.params.id }, data: { pinned }, select: { id: true, pinned: true } });
+  res.json({ product });
+}
+
+/** POST /admin/products/recount-sales — recount best sellers now. */
+export async function recountSales(_req: Request, res: Response) {
+  const { recomputeSalesScores } = await import('../services/bestsellers.js');
+  const changed = await recomputeSalesScores();
+  res.json({ success: true, changed });
+}
+
 /** PUT /admin/categories/reorder — body { ids } in display order (menu, slideshow, stories). */
 export async function reorderCategories(req: Request, res: Response) {
   const { ids } = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500) }).parse(req.body);
@@ -484,7 +498,8 @@ const categorySchema = z.object({
   group: z.enum(['TOP', 'BOTTOM', 'ACCESSORIES']).optional().nullable(),
   description: z.string().max(2000).optional().nullable(),
   imageUrl: imageUrl.optional().nullable().or(z.literal('')),
-  sortOrder: z.number().int().optional()
+  sortOrder: z.number().int().optional(),
+  autoSort: z.boolean().optional()
 });
 
 export async function createCategory(req: Request, res: Response) {
@@ -496,7 +511,8 @@ export async function createCategory(req: Request, res: Response) {
       description: data.description || null,
       imageUrl: data.imageUrl || null,
       sortOrder: data.sortOrder ?? 0,
-      group: data.group || 'TOP'
+      group: data.group || 'TOP',
+      autoSort: data.autoSort ?? true
     }
   });
   res.status(201).json({ category });
@@ -511,7 +527,8 @@ export async function updateCategory(req: Request, res: Response) {
       ...(data.description !== undefined ? { description: data.description || null } : {}),
       ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
       ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-      ...(data.group !== undefined ? { group: data.group || 'TOP' } : {})
+      ...(data.group !== undefined ? { group: data.group || 'TOP' } : {}),
+      ...(data.autoSort !== undefined ? { autoSort: data.autoSort } : {})
     }
   });
   res.json({ category });

@@ -3,6 +3,7 @@ import { prisma } from '../config/db.js';
 import { env } from '../config/env.js';
 import { getSettings } from './store.js';
 import { genderFilter } from '../utils/serialize.js';
+import { sortBestSellers } from './bestsellers.js';
 
 /**
  * Server-side SEO for the React storefront.
@@ -248,7 +249,8 @@ async function build(pathname: string): Promise<SeoPage> {
         name = cat.name;
         description = cat.description || '';
         image = abs(cat.imageUrl);
-        products = await prisma.product.findMany({ where: { isActive: true, categoryId: cat.id }, orderBy: [{ position: 'asc' }, { createdAt: 'desc' }], take: 60, select: sel });
+        const rows = await prisma.product.findMany({ where: { isActive: true, categoryId: cat.id }, orderBy: [{ position: 'asc' }, { createdAt: 'desc' }], take: 60, select: { ...sel, pinned: true, salesScore: true, position: true, createdAt: true } });
+        products = cat.autoSort ? sortBestSellers(rows) : rows;
       }
     }
     const url = `${site}/collections/${slug}`;

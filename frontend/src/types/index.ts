@@ -26,6 +26,7 @@ export interface Category {
   imageUrl?: string | null;
   sortOrder?: number;
   group?: string | null;
+  autoSort?: boolean;
   _count?: { products: number };
 }
 
@@ -53,6 +54,8 @@ export interface Product {
   comparePrice?: number | null; // in paise
   isFeatured: boolean;
   isActive: boolean;
+  pinned?: boolean;
+  salesScore?: number;
   colorGroup?: string | null;
   gender?: Gender;
   collectionIds?: string[];

@@ -6,6 +6,7 @@ import { invalidateHomeCache } from '../controllers/homeController.js';
 import { invalidateSettingsCache } from '../services/store.js';
 import { broadcastChange } from '../services/live.js';
 import { clearSeoCache } from '../services/seo.js';
+import { scheduleSalesRecompute } from '../services/bestsellers.js';
 import { uploadMedia, uploadVideoChunk } from '../controllers/mediaController.js';
 
 const router = Router();
@@ -21,6 +22,8 @@ router.use((req, res, next) => {
       clearSeoCache();
       const scope = req.path.split('/')[1] || 'all'; // products, collections, settings, orders, …
       broadcastChange(scope);
+      // Cancelling, refunding or deleting orders changes the best-seller counts.
+      if (scope === 'orders') scheduleSalesRecompute();
     });
   }
   next();
@@ -40,6 +43,8 @@ router.delete('/orders/:id', h(admin.deleteOrder));
 router.get('/products', h(admin.getAdminProducts));
 router.post('/products', h(admin.createProduct));
 router.put('/products/reorder', h(admin.reorderProducts));
+router.put('/products/:id/pin', h(admin.pinProduct));
+router.post('/products/recount-sales', h(admin.recountSales));
 router.put('/products/:id', h(admin.updateProduct));
 router.delete('/products/:id', h(admin.deleteProduct));
 

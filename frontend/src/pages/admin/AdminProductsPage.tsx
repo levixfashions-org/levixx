@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, Eye, EyeOff, Star, Palette, ChevronUp, ChevronDown, ChevronsUp } from 'lucide-react';
+import { Plus, Edit2, Trash2, ExternalLink, X, Copy, Search, Package, Image as ImageIcon, Eye, EyeOff, Star, Palette, ChevronUp, ChevronDown, ChevronsUp, Pin, TrendingUp } from 'lucide-react';
 import { apiClient, COLOR_GROUPS, COLOR_SWATCHES } from '../../services/api';
 import { Category, Gender, Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
@@ -381,6 +381,19 @@ export const AdminProductsPage: React.FC = () => {
     }
   };
 
+  /** Pinned products stay on top of their category even when it auto-sorts by best sellers. */
+  const handleTogglePin = async (p: Product) => {
+    const next = !p.pinned;
+    setProducts((list) => list.map((x) => (x.id === p.id ? { ...x, pinned: next } : x)));
+    try {
+      await apiClient.put(`/admin/products/${p.id}/pin`, { pinned: next });
+      flash(next ? `📌 "${p.name}" pinned to the top of its category.` : `"${p.name}" unpinned — best-seller order applies.`);
+    } catch (err: any) {
+      setProducts((list) => list.map((x) => (x.id === p.id ? { ...x, pinned: !next } : x)));
+      alert(err.message);
+    }
+  };
+
   const handleDelete = async (p: Product) => {
     if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
     try {
@@ -598,11 +611,14 @@ export const AdminProductsPage: React.FC = () => {
                       <td className="py-3 px-4 space-y-1">
                         <span className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-neutral-200 text-neutral-700'}`}>{p.isActive ? 'Live' : 'Hidden'}</span>
                         {p.isFeatured && <span className="flex items-center gap-1 text-[10px] text-[#FF5400] font-bold uppercase"><Star className="w-3 h-3" /> Featured</span>}
+                        {p.pinned && <span className="flex items-center gap-1 text-[10px] text-black font-bold uppercase"><Pin className="w-3 h-3" /> Pinned</span>}
+                        <span className="flex items-center gap-1 text-[10px] text-neutral-500" title="Units sold in the last 30 days (paid / COD orders, not cancelled or refunded)"><TrendingUp className="w-3 h-3" /> {p.salesScore || 0} sold · 30d</span>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => fillForm(p)} title="Edit" className="p-2 hover:bg-neutral-100"><Edit2 className="w-3.5 h-3.5" /></button>
                           <button onClick={() => fillForm(p, true)} title="Duplicate" className="p-2 hover:bg-neutral-100"><Copy className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => handleTogglePin(p)} title={p.pinned ? 'Unpin (let best sellers decide)' : 'Pin to the top of its category'} aria-pressed={!!p.pinned} className={`p-2 ${p.pinned ? 'bg-black text-white' : 'hover:bg-neutral-100'}`}><Pin className="w-3.5 h-3.5" /></button>
                           <button onClick={() => handleToggleActive(p)} title={p.isActive ? 'Hide from store' : 'Show in store'} className="p-2 hover:bg-neutral-100">
                             {p.isActive ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>

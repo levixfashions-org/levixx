@@ -52,6 +52,19 @@ export const AdminCategoriesManager: React.FC = () => {
     }
   };
 
+  /** Turn best-seller sorting on/off for one category (saves straight away). */
+  const toggleAutoSort = async (c: Category) => {
+    const next = c.autoSort === false;
+    setCategories((list) => list.map((x) => (x.id === c.id ? { ...x, autoSort: next } : x)));
+    try {
+      await apiClient.put(`/admin/categories/${c.id}`, { autoSort: next });
+      flash(next ? `✓ ${c.name}: best sellers now show first.` : `✓ ${c.name}: using your manual product order.`);
+    } catch (err: any) {
+      setCategories((list) => list.map((x) => (x.id === c.id ? { ...x, autoSort: !next } : x)));
+      alert(err.message);
+    }
+  };
+
   /** Move a category up/down; the menu, homepage slideshow and story bubbles follow this order. */
   const move = async (idx: number, dir: -1 | 1) => {
     const j = idx + dir;
@@ -138,6 +151,13 @@ export const AdminCategoriesManager: React.FC = () => {
                   <option value="ACCESSORIES">Menu group: Accessories</option>
                 </select>
                 <p className="text-[10px] text-neutral-500 font-mono self-center">/collections/{c.slug} • {c._count?.products ?? 0} live products</p>
+                <label className="sm:col-span-2 flex items-start gap-2 text-xs cursor-pointer select-none bg-neutral-50 border border-black/10 p-2">
+                  <input type="checkbox" checked={c.autoSort !== false} onChange={() => toggleAutoSort(c)} className="accent-black w-4 h-4 mt-0.5" />
+                  <span>
+                    <span className="font-bold">Auto-sort by best sellers</span>
+                    <span className="block text-[10.5px] text-neutral-500">The most ordered tees (last 30 days) move to the top of this category automatically. Pinned products (📌 in Products) always stay first. Turn off to use your manual arrow order.</span>
+                  </span>
+                </label>
               </div>
               <div className="md:col-span-1 flex md:flex-col gap-2">
                 <button type="button" onClick={() => save(c)} disabled={!drafts[c.id] || busy === c.id} className="p-2 bg-black text-white disabled:opacity-30" title="Save"><Save className="w-3.5 h-3.5" /></button>
