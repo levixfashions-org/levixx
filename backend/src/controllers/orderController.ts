@@ -8,7 +8,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { addressSchema } from './authController.js';
 import { formatCart, getAnonymousToken, imageForColor, resolveCart } from './cartController.js';
 import { calculateShippingPaise, getSettings } from '../services/store.js';
-import { evaluateCoupon, formatAddress, generateAccessKey, generateOrderNumber, safeEqual } from '../services/orders.js';
+import { evaluateCoupon, formatAddress, generateAccessKey, generateOrderNumber, notifyOrder, safeEqual } from '../services/orders.js';
 
 const createOrderSchema = z.object({
   customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address'),
@@ -154,6 +154,7 @@ export async function createOrder(req: Request, res: Response) {
       { timeout: 20000, maxWait: 10000 }
     );
     await saveCheckoutAddress(req, data);
+    notifyOrder(order.id);
     res.status(201).json({
       order: { id: order.id, orderNumber: order.orderNumber, totalPaise: order.totalPaise, customerEmail: order.customerEmail, customerName: order.customerName },
       accessKey,
