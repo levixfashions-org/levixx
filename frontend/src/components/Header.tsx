@@ -6,6 +6,7 @@ import { useWishlistStore } from '../store/wishlistStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { Logo } from './Logo';
 import { MegaMenu } from './MegaMenu';
+import { ScrollRing } from './ScrollRing';
 import { BagIcon, BookmarkIcon, CloseIcon, MenuIcon, SearchIcon, UserIcon } from './Icons';
 
 /**
@@ -91,14 +92,14 @@ export const Header: React.FC = () => {
       {/* ---------------- Mobile ---------------- */}
       <header style={{ top: offset }} className="md:hidden fixed inset-x-0 z-50 pointer-events-none">
         <div className={`flex items-center justify-between px-3 pt-3 pb-2 transition-colors ${solid ? 'bg-[#EFEFEF]/90 backdrop-blur-md' : ''}`}>
-          <div className="pointer-events-auto flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white/55 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
+          <ScrollRing className="pointer-events-auto flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white/55 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
             <button onClick={openMobileNav} aria-label="Open menu" className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center">
               <MenuIcon className="w-4 h-4" />
             </button>
             <Link to="/" aria-label="LEVIX home">
               <Logo className="text-[20px]" />
             </Link>
-          </div>
+          </ScrollRing>
           <div className="pointer-events-auto flex items-center gap-4 pr-1">
             <button onClick={openSearch} aria-label="Search"><SearchIcon className="w-[19px] h-[19px]" /></button>
             <Link to="/wishlist" aria-label="Saved items"><BookmarkIcon className="w-[16px] h-[19px]" filled /></Link>
