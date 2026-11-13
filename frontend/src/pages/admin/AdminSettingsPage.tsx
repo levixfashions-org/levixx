@@ -455,6 +455,15 @@ export const AdminSettingsPage: React.FC = () => {
                 <input value={settings.seoTitle} onChange={(e) => setSettings({ ...settings, seoTitle: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1 mt-3">Footer SEO text ("Read more")</label>
                 <textarea rows={5} value={settings.seoText} onChange={(e) => setSettings({ ...settings, seoText: e.target.value })} className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+                <p className="text-[10px] text-neutral-500 mt-1">The first ~160 characters are also used as the homepage description in Google results.</p>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1 mt-3">Google Search Console verification code</label>
+                <input
+                  value={settings.googleSiteVerification || ''}
+                  onChange={(e) => setSettings({ ...settings, googleSiteVerification: e.target.value })}
+                  placeholder='Paste the code (or the whole <meta name="google-site-verification" …> tag)'
+                  className="w-full border border-black/20 p-2.5 font-mono text-xs focus:border-black focus:outline-none"
+                />
+                <p className="text-[10px] text-neutral-500 mt-1">From Google Search Console → Add property → URL prefix → HTML tag. Save, then click Verify in Google.</p>
               </div>
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Product page "Shipping" tab (one point per line)</label>

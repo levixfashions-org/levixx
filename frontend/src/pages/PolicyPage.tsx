@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSettingsStore } from '../store/settingsStore';
+import { setSeo } from '../utils/seo';
 
 type PolicyKey = 'shipping' | 'refund' | 'privacy' | 'terms' | 'contact';
 
@@ -51,7 +52,7 @@ export const PolicyPage: React.FC = () => {
 
   const title = TABS.find((t) => t.key === key)?.label || 'Policies';
   useEffect(() => {
-    document.title = `${title} | LEVIX`;
+    setSeo({ title: `${title} | LEVIX` });
   }, [title]);
 
   const free = settings.freeShippingThreshold;

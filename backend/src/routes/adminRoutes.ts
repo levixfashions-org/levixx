@@ -5,6 +5,7 @@ import * as admin from '../controllers/adminController.js';
 import { invalidateHomeCache } from '../controllers/homeController.js';
 import { invalidateSettingsCache } from '../services/store.js';
 import { broadcastChange } from '../services/live.js';
+import { clearSeoCache } from '../services/seo.js';
 import { uploadMedia, uploadVideoChunk } from '../controllers/mediaController.js';
 
 const router = Router();
@@ -17,6 +18,7 @@ router.use((req, res, next) => {
       if (res.statusCode >= 400) return;
       invalidateHomeCache();
       invalidateSettingsCache();
+      clearSeoCache();
       const scope = req.path.split('/')[1] || 'all'; // products, collections, settings, orders, …
       broadcastChange(scope);
     });

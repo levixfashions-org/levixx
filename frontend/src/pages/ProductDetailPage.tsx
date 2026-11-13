@@ -9,6 +9,7 @@ import { Product } from '../types';
 import { ProductRail } from '../components/ProductRail';
 import { BookmarkIcon } from '../components/Icons';
 import { formatRs } from '../components/ProductCard';
+import { setSeo } from '../utils/seo';
 
 type Tab = 'details' | 'care' | 'shipping';
 
@@ -72,13 +73,13 @@ export const ProductDetailPage: React.FC = () => {
           // keep the selected size if it still exists and is in stock
           setVariantId((cur) => (cur && p.variants.some((v) => v.id === cur && v.stockQuantity > 0) ? cur : null));
           setColor((cur) => (cur && p.variants.some((v) => v.color === cur) ? cur : p.variants[0]?.color || null));
-          document.title = `${p.name} | LEVIX`;
+          setSeo({ title: `${p.name} | LEVIX`, description: `${p.name} — ₹${Math.round(p.basePrice / 100)}. ${p.description || ''}`, image: p.images?.[0]?.url });
           return;
         }
         const first = p.variants.find((v) => v.stockQuantity > 0) || p.variants[0];
         setColor(first?.color || null);
         setVariantId(first && first.stockQuantity > 0 ? first.id : null);
-        document.title = `${p.name} | LEVIX`;
+        setSeo({ title: `${p.name} | LEVIX`, description: `${p.name} — ₹${Math.round(p.basePrice / 100)}. ${p.description || ''}`, image: p.images?.[0]?.url });
       } catch {
         if (silent) return;
         if (!cancelled) {

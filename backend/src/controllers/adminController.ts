@@ -536,6 +536,7 @@ const settingsSchema = patchSchema(z.object({
   freeShippingThreshold: z.coerce.number().int().min(0).max(1000000),
   shippingFee: z.coerce.number().int().min(0).max(100000),
   announcementEnabled: z.boolean(),
+  googleSiteVerification: z.string().trim().max(300),
   menCoverImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Cover image must be uploaded or a full URL'),
   womenCoverImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Cover image must be uploaded or a full URL'),
   heroDesktopImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),

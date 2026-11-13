@@ -41,6 +41,7 @@ export interface StoreSettings {
   shippingFee: number; // rupees
   announcementEnabled: boolean;
   menCoverImage: string;
+  googleSiteVerification: string;
   womenCoverImage: string;
   heroDesktopImage: string;
   heroMobileImage: string;
@@ -74,6 +75,7 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   shippingFee: 150,
   announcementEnabled: false,
   menCoverImage: '',
+  googleSiteVerification: '',
   womenCoverImage: '',
   heroDesktopImage: '',
   heroMobileImage: '',

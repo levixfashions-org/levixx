@@ -9,6 +9,7 @@ import { GallerySlider, Slide } from '../components/GallerySlider';
 import { StoriesBar } from '../components/StoriesBar';
 import { HomeSection } from '../types';
 import { FramedImg } from '../components/FramedImg';
+import { setSeo } from '../utils/seo';
 
 const useMedia = (query: string) => {
   const get = () => typeof window !== 'undefined' && window.matchMedia(query).matches;
@@ -133,7 +134,7 @@ export const HomePage: React.FC = () => {
   }, [fetchHome]);
 
   useEffect(() => {
-    document.title = 'LEVIX | Premium Streetwear';
+    setSeo({ title: 'LEVIX | Premium Streetwear — Overlength, Waffle & Acid Wash Tees', description: 'LEVIX — premium heavyweight streetwear from India. Overlength tees, waffle boxy full sleeves and acid wash tees. Free delivery on every order.', path: '/' });
   }, []);
 
   // Banner slideshow: collections marked "show in gallery", otherwise category banners.
@@ -160,6 +161,7 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="pb-6">
+      <h1 className="sr-only">LEVIX — Premium Streetwear: Overlength, Waffle &amp; Acid Wash Tees</h1>
       <Hero />
       <StoriesBar stories={stories} />
 

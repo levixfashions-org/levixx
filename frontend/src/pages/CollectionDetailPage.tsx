@@ -6,6 +6,7 @@ import { useHomeStore } from '../store/homeStore';
 import { Product } from '../types';
 import { ProductGrid, ProductGridSkeleton } from '../components/ProductGrid';
 import { CloseIcon, FilterIcon } from '../components/Icons';
+import { setSeo } from '../utils/seo';
 
 const SORTS = [
   { value: 'featured', label: 'Featured' },
@@ -84,8 +85,8 @@ export const CollectionDetailPage: React.FC = () => {
   }, [handle, sort, gender, live]);
 
   useEffect(() => {
-    if (title) document.title = `${title} | LEVIX`;
-  }, [title]);
+    if (title) setSeo({ title: `${title} | LEVIX`, description: description || `Shop ${title} at LEVIX — premium heavyweight streetwear with free delivery across India.` });
+  }, [title, description]);
 
   const availableSizes = useMemo(() => {
     const set = new Set<string>();

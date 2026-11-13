@@ -9,6 +9,7 @@ import { prisma } from './config/db.js';
 import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { liveStream, liveVersion, broadcastChange } from './services/live.js';
 import { razorpayMode, razorpayKeyCheck } from './config/razorpay.js';
+import { renderPage } from './services/seo.js';
 import { sendVerification, sendPasswordReset, authMailReady } from './controllers/authMailController.js';
 import { authRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundApi } from './middleware/errorHandler.js';
@@ -189,39 +190,59 @@ app.use('/api', notFoundApi);
 // Uploaded images (stored in MySQL)
 app.get('/media/:file', asyncHandler(serveMedia));
 
-/* sitemap.xml — every live product, collection and policy page, for Google */
+/* sitemap.xml — every live product (with its photos), collection, category and policy page, for Google */
 app.get(
   '/sitemap.xml',
   asyncHandler(async (_req, res) => {
-    const base = 'https://thelevix.shop';
+    const base = (process.env.FRONTEND_URL || 'https://thelevix.shop').replace(/\/+$/, '');
     const [products, collections, categories] = await Promise.all([
-      prisma.product.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } }),
-      prisma.collection.findMany({ where: { isActive: true }, select: { slug: true } }),
-      prisma.category.findMany({ select: { slug: true } })
+      prisma.product.findMany({
+        where: { isActive: true },
+        orderBy: [{ position: 'asc' }, { createdAt: 'desc' }],
+        select: { slug: true, name: true, updatedAt: true, images: { orderBy: { sortOrder: 'asc' }, take: 8, select: { url: true } } }
+      }),
+      prisma.collection.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } }),
+      prisma.category.findMany({ select: { slug: true, updatedAt: true } })
     ]);
-    const fixed = [
-      '/',
-      '/collections/all-products',
-      '/collections/new-in',
-      '/collections/men',
-      '/collections/women',
-      '/pages/about',
-      '/pages/track',
-      '/policies/terms-of-service',
-      '/policies/refund-policy',
-      '/policies/shipping-policy',
-      '/policies/privacy-policy',
-      '/policies/contact'
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const abs = (u: string) => {
+      const c = u.split('#')[0];
+      return /^https?:\/\//i.test(c) ? c : `${base}${c.startsWith('/') ? '' : '/'}${c}`;
+    };
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    const today = day(new Date());
+    const fixed: [string, string, string][] = [
+      ['/', 'daily', '1.0'],
+      ['/collections', 'weekly', '0.8'],
+      ['/collections/all-products', 'daily', '0.9'],
+      ['/collections/new-in', 'daily', '0.8'],
+      ['/collections/men', 'daily', '0.8'],
+      ['/collections/women', 'daily', '0.8'],
+      ['/pages/about', 'monthly', '0.4'],
+      ['/pages/track', 'monthly', '0.3'],
+      ['/policies/shipping-policy', 'monthly', '0.4'],
+      ['/policies/refund-policy', 'monthly', '0.4'],
+      ['/policies/terms-of-service', 'yearly', '0.3'],
+      ['/policies/privacy-policy', 'yearly', '0.3'],
+      ['/policies/contact', 'monthly', '0.4']
     ];
-    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     const urls = [
-      ...fixed.map((u) => `<url><loc>${base}${u}</loc></url>`),
-      ...[...collections, ...categories].map((c) => `<url><loc>${base}/collections/${esc(c.slug)}</loc></url>`),
-      ...products.map((p) => `<url><loc>${base}/products/${esc(p.slug)}</loc><lastmod>${p.updatedAt.toISOString().slice(0, 10)}</lastmod></url>`)
+      ...fixed.map(([u, f, p]) => `<url><loc>${base}${u}</loc><lastmod>${today}</lastmod><changefreq>${f}</changefreq><priority>${p}</priority></url>`),
+      ...[...collections, ...categories].map(
+        (c) => `<url><loc>${base}/collections/${esc(c.slug)}</loc><lastmod>${day(c.updatedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`
+      ),
+      ...products.map(
+        (p) =>
+          `<url><loc>${base}/products/${esc(p.slug)}</loc><lastmod>${day(p.updatedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority>${p.images
+            .map((i) => `<image:image><image:loc>${esc(abs(i.url))}</image:loc><image:title>${esc(p.name)}</image:title></image:image>`)
+            .join('')}</url>`
+      )
     ];
     res.set('Content-Type', 'application/xml; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=3600');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`);
+    res.send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls.join('')}</urlset>`
+    );
   })
 );
 
@@ -269,7 +290,12 @@ if (frontendDist) {
       return;
     }
     res.setHeader('Cache-Control', 'no-cache');
-    res.sendFile(path.join(frontendDist, 'index.html'));
+    // Page-specific SEO (title, description, social previews, structured data) baked into the HTML.
+    renderPage(path.join(frontendDist, 'index.html'), req.path)
+      .then(({ status, html }) => {
+        res.status(status).type('html').send(html);
+      })
+      .catch(() => res.sendFile(path.join(frontendDist, 'index.html')));
   });
 } else {
   console.warn('⚠️ frontend/dist not found. Checked:', possiblePaths);
