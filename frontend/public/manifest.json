@@ -1,12 +1,12 @@
 {
-  "name": "LEVIX | Luxury Streetwear",
+  "name": "LEVIX — Premium Streetwear",
   "short_name": "LEVIX",
   "description": "Architectural luxury streetwear capsules, overlength t-shirts, thermal waffle full sleeves, and mineral acid wash drops.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#EFEFEF",
-  "theme_color": "#000000",
+  "background_color": "#0A0A0A",
+  "theme_color": "#0A0A0A",
   "orientation": "portrait",
   "categories": [
     "shopping",
@@ -27,7 +27,7 @@
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

@@ -2,8 +2,8 @@
 // - Pages (HTML): network-first, so customers always get the latest deployment.
 // - Hashed JS/CSS in /assets: cache-first (file names change on every build).
 // - API calls and payments are never cached.
-const CACHE_NAME = 'levix-pwa-v2';
-const PRECACHE = ['/manifest.json', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+const CACHE_NAME = 'levix-pwa-v3';
+const PRECACHE = ['/manifest.json', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE)).catch(() => undefined));
