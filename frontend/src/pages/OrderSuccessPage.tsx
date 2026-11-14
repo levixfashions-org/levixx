@@ -5,6 +5,7 @@ import { apiClient } from '../services/api';
 import { Order } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useSettingsStore } from '../store/settingsStore';
+import { ShipmentTracker } from '../components/ShipmentTracker';
 
 export const OrderSuccessPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -98,6 +99,12 @@ export const OrderSuccessPage: React.FC = () => {
             <p className="font-bold text-black text-xs uppercase">{order.status}</p>
           </div>
         </div>
+
+        {order.status !== 'PENDING' && (
+          <div className="border-b border-black/10 pb-5">
+            <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} />
+          </div>
+        )}
 
         <div className="space-y-3">
           <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">Items Ordered ({order.items.length})</p>

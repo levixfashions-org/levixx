@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { ShipmentTracker } from '../components/ShipmentTracker';
 import { Order } from '../types';
 import { Package, ArrowLeft, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
 
@@ -109,11 +110,6 @@ export const OrderHistoryPage: React.FC = () => {
                           {order.paymentStatus === 'PAID' ? 'Cash on Delivery · Paid' : 'Cash on Delivery'}
                         </p>
                       )}
-                      {order.trackingNumber && (
-                        <p className="text-[11px] text-neutral-600 font-mono mt-0.5">
-                          {order.courier ? `${order.courier}: ` : 'Tracking: '}{order.trackingNumber}
-                        </p>
-                      )}
                     </div>
 
                     <Link
@@ -123,6 +119,11 @@ export const OrderHistoryPage: React.FC = () => {
                       View Receipt
                     </Link>
                   </div>
+                </div>
+
+                {/* Order progress + courier tracking */}
+                <div className="px-4 sm:px-6 py-5 border-b border-black/5">
+                  <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} />
                 </div>
 
                 {/* Items */}
