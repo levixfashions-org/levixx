@@ -39,6 +39,7 @@ router.post('/media/video', express.raw({ type: ['video/*', 'application/octet-s
 router.get('/orders', h(admin.getAllOrders));
 router.patch('/orders/:id', h(admin.updateOrder));
 router.patch('/orders/:id/status', h(admin.updateOrder));
+router.post('/orders/:id/refund', h(admin.refundAdminOrder));
 router.delete('/orders/:id', h(admin.deleteOrder));
 router.get('/products', h(admin.getAdminProducts));
 router.post('/products', h(admin.createProduct));

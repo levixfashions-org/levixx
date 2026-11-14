@@ -5,6 +5,7 @@ import { getRazorpay, verifyPaymentSignature, verifyWebhookSignature } from '../
 import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { markOrderPaid } from '../services/orders.js';
+import { handleRefundWebhook } from '../services/refunds.js';
 const verifySchema = z.object({
     orderNumber: z.string().min(5).max(40),
     razorpayOrderId: z.string().min(5).max(60),
@@ -75,6 +76,17 @@ export async function handleWebhook(req, res) {
         return;
     }
     const event = req.body?.event;
+    // Refund updates (from the admin "Refund" button or refunds made in the Razorpay dashboard).
+    if (typeof event === 'string' && event.startsWith('refund.')) {
+        try {
+            await handleRefundWebhook(event, req.body?.payload?.refund?.entity);
+        }
+        catch (err) {
+            console.error('Refund webhook error:', err?.message || err);
+        }
+        res.json({ status: 'ok' });
+        return;
+    }
     const paymentEntity = req.body?.payload?.payment?.entity;
     const rzpOrderId = paymentEntity?.order_id || req.body?.payload?.order?.entity?.id;
     if (rzpOrderId) {

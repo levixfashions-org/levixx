@@ -809,7 +809,7 @@ function notifyOrderPush(orderId, kind) {
   (async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { userId: true, orderNumber: true, courier: true, trackingNumber: true }
+      select: { userId: true, orderNumber: true, courier: true, trackingNumber: true, refundAmountPaise: true, totalPaise: true }
     });
     if (!order?.userId) return;
     const msgs = {
@@ -820,7 +820,19 @@ function notifyOrderPush(orderId, kind) {
         url: "/account/orders",
         tag: `order-${order.orderNumber}`
       },
-      delivered: { title: "Delivered \u{1F4E6}", body: `Order ${order.orderNumber} has been delivered. Enjoy your LEVIX fit!`, url: "/account/orders", tag: `order-${order.orderNumber}` }
+      delivered: { title: "Delivered \u{1F4E6}", body: `Order ${order.orderNumber} has been delivered. Enjoy your LEVIX fit!`, url: "/account/orders", tag: `order-${order.orderNumber}` },
+      refund_started: {
+        title: "Refund started \u{1F4B8}",
+        body: `Your refund of \u20B9${Math.round((order.refundAmountPaise || order.totalPaise) / 100).toLocaleString("en-IN")} for order ${order.orderNumber} is on its way to your original payment method (about 5\u20137 working days).`,
+        url: "/account/orders",
+        tag: `order-${order.orderNumber}`
+      },
+      refunded: {
+        title: "Refund completed \u2705",
+        body: `\u20B9${Math.round((order.refundAmountPaise || order.totalPaise) / 100).toLocaleString("en-IN")} for order ${order.orderNumber} has been sent back to your original payment method.`,
+        url: "/account/orders",
+        tag: `order-${order.orderNumber}`
+      }
     };
     await pushToUser(order.userId, msgs[kind]);
   })().catch((err) => console.error("Order push failed:", err?.message || err));
@@ -2642,6 +2654,9 @@ async function trackOrder(req, res) {
       paymentMethod: order.paymentMethod,
       courier: order.courier,
       trackingNumber: order.trackingNumber,
+      refundStatus: order.refundStatus,
+      refundAmountPaise: order.refundAmountPaise,
+      refundedAt: order.refundedAt,
       createdAt: order.createdAt,
       itemCount: order.items.reduce((a, i) => a + i.quantity, 0)
     }
@@ -2663,11 +2678,134 @@ init_errorHandler();
 
 // src/controllers/paymentController.ts
 var import_zod7 = require("zod");
-var import_client7 = require("@prisma/client");
+var import_client8 = require("@prisma/client");
 init_db();
 init_env();
 init_errorHandler();
 init_orders();
+
+// src/services/refunds.ts
+var import_client7 = require("@prisma/client");
+init_db();
+init_errorHandler();
+init_push();
+var REFUND = {
+  REQUESTING: "REQUESTING",
+  // we are talking to Razorpay right now (guards against double clicks)
+  PROCESSING: "PROCESSING",
+  // Razorpay accepted it; money is on its way (normal speed ≈ 5–7 working days)
+  PROCESSED: "PROCESSED",
+  // money sent back to the customer's original payment method
+  FAILED: "FAILED"
+  // Razorpay refused / failed — can be retried
+};
+function razorpayError(err) {
+  const d = err?.error?.description || err?.error?.reason || err?.message || "Razorpay could not process the refund";
+  return String(d).slice(0, 280);
+}
+async function refundOrder(orderId) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { payment: true } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (order.paymentMethod === "COD") throw new AppError("Cash on Delivery orders are refunded by you directly (cash/UPI), not through Razorpay.", 400);
+  if (order.paymentStatus !== import_client7.PaymentStatus.PAID && order.paymentStatus !== import_client7.PaymentStatus.REFUNDED) {
+    throw new AppError("This order was never paid online, so there is nothing to refund.", 400);
+  }
+  if (order.refundStatus === REFUND.PROCESSED || order.paymentStatus === import_client7.PaymentStatus.REFUNDED) {
+    throw new AppError("This order has already been refunded.", 400);
+  }
+  if (order.refundStatus === REFUND.PROCESSING) throw new AppError("A refund for this order is already on its way.", 400);
+  if (order.refundStatus === REFUND.REQUESTING) throw new AppError("A refund for this order is being sent right now \u2014 please wait a moment.", 409);
+  const paymentId = order.payment?.razorpayPaymentId;
+  if (!paymentId) throw new AppError("No Razorpay payment ID is saved for this order. Refund it from the Razorpay dashboard instead.", 400);
+  if (!isRazorpayConfigured()) throw new AppError("Razorpay keys are not configured on the server.", 503);
+  const amount = order.payment?.amountPaise || order.totalPaise;
+  if (!amount || amount < 100) throw new AppError("Refund amount is too small (Razorpay minimum is \u20B91).", 400);
+  const lock = await prisma.order.updateMany({
+    where: { id: order.id, OR: [{ refundStatus: null }, { refundStatus: REFUND.FAILED }] },
+    data: { refundStatus: REFUND.REQUESTING, refundError: null, refundRequestedAt: /* @__PURE__ */ new Date() }
+  });
+  if (lock.count !== 1) throw new AppError("A refund for this order is already in progress.", 409);
+  let refund;
+  try {
+    refund = await getRazorpay().payments.refund(paymentId, {
+      amount,
+      speed: "normal",
+      receipt: order.orderNumber.slice(0, 40),
+      notes: { order_number: order.orderNumber, reason: "Order cancelled by LEVIX" }
+    });
+  } catch (err) {
+    const message = razorpayError(err);
+    if (/fully refunded|already been refunded|refunded fully/i.test(message)) {
+      const done = await prisma.order.update({
+        where: { id: order.id },
+        data: { refundStatus: REFUND.PROCESSED, refundAmountPaise: amount, refundedAt: /* @__PURE__ */ new Date(), paymentStatus: import_client7.PaymentStatus.REFUNDED, status: import_client7.OrderStatus.CANCELLED }
+      });
+      await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client7.PaymentStatus.REFUNDED } });
+      broadcastChange("orders");
+      return { order: done, refund: null, alreadyRefunded: true };
+    }
+    await prisma.order.update({ where: { id: order.id }, data: { refundStatus: REFUND.FAILED, refundError: message } });
+    broadcastChange("orders");
+    throw new AppError(`Refund failed: ${message}`, 502);
+  }
+  const processed = refund?.status === "processed";
+  const updated = await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      refundId: String(refund?.id || "").slice(0, 40) || null,
+      refundAmountPaise: Number(refund?.amount) || amount,
+      refundStatus: processed ? REFUND.PROCESSED : REFUND.PROCESSING,
+      refundError: null,
+      ...processed ? { refundedAt: /* @__PURE__ */ new Date(), paymentStatus: import_client7.PaymentStatus.REFUNDED } : {},
+      // A refunded order is always a cancelled order.
+      ...order.status !== import_client7.OrderStatus.CANCELLED ? { status: import_client7.OrderStatus.CANCELLED } : {}
+    }
+  });
+  if (processed) await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client7.PaymentStatus.REFUNDED } });
+  notifyOrderPush(order.id, processed ? "refunded" : "refund_started");
+  broadcastChange("orders");
+  return { order: updated, refund, alreadyRefunded: false };
+}
+async function handleRefundWebhook(event, refundEntity) {
+  const paymentId = refundEntity?.payment_id;
+  if (!paymentId) return;
+  const payment = await prisma.payment.findFirst({ where: { razorpayPaymentId: paymentId }, select: { orderId: true } });
+  if (!payment) return;
+  const order = await prisma.order.findUnique({ where: { id: payment.orderId } });
+  if (!order) return;
+  const base = {
+    refundId: order.refundId || String(refundEntity.id || "").slice(0, 40) || null,
+    refundAmountPaise: Number(refundEntity.amount) || order.refundAmountPaise || order.totalPaise
+  };
+  if (event === "refund.processed") {
+    if (order.refundStatus === REFUND.PROCESSED) return;
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        ...base,
+        refundStatus: REFUND.PROCESSED,
+        refundError: null,
+        refundedAt: /* @__PURE__ */ new Date(),
+        paymentStatus: import_client7.PaymentStatus.REFUNDED,
+        ...order.status !== import_client7.OrderStatus.CANCELLED ? { status: import_client7.OrderStatus.CANCELLED } : {}
+      }
+    });
+    await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client7.PaymentStatus.REFUNDED } });
+    notifyOrderPush(order.id, "refunded");
+  } else if (event === "refund.failed") {
+    if (order.refundStatus === REFUND.PROCESSED) return;
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { ...base, refundStatus: REFUND.FAILED, refundError: String(refundEntity?.error_description || "Refund failed at the bank").slice(0, 280) }
+    });
+  } else if (event === "refund.created") {
+    if (order.refundStatus === REFUND.PROCESSED || order.refundStatus === REFUND.PROCESSING) return;
+    await prisma.order.update({ where: { id: order.id }, data: { ...base, refundStatus: REFUND.PROCESSING, refundRequestedAt: order.refundRequestedAt || /* @__PURE__ */ new Date() } });
+  } else return;
+  broadcastChange("orders");
+}
+
+// src/controllers/paymentController.ts
 var verifySchema = import_zod7.z.object({
   orderNumber: import_zod7.z.string().min(5).max(40),
   razorpayOrderId: import_zod7.z.string().min(5).max(60),
@@ -2684,18 +2822,18 @@ async function verifyPayment(req, res) {
   if (!verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
     await prisma.payment.upsert({
       where: { orderId: order.id },
-      update: { status: import_client7.PaymentStatus.FAILED, razorpayPaymentId },
+      update: { status: import_client8.PaymentStatus.FAILED, razorpayPaymentId },
       create: {
         orderId: order.id,
         amountPaise: order.totalPaise,
         razorpayOrderId,
         razorpayPaymentId,
-        status: import_client7.PaymentStatus.FAILED
+        status: import_client8.PaymentStatus.FAILED
       }
     }).catch(() => void 0);
     throw new AppError("Payment verification failed. If money was deducted it will be refunded automatically.", 400);
   }
-  if (order.paymentStatus !== import_client7.PaymentStatus.PAID) {
+  if (order.paymentStatus !== import_client8.PaymentStatus.PAID) {
     try {
       const rzp = getRazorpay();
       const payment = await rzp.payments.fetch(razorpayPaymentId);
@@ -2730,6 +2868,15 @@ async function handleWebhook(req, res) {
     return;
   }
   const event = req.body?.event;
+  if (typeof event === "string" && event.startsWith("refund.")) {
+    try {
+      await handleRefundWebhook(event, req.body?.payload?.refund?.entity);
+    } catch (err) {
+      console.error("Refund webhook error:", err?.message || err);
+    }
+    res.json({ status: "ok" });
+    return;
+  }
   const paymentEntity = req.body?.payload?.payment?.entity;
   const rzpOrderId = paymentEntity?.order_id || req.body?.payload?.order?.entity?.id;
   if (rzpOrderId) {
@@ -2746,16 +2893,16 @@ async function handleWebhook(req, res) {
         } else {
           console.error(`Webhook amount mismatch for ${order.orderNumber}: ${paymentEntity.amount} vs ${order.totalPaise}`);
         }
-      } else if (event === "payment.failed" && order.paymentStatus !== import_client7.PaymentStatus.PAID && paymentEntity) {
+      } else if (event === "payment.failed" && order.paymentStatus !== import_client8.PaymentStatus.PAID && paymentEntity) {
         await prisma.payment.upsert({
           where: { orderId: order.id },
-          update: { status: import_client7.PaymentStatus.FAILED, razorpayPaymentId: paymentEntity.id },
+          update: { status: import_client8.PaymentStatus.FAILED, razorpayPaymentId: paymentEntity.id },
           create: {
             orderId: order.id,
             amountPaise: order.totalPaise,
             razorpayOrderId: rzpOrderId,
             razorpayPaymentId: paymentEntity.id,
-            status: import_client7.PaymentStatus.FAILED
+            status: import_client8.PaymentStatus.FAILED
           }
         }).catch(() => void 0);
       }
@@ -2788,7 +2935,7 @@ function patchSchema(schema) {
 
 // src/controllers/adminController.ts
 var import_zod9 = require("zod");
-var import_client8 = require("@prisma/client");
+var import_client9 = require("@prisma/client");
 init_db();
 init_errorHandler();
 init_store();
@@ -2798,15 +2945,15 @@ async function getDashboardMetrics(_req, res) {
   const startOfToday = /* @__PURE__ */ new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const [paidAgg, todayAgg, paidOrders, toFulfil, totalCustomers, totalProducts, lowStockVariants, recentOrders, subscribers] = await Promise.all([
-    prisma.order.aggregate({ where: { paymentStatus: import_client8.PaymentStatus.PAID }, _sum: { totalPaise: true } }),
+    prisma.order.aggregate({ where: { paymentStatus: import_client9.PaymentStatus.PAID }, _sum: { totalPaise: true } }),
     prisma.order.aggregate({
-      where: { paymentStatus: import_client8.PaymentStatus.PAID, paidAt: { gte: startOfToday } },
+      where: { paymentStatus: import_client9.PaymentStatus.PAID, paidAt: { gte: startOfToday } },
       _sum: { totalPaise: true },
       _count: true
     }),
-    prisma.order.count({ where: { paymentStatus: import_client8.PaymentStatus.PAID } }),
-    prisma.order.count({ where: { status: { in: [import_client8.OrderStatus.PAID, import_client8.OrderStatus.PROCESSING] } } }),
-    prisma.user.count({ where: { role: import_client8.Role.CUSTOMER } }),
+    prisma.order.count({ where: { paymentStatus: import_client9.PaymentStatus.PAID } }),
+    prisma.order.count({ where: { status: { in: [import_client9.OrderStatus.PAID, import_client9.OrderStatus.PROCESSING] } } }),
+    prisma.user.count({ where: { role: import_client9.Role.CUSTOMER } }),
     prisma.product.count({ where: { isActive: true } }),
     prisma.productVariant.findMany({
       where: { stockQuantity: { lte: 5 }, product: { isActive: true } },
@@ -2815,7 +2962,7 @@ async function getDashboardMetrics(_req, res) {
       take: 20
     }),
     prisma.order.findMany({
-      where: { paymentStatus: import_client8.PaymentStatus.PAID },
+      where: { paymentStatus: import_client9.PaymentStatus.PAID },
       orderBy: { createdAt: "desc" },
       take: 8,
       include: { items: true }
@@ -2848,10 +2995,10 @@ async function getAllOrders(req, res) {
   const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
   const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "100"), 10) || 100));
   const where = {};
-  if (status && status !== "ALL" && Object.values(import_client8.OrderStatus).includes(status)) {
+  if (status && status !== "ALL" && Object.values(import_client9.OrderStatus).includes(status)) {
     where.status = status;
   } else if (!includeUnpaid) {
-    where.NOT = { status: import_client8.OrderStatus.PENDING, paymentStatus: { not: import_client8.PaymentStatus.PAID } };
+    where.NOT = { status: import_client9.OrderStatus.PENDING, paymentStatus: { not: import_client9.PaymentStatus.PAID } };
   }
   if (search) {
     where.OR = [
@@ -2878,7 +3025,7 @@ async function getAllOrders(req, res) {
   });
 }
 var updateOrderSchema = import_zod9.z.object({
-  status: import_zod9.z.nativeEnum(import_client8.OrderStatus).optional(),
+  status: import_zod9.z.nativeEnum(import_client9.OrderStatus).optional(),
   courier: import_zod9.z.string().trim().max(100).optional(),
   trackingNumber: import_zod9.z.string().trim().max(100).optional(),
   adminNotes: import_zod9.z.string().max(5e3).optional(),
@@ -2888,17 +3035,20 @@ async function updateOrder(req, res) {
   const data2 = updateOrderSchema.parse(req.body);
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
   if (!order) throw new AppError("Order not found", 404);
-  if (data2.status && data2.status !== import_client8.OrderStatus.CANCELLED && data2.status !== import_client8.OrderStatus.PENDING) {
-    if (order.paymentStatus !== import_client8.PaymentStatus.PAID && order.paymentMethod !== "COD") {
+  if (data2.status && data2.status !== import_client9.OrderStatus.CANCELLED && order.refundStatus && order.refundStatus !== "FAILED") {
+    throw new AppError("This order has been refunded, so it must stay Cancelled.", 400);
+  }
+  if (data2.status && data2.status !== import_client9.OrderStatus.CANCELLED && data2.status !== import_client9.OrderStatus.PENDING) {
+    if (order.paymentStatus !== import_client9.PaymentStatus.PAID && order.paymentMethod !== "COD") {
       throw new AppError("This order has not been paid yet, so it cannot be moved to fulfilment", 400);
     }
   }
   if (data2.markCodPaid) {
     if (order.paymentMethod !== "COD") throw new AppError("Only Cash on Delivery orders can be marked as paid here", 400);
-    if (order.status === import_client8.OrderStatus.CANCELLED) throw new AppError("This order is cancelled", 400);
+    if (order.status === import_client9.OrderStatus.CANCELLED) throw new AppError("This order is cancelled", 400);
   }
   const updated = await prisma.$transaction(async (tx) => {
-    if (data2.status === import_client8.OrderStatus.CANCELLED && order.status !== import_client8.OrderStatus.CANCELLED && order.stockDeducted) {
+    if (data2.status === import_client9.OrderStatus.CANCELLED && order.status !== import_client9.OrderStatus.CANCELLED && order.stockDeducted) {
       for (const item of order.items) {
         if (item.variantId) {
           await tx.productVariant.updateMany({
@@ -2912,18 +3062,18 @@ async function updateOrder(req, res) {
       where: { id: order.id },
       data: {
         ...data2.status ? { status: data2.status } : {},
-        ...data2.status === import_client8.OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {},
+        ...data2.status === import_client9.OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {},
         ...data2.courier !== void 0 ? { courier: data2.courier || null } : {},
         ...data2.trackingNumber !== void 0 ? { trackingNumber: data2.trackingNumber || null } : {},
         ...data2.adminNotes !== void 0 ? { adminNotes: data2.adminNotes || null } : {},
-        ...data2.markCodPaid && order.paymentStatus !== import_client8.PaymentStatus.PAID ? { paymentStatus: import_client8.PaymentStatus.PAID, paidAt: /* @__PURE__ */ new Date() } : {}
+        ...data2.markCodPaid && order.paymentStatus !== import_client9.PaymentStatus.PAID ? { paymentStatus: import_client9.PaymentStatus.PAID, paidAt: /* @__PURE__ */ new Date() } : {}
       },
       include: { items: true }
     });
   });
   if (data2.status && data2.status !== order.status) {
-    if (data2.status === import_client8.OrderStatus.SHIPPED) notifyOrderPush(order.id, "shipped");
-    else if (data2.status === import_client8.OrderStatus.DELIVERED) notifyOrderPush(order.id, "delivered");
+    if (data2.status === import_client9.OrderStatus.SHIPPED) notifyOrderPush(order.id, "shipped");
+    else if (data2.status === import_client9.OrderStatus.DELIVERED) notifyOrderPush(order.id, "delivered");
   }
   const { accessKey, ...o } = updated;
   res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
@@ -2932,7 +3082,7 @@ async function deleteOrder(req, res) {
   const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
   if (!order) throw new AppError("Order not found", 404);
   const testConfirmed = req.query.test === "1";
-  if (order.paymentStatus === import_client8.PaymentStatus.PAID && !testConfirmed) {
+  if (order.paymentStatus === import_client9.PaymentStatus.PAID && !testConfirmed) {
     throw new AppError("Paid orders are kept for your records. If this was a TEST order, confirm it as a test order to delete it.", 400);
   }
   const shipped = ["SHIPPED", "DELIVERED"].includes(String(order.status));
@@ -3291,7 +3441,7 @@ function toDiscountDto(c) {
     code: c.code,
     type: c.discountType,
     // percentage → percent; fixed → rupees
-    value: c.discountType === import_client8.DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
+    value: c.discountType === import_client9.DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
     minOrderPaise: c.minOrderPaise,
     maxDiscountPaise: c.maxDiscountPaise ?? null,
     isActive: c.isActive,
@@ -3325,7 +3475,7 @@ async function createAdminDiscount(req, res) {
   const coupon = await prisma.coupon.create({
     data: {
       code: data2.code,
-      discountType: data2.type === "FIXED" ? import_client8.DiscountType.FIXED : import_client8.DiscountType.PERCENTAGE,
+      discountType: data2.type === "FIXED" ? import_client9.DiscountType.FIXED : import_client9.DiscountType.PERCENTAGE,
       discountValue: data2.type === "FIXED" ? Math.round(data2.value * 100) : Math.round(data2.value),
       minOrderPaise: Math.round(data2.minOrderINR * 100),
       maxDiscountPaise: data2.type === "PERCENTAGE" && data2.maxDiscountINR && data2.maxDiscountINR > 0 ? Math.round(data2.maxDiscountINR * 100) : null,
@@ -3482,6 +3632,24 @@ async function sendPushTest(req, res) {
     throw new AppError("This device is not subscribed yet. Turn on notifications on your phone (signed in as admin), then try again.", 400);
   }
   res.json({ success: true, ...result });
+}
+async function refundAdminOrder(req, res) {
+  const before = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!before) throw new AppError("Order not found", 404);
+  if (before.paymentMethod !== "COD" && before.paymentStatus === import_client9.PaymentStatus.PAID && before.status !== import_client9.OrderStatus.CANCELLED) {
+    await prisma.$transaction(async (tx) => {
+      if (before.stockDeducted) {
+        for (const item of before.items) {
+          if (item.variantId) await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: { increment: item.quantity } } });
+        }
+      }
+      await tx.order.update({ where: { id: before.id }, data: { status: import_client9.OrderStatus.CANCELLED, stockDeducted: false } });
+    });
+  }
+  const result = await refundOrder(req.params.id);
+  const full = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } } });
+  const { accessKey, ...o } = full;
+  res.json({ success: true, alreadyRefunded: result.alreadyRefunded, order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }
 
 // src/controllers/homeController.ts
@@ -3846,6 +4014,7 @@ router7.post("/media/video", import_express7.default.raw({ type: ["video/*", "ap
 router7.get("/orders", asyncHandler(getAllOrders));
 router7.patch("/orders/:id", asyncHandler(updateOrder));
 router7.patch("/orders/:id/status", asyncHandler(updateOrder));
+router7.post("/orders/:id/refund", asyncHandler(refundAdminOrder));
 router7.delete("/orders/:id", asyncHandler(deleteOrder));
 router7.get("/products", asyncHandler(getAdminProducts));
 router7.post("/products", asyncHandler(createProduct));

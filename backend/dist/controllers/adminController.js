@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { productFullInclude, serializeProduct, slugify } from '../utils/serialize.js';
 import { getSettings, saveSettings } from '../services/store.js';
 import { notifyOrderPush, pushToAll, pushToUser } from '../services/push.js';
+import { refundOrder } from '../services/refunds.js';
 import { formatAddress } from '../services/orders.js';
 /* ----------------------------------------------------------------------------------------------
  * Dashboard
@@ -110,6 +111,9 @@ export async function updateOrder(req, res) {
     const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
     if (!order)
         throw new AppError('Order not found', 404);
+    if (data.status && data.status !== OrderStatus.CANCELLED && order.refundStatus && order.refundStatus !== 'FAILED') {
+        throw new AppError('This order has been refunded, so it must stay Cancelled.', 400);
+    }
     if (data.status && data.status !== OrderStatus.CANCELLED && data.status !== OrderStatus.PENDING) {
         if (order.paymentStatus !== PaymentStatus.PAID && order.paymentMethod !== 'COD') {
             throw new AppError('This order has not been paid yet, so it cannot be moved to fulfilment', 400);
@@ -784,4 +788,27 @@ export async function sendPushTest(req, res) {
         throw new AppError('This device is not subscribed yet. Turn on notifications on your phone (signed in as admin), then try again.', 400);
     }
     res.json({ success: true, ...result });
+}
+/** POST /admin/orders/:id/refund — full Razorpay refund of a paid online order (also cancels it). */
+export async function refundAdminOrder(req, res) {
+    const before = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+    if (!before)
+        throw new AppError('Order not found', 404);
+    // Refunding = cancelling: cancel first (and put stock back once), then refund.
+    // If Razorpay then refuses, the order stays cancelled and the refund can be retried.
+    if (before.paymentMethod !== 'COD' && before.paymentStatus === PaymentStatus.PAID && before.status !== OrderStatus.CANCELLED) {
+        await prisma.$transaction(async (tx) => {
+            if (before.stockDeducted) {
+                for (const item of before.items) {
+                    if (item.variantId)
+                        await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: { increment: item.quantity } } });
+                }
+            }
+            await tx.order.update({ where: { id: before.id }, data: { status: OrderStatus.CANCELLED, stockDeducted: false } });
+        });
+    }
+    const result = await refundOrder(req.params.id);
+    const full = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } } });
+    const { accessKey, ...o } = full;
+    res.json({ success: true, alreadyRefunded: result.alreadyRefunded, order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }

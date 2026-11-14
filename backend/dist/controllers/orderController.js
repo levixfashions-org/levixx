@@ -248,6 +248,9 @@ export async function trackOrder(req, res) {
             paymentMethod: order.paymentMethod,
             courier: order.courier,
             trackingNumber: order.trackingNumber,
+            refundStatus: order.refundStatus,
+            refundAmountPaise: order.refundAmountPaise,
+            refundedAt: order.refundedAt,
             createdAt: order.createdAt,
             itemCount: order.items.reduce((a, i) => a + i.quantity, 0)
         }
