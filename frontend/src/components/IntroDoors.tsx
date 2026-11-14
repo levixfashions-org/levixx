@@ -12,6 +12,8 @@ function shouldShow(pathname: string): boolean {
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false;
   // Opened as the installed app: the launch screen (index.html) already played — don't show a second intro.
   if (document.documentElement.classList.contains('lx-app')) return false;
+  // Installed app: never show the website's door intro (also not after a refresh) — the app has its own opening screen.
+  if (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true) return false;
   if (/bot|crawler|spider|lighthouse|headless/i.test(navigator.userAgent)) return false;
   try {
     if (sessionStorage.getItem(SEEN_KEY)) return false;
