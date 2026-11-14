@@ -10,6 +10,7 @@ import { SearchDrawer } from './components/SearchDrawer';
 import { MobileNavDrawer } from './components/MobileNavDrawer';
 import { SizeGuideModal } from './components/SizeGuideModal';
 import { GlassyPwaNotification } from './components/GlassyPwaNotification';
+import { PushPrompt } from './components/PushPrompt';
 import { IntroDoors } from './components/IntroDoors';
 import { LiveSync } from './components/LiveSync';
 import { AdminGuard } from './components/admin/AdminGuard';
@@ -42,6 +43,7 @@ const AdminProductsPage = named(() => import('./pages/admin/AdminProductsPage'),
 const AdminOrdersPage = named(() => import('./pages/admin/AdminOrdersPage'), 'AdminOrdersPage');
 const AdminDiscountsPage = named(() => import('./pages/admin/AdminDiscountsPage'), 'AdminDiscountsPage');
 const AdminSettingsPage = named(() => import('./pages/admin/AdminSettingsPage'), 'AdminSettingsPage');
+const AdminNotificationsPage = named(() => import('./pages/admin/AdminNotificationsPage'), 'AdminNotificationsPage');
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -92,6 +94,7 @@ export const App: React.FC = () => {
             <MobileNavDrawer />
             <SizeGuideModal />
             <GlassyPwaNotification />
+            <PushPrompt />
 
             <Main>
               <Suspense fallback={<PageLoader />}>
@@ -121,6 +124,7 @@ export const App: React.FC = () => {
                   <Route path="/admin/orders" element={admin(<AdminOrdersPage />)} />
                   <Route path="/admin/discounts" element={admin(<AdminDiscountsPage />)} />
                   <Route path="/admin/settings" element={admin(<AdminSettingsPage />)} />
+                  <Route path="/admin/notifications" element={admin(<AdminNotificationsPage />)} />
                   <Route path="/admin/collections" element={admin(<AdminCollectionsPage />)} />
 
                   <Route

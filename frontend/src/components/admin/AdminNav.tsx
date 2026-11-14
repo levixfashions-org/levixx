@@ -10,7 +10,8 @@ import {
   Layers, 
   ExternalLink, 
   LogOut, 
-  Shield 
+  Shield,
+  Bell
 } from 'lucide-react';
 
 export const AdminNav: React.FC = () => {
@@ -24,6 +25,7 @@ export const AdminNav: React.FC = () => {
     { name: 'Collections & Home', path: '/admin/collections', icon: Layers },
     { name: 'Customer Orders', path: '/admin/orders', icon: ShoppingBag },
     { name: 'Promo Discounts', path: '/admin/discounts', icon: Tag },
+    { name: 'Notifications', path: '/admin/notifications', icon: Bell },
     { name: 'Store Settings', path: '/admin/settings', icon: Sliders },
   ];
 

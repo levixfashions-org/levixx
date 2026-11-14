@@ -24,6 +24,7 @@ import storeRoutes from './routes/storeRoutes.js';
 import { serveMedia } from './controllers/mediaController.js';
 import { asyncHandler } from './middleware/errorHandler.js';
 import wishlistRoutes from './routes/wishlistRoutes.js';
+import pushRoutes from './routes/pushRoutes.js';
 
 const app = express();
 
@@ -183,6 +184,7 @@ app.use(['/api/orders', '/api/payments'], (req, res, next) => {
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/push', pushRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', notFoundApi);
 

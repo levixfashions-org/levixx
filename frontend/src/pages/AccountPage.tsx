@@ -1,3 +1,4 @@
+import { PushToggle } from '../components/PushToggle';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -187,6 +188,8 @@ export const AccountPage: React.FC = () => {
               <p>Status: <span className="font-bold text-[#FF5400] uppercase">Active Member</span></p>
             </div>
           </div>
+
+          <PushToggle />
         </div>
 
         {/* Right Column: Delivery Addresses (8 cols) */}

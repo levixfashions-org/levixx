@@ -45,6 +45,7 @@ model User {
 
   addresses   Address[]
   orders      Order[]
+  pushSubscriptions PushSubscription[]
   cart        Cart?
   wishlist    Wishlist?
   reviews     Review[]
@@ -323,6 +324,7 @@ model StoreSetting {
   googleSiteVerification String?  @db.Text
   introTagline           String?  @db.VarChar(80)  // Opening animation: big line under LEVIX
   introSubline           String?  @db.VarChar(80)  // Opening animation: small line under the tagline
+  vapidKeys              String?  @db.Text         // Web push signing keys (server-only, generated automatically)
   menCoverImage         String?  @db.Text
   womenCoverImage       String?  @db.Text
   heroDesktopImage      String?  @db.Text
@@ -392,4 +394,34 @@ model MediaChunk {
   data    Bytes  @db.LongBlob
 
   @@id([mediaId, idx])
+}
+
+/// A browser / installed app that allowed LEVIX notifications.
+model PushSubscription {
+  id            String    @id @default(uuid())
+  endpoint      String    @unique @db.VarChar(700)
+  p256dh        String    @db.VarChar(255)
+  auth          String    @db.VarChar(64)
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  platform      String?   @db.VarChar(20) // android | ios | desktop
+  failCount     Int       @default(0)
+  lastSentAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+/// A notification the owner sent from Admin → Notifications.
+model PushCampaign {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(80)
+  body        String   @db.VarChar(240)
+  url         String   @db.VarChar(500)
+  imageUrl    String?  @db.Text
+  targetCount Int      @default(0)
+  sentCount   Int      @default(0)
+  failedCount Int      @default(0)
+  createdAt   DateTime @default(now())
 }
