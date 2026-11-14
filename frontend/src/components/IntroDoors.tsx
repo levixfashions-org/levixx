@@ -48,7 +48,7 @@ export const IntroDoors: React.FC = () => {
   const finish = () => {
     timers.current.forEach(clearTimeout);
     setPhase('leave');
-    timers.current = [window.setTimeout(() => setPhase('done'), 600)];
+    timers.current = [window.setTimeout(() => setPhase('done'), 700)];
   };
 
   useEffect(() => {
@@ -63,8 +63,9 @@ export const IntroDoors: React.FC = () => {
     const at = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
     at(450, () => setPhase('open'));
     at(750, () => setPhase('reveal'));
-    at(2700, () => setPhase('leave'));
-    at(3300, () => setPhase('done'));
+    // Hold the text long enough to read it comfortably (tap / SKIP still closes it right away).
+    at(5600, () => setPhase('leave'));
+    at(6300, () => setPhase('done'));
     const onKey = () => finish();
     window.addEventListener('keydown', onKey);
     return () => {
