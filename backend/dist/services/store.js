@@ -315,4 +315,11 @@ export async function ensureStoreDefaults() {
         cache = null;
         console.log('✓ Dispatch time updated to 2–5 business days.');
     }
+    // Version 11: every collection shows on the homepage automatically (as a swipe row) — owner can still hide one.
+    if ((row?.defaultsVersion ?? 0) < 11) {
+        await prisma.collection.updateMany({ where: { homeLayout: 'NONE' }, data: { homeLayout: 'CAROUSEL' } });
+        await prisma.storeSetting.update({ where: { id: 'default' }, data: { defaultsVersion: 11 } });
+        cache = null;
+        console.log('✓ All collections now appear on the homepage.');
+    }
 }

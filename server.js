@@ -333,6 +333,12 @@ async function ensureStoreDefaults() {
     cache = null;
     console.log("\u2713 Dispatch time updated to 2\u20135 business days.");
   }
+  if ((row?.defaultsVersion ?? 0) < 11) {
+    await prisma.collection.updateMany({ where: { homeLayout: "NONE" }, data: { homeLayout: "CAROUSEL" } });
+    await prisma.storeSetting.update({ where: { id: "default" }, data: { defaultsVersion: 11 } });
+    cache = null;
+    console.log("\u2713 All collections now appear on the homepage.");
+  }
 }
 var DEFAULT_SETTINGS, DEFAULT_CATEGORIES, cache, CACHE_MS, DEFAULT_DROPS;
 var init_store = __esm({
@@ -3158,7 +3164,7 @@ var collectionSchema = import_zod9.z.object({
   mobileBannerUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
   isActive: import_zod9.z.boolean().default(true),
   sortOrder: import_zod9.z.coerce.number().int().default(0),
-  homeLayout: import_zod9.z.enum(["NONE", "CAROUSEL", "GRID"]).default("NONE"),
+  homeLayout: import_zod9.z.enum(["NONE", "CAROUSEL", "GRID"]).default("CAROUSEL"),
   showInGallery: import_zod9.z.boolean().default(false),
   showInMenu: import_zod9.z.boolean().default(true),
   productIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(500).optional()
