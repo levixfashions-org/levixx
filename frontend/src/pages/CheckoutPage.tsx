@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowRight, Tag, X, Plus } from 'lucide-react';
+import { Lock, ArrowRight, Tag, X, Plus, Minus } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
@@ -42,7 +42,21 @@ function loadRazorpay(): Promise<boolean> {
 }
 
 export const CheckoutPage: React.FC = () => {
-  const { cart, fetchCart } = useCartStore();
+  const { cart, fetchCart, updateQuantity, removeItem } = useCartStore();
+  const [itemBusy, setItemBusy] = useState<string | null>(null);
+  const [itemError, setItemError] = useState<string | null>(null);
+  const changeItem = async (itemId: string, qty: number) => {
+    setItemBusy(itemId);
+    setItemError(null);
+    try {
+      if (qty <= 0) await removeItem(itemId);
+      else await updateQuantity(itemId, qty);
+    } catch (err: any) {
+      setItemError(err?.message || 'Could not update your bag. Please try again.');
+    } finally {
+      setItemBusy(null);
+    }
+  };
   const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
@@ -634,20 +648,36 @@ export const CheckoutPage: React.FC = () => {
             Order Summary ({cart.itemCount})
           </h3>
 
-          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
             {cart.items.map((item) => (
-              <div key={item.id} className="flex items-center space-x-3 text-xs">
+              <div key={item.id} className={`flex items-center space-x-3 text-xs transition-opacity ${itemBusy === item.id ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div className="w-14 h-16 bg-neutral-200 overflow-hidden flex-shrink-0">
                   {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover" loading="lazy" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-black truncate">{item.productName}</p>
-                  <p className="text-[11px] text-neutral-500 font-mono">Size: {item.size}{item.color ? ` • ${item.color}` : ''} • Qty: {item.quantity}</p>
+                  <p className="text-[11px] text-neutral-500 font-mono">Size: {item.size}{item.color ? ` • ${item.color}` : ''}</p>
+                  <div className="mt-1.5 inline-flex items-center border border-black/15">
+                    <button type="button" onClick={() => changeItem(item.id, item.quantity - 1)} aria-label={`Decrease quantity of ${item.productName}`} className="w-7 h-7 flex items-center justify-center hover:bg-neutral-100">
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-7 text-center font-mono font-bold text-[11px]">{item.quantity}</span>
+                    <button type="button" onClick={() => changeItem(item.id, item.quantity + 1)} disabled={item.quantity >= item.stockQuantity} aria-label={`Increase quantity of ${item.productName}`} className="w-7 h-7 flex items-center justify-center hover:bg-neutral-100 disabled:opacity-30">
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
-                <span className="font-bold font-mono text-black">RS. {inr(item.totalPaise)}</span>
+                <div className="flex flex-col items-end gap-2 self-stretch justify-between">
+                  <button type="button" onClick={() => changeItem(item.id, 0)} aria-label={`Remove ${item.productName}`} title="Remove" className="w-7 h-7 -mr-1 flex items-center justify-center rounded-full text-neutral-400 hover:text-red-600 hover:bg-red-50">
+                    <X className="w-4 h-4" />
+                  </button>
+                  <span className="font-bold font-mono text-black whitespace-nowrap">RS. {inr(item.totalPaise)}</span>
+                </div>
               </div>
             ))}
           </div>
+
+          {itemError && <p className="text-[11px] text-red-600 -mt-3">{itemError}</p>}
 
           <div className="pt-2 border-t border-black/10">
             {appliedCoupon ? (
