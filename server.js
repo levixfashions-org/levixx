@@ -525,12 +525,12 @@ function getTransporter() {
   }
   return transporter;
 }
-async function sendMail(to, subject, html, text) {
+async function sendMail(to, subject2, html, text) {
   await getTransporter().sendMail({
     from: { name: env.MAIL_FROM_NAME, address: env.SMTP_USER },
     replyTo: "levixfashions@gmail.com",
     to,
-    subject,
+    subject: subject2,
     html,
     text
   });
@@ -647,6 +647,195 @@ var init_errorHandler = __esm({
   }
 });
 
+// src/services/webpushCore.ts
+function generateVapidKeys() {
+  const { publicKey, privateKey } = import_crypto2.default.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const pub = publicKey.export({ format: "jwk" });
+  const priv = privateKey.export({ format: "jwk" });
+  const raw = Buffer.concat([Buffer.from([4]), fromB64u(pub.x), fromB64u(pub.y)]);
+  return { publicKey: b64u(raw), privateKey: priv.d };
+}
+function vapidPrivateKeyObject(keys) {
+  const raw = fromB64u(keys.publicKey);
+  return import_crypto2.default.createPrivateKey({
+    key: { kty: "EC", crv: "P-256", x: b64u(raw.subarray(1, 33)), y: b64u(raw.subarray(33, 65)), d: keys.privateKey },
+    format: "jwk"
+  });
+}
+function vapidAuthHeader(endpoint, keys, subject2) {
+  const aud = new URL(endpoint).origin;
+  const header = b64u(Buffer.from(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const claims = b64u(Buffer.from(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1e3) + 12 * 3600, sub: subject2 })));
+  const data2 = `${header}.${claims}`;
+  const sig = import_crypto2.default.sign("sha256", Buffer.from(data2), { key: vapidPrivateKeyObject(keys), dsaEncoding: "ieee-p1363" });
+  return `vapid t=${data2}.${b64u(sig)}, k=${keys.publicKey}`;
+}
+function encryptPayload(target, payload, salt = import_crypto2.default.randomBytes(16), ecdh) {
+  const uaPublic = fromB64u(target.p256dh);
+  const authSecret = fromB64u(target.auth);
+  const local = ecdh || import_crypto2.default.createECDH("prime256v1");
+  if (!ecdh) local.generateKeys();
+  const asPublic = local.getPublicKey();
+  const shared = local.computeSecret(uaPublic);
+  const prkKey = hmac(authSecret, shared);
+  const keyInfo = Buffer.concat([Buffer.from("WebPush: info\0"), uaPublic, asPublic, Buffer.from([1])]);
+  const ikm = hmac(prkKey, keyInfo);
+  const prk = hmac(salt, ikm);
+  const cek = hmac(prk, Buffer.concat([Buffer.from("Content-Encoding: aes128gcm\0"), Buffer.from([1])])).subarray(0, 16);
+  const nonce = hmac(prk, Buffer.concat([Buffer.from("Content-Encoding: nonce\0"), Buffer.from([1])])).subarray(0, 12);
+  const cipher = import_crypto2.default.createCipheriv("aes-128-gcm", cek, nonce);
+  const body = Buffer.concat([cipher.update(Buffer.concat([payload, Buffer.from([2])])), cipher.final(), cipher.getAuthTag()]);
+  const rs2 = Buffer.alloc(4);
+  rs2.writeUInt32BE(4096);
+  return Buffer.concat([salt, rs2, Buffer.from([asPublic.length]), asPublic, body]);
+}
+async function sendPush(target, payload, keys, subject2, opts = {}) {
+  const body = encryptPayload(target, Buffer.from(JSON.stringify(payload)));
+  const headers = {
+    Authorization: vapidAuthHeader(target.endpoint, keys, subject2),
+    "Content-Encoding": "aes128gcm",
+    "Content-Type": "application/octet-stream",
+    TTL: String(opts.ttl ?? 4 * 24 * 3600),
+    Urgency: opts.urgency || "normal"
+  };
+  if (opts.topic) headers.Topic = opts.topic.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32);
+  const ctrl = new AbortController();
+  const timer2 = setTimeout(() => ctrl.abort(), 1e4);
+  try {
+    const res = await fetch(target.endpoint, { method: "POST", headers, body, signal: ctrl.signal });
+    return { ok: res.status >= 200 && res.status < 300, status: res.status, gone: res.status === 404 || res.status === 410 };
+  } catch {
+    return { ok: false, status: 0, gone: false };
+  } finally {
+    clearTimeout(timer2);
+  }
+}
+var import_crypto2, b64u, fromB64u, hmac;
+var init_webpushCore = __esm({
+  "src/services/webpushCore.ts"() {
+    import_crypto2 = __toESM(require("crypto"), 1);
+    b64u = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    fromB64u = (s) => Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    hmac = (key, data2) => import_crypto2.default.createHmac("sha256", key).update(data2).digest();
+  }
+});
+
+// src/services/push.ts
+var push_exports = {};
+__export(push_exports, {
+  getVapidKeys: () => getVapidKeys,
+  notifyOrderPush: () => notifyOrderPush,
+  pushToAll: () => pushToAll,
+  pushToUser: () => pushToUser
+});
+async function getVapidKeys() {
+  if (keysCache) return keysCache;
+  const row = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { vapidKeys: true } });
+  if (row?.vapidKeys) {
+    try {
+      const k = JSON.parse(row.vapidKeys);
+      if (k?.publicKey && k?.privateKey) return keysCache = k;
+    } catch {
+    }
+  }
+  const fresh = generateVapidKeys();
+  await prisma.storeSetting.updateMany({ where: { id: "default", vapidKeys: null }, data: { vapidKeys: JSON.stringify(fresh) } });
+  const again2 = await prisma.storeSetting.findUnique({ where: { id: "default" }, select: { vapidKeys: true } });
+  keysCache = again2?.vapidKeys ? JSON.parse(again2.vapidKeys) : fresh;
+  return keysCache;
+}
+function subject() {
+  const list = Array.isArray(env.ADMIN_EMAILS) ? env.ADMIN_EMAILS : String(env.ADMIN_EMAILS || "").split(",");
+  const email = list[0]?.trim() || "levixfashions@gmail.com";
+  return `mailto:${email}`;
+}
+function siteUrl(path4) {
+  const base = (env.FRONTEND_URL || "https://thelevix.shop").replace(/\/+$/, "");
+  if (!path4) return base + "/";
+  if (/^https?:\/\//i.test(path4)) return path4;
+  return base + (path4.startsWith("/") ? path4 : `/${path4}`);
+}
+function absImage(u) {
+  if (!u) return void 0;
+  const clean = u.split("#")[0];
+  return /^https?:\/\//i.test(clean) ? clean : siteUrl(clean);
+}
+async function deliver(subs, msg, urgency = "normal") {
+  const keys = await getVapidKeys();
+  const payload = {
+    title: msg.title.slice(0, 80),
+    body: msg.body.slice(0, 240),
+    url: siteUrl(msg.url),
+    image: absImage(msg.image),
+    tag: msg.tag
+  };
+  let sent = 0;
+  let failed = 0;
+  const gone = [];
+  const okIds = [];
+  const failIds = [];
+  for (let i = 0; i < subs.length; i += 25) {
+    const batch = subs.slice(i, i + 25);
+    const results = await Promise.all(batch.map((s) => sendPush(s, payload, keys, subject(), { urgency, topic: msg.tag })));
+    results.forEach((r, j) => {
+      if (r.ok) {
+        sent++;
+        okIds.push(batch[j].id);
+      } else {
+        failed++;
+        if (r.gone) gone.push(batch[j].id);
+        else failIds.push(batch[j].id);
+      }
+    });
+  }
+  if (gone.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: gone } } });
+  if (okIds.length) await prisma.pushSubscription.updateMany({ where: { id: { in: okIds } }, data: { failCount: 0, lastSentAt: /* @__PURE__ */ new Date() } });
+  if (failIds.length) {
+    await prisma.pushSubscription.updateMany({ where: { id: { in: failIds } }, data: { failCount: { increment: 1 } } });
+    await prisma.pushSubscription.deleteMany({ where: { failCount: { gte: 5 } } });
+  }
+  return { sent, failed, removed: gone.length };
+}
+async function pushToAll(msg) {
+  const subs = await prisma.pushSubscription.findMany({ select: SUB_SELECT, take: 5e4 });
+  return { target: subs.length, ...await deliver(subs, msg) };
+}
+async function pushToUser(userId, msg) {
+  const subs = await prisma.pushSubscription.findMany({ where: { userId }, select: SUB_SELECT, take: 20 });
+  if (!subs.length) return { target: 0, sent: 0, failed: 0, removed: 0 };
+  return { target: subs.length, ...await deliver(subs, msg, "high") };
+}
+function notifyOrderPush(orderId, kind) {
+  (async () => {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { userId: true, orderNumber: true, courier: true, trackingNumber: true }
+    });
+    if (!order?.userId) return;
+    const msgs = {
+      confirmed: { title: "Order confirmed \u2705", body: `Thanks for shopping with LEVIX! Order ${order.orderNumber} is confirmed and will be packed soon.`, url: "/account/orders", tag: `order-${order.orderNumber}` },
+      shipped: {
+        title: "Your LEVIX order is on the way \u{1F69A}",
+        body: `Order ${order.orderNumber} has shipped${order.courier ? ` with ${order.courier}` : ""}${order.trackingNumber ? ` \xB7 Tracking ${order.trackingNumber}` : ""}.`,
+        url: "/account/orders",
+        tag: `order-${order.orderNumber}`
+      },
+      delivered: { title: "Delivered \u{1F4E6}", body: `Order ${order.orderNumber} has been delivered. Enjoy your LEVIX fit!`, url: "/account/orders", tag: `order-${order.orderNumber}` }
+    };
+    await pushToUser(order.userId, msgs[kind]);
+  })().catch((err) => console.error("Order push failed:", err?.message || err));
+}
+var keysCache, SUB_SELECT;
+var init_push = __esm({
+  "src/services/push.ts"() {
+    init_db();
+    init_env();
+    init_webpushCore();
+    keysCache = null;
+    SUB_SELECT = { id: true, endpoint: true, p256dh: true, auth: true };
+  }
+});
+
 // src/services/orderEmails.ts
 var orderEmails_exports = {};
 __export(orderEmails_exports, {
@@ -726,7 +915,7 @@ var init_orderEmails = __esm({
 
 // src/services/orders.ts
 function randomCode(length) {
-  const bytes = import_crypto2.default.randomBytes(length);
+  const bytes = import_crypto3.default.randomBytes(length);
   let out = "";
   for (let i = 0; i < length; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
   return out;
@@ -738,13 +927,13 @@ function generateOrderNumber() {
   return `LVX-${ymd}-${randomCode(6)}`;
 }
 function generateAccessKey() {
-  return import_crypto2.default.randomBytes(24).toString("base64url");
+  return import_crypto3.default.randomBytes(24).toString("base64url");
 }
 function safeEqual(a, b) {
   if (!a || !b) return false;
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
-  return ab.length === bb.length && import_crypto2.default.timingSafeEqual(ab, bb);
+  return ab.length === bb.length && import_crypto3.default.timingSafeEqual(ab, bb);
 }
 async function evaluateCoupon(rawCode, subtotalPaise) {
   const code = rawCode.trim().toUpperCase();
@@ -775,6 +964,8 @@ async function markOrderPaid(orderId, info) {
 }
 function notifyOrder(orderId) {
   Promise.resolve().then(() => (init_bestsellers(), bestsellers_exports)).then((m) => m.scheduleSalesRecompute()).catch(() => {
+  });
+  Promise.resolve().then(() => (init_push(), push_exports)).then((m) => m.notifyOrderPush(orderId, "confirmed")).catch(() => {
   });
   Promise.resolve().then(() => (init_orderEmails(), orderEmails_exports)).then((m) => m.sendOrderEmails(orderId)).catch((err) => console.error("Order email error:", err?.message || err));
 }
@@ -847,10 +1038,10 @@ function formatAddress(snapshot) {
   if (!snapshot || typeof snapshot !== "object") return "";
   return [snapshot.fullName, snapshot.line1, snapshot.line2, snapshot.city, snapshot.state, snapshot.postalCode, snapshot.country].filter(Boolean).join(", ");
 }
-var import_crypto2, import_client5, ALPHABET;
+var import_crypto3, import_client5, ALPHABET;
 var init_orders = __esm({
   "src/services/orders.ts"() {
-    import_crypto2 = __toESM(require("crypto"), 1);
+    import_crypto3 = __toESM(require("crypto"), 1);
     import_client5 = require("@prisma/client");
     init_db();
     init_errorHandler();
@@ -868,7 +1059,7 @@ __export(server_exports, {
 module.exports = __toCommonJS(server_exports);
 
 // src/app.ts
-var import_express10 = __toESM(require("express"), 1);
+var import_express11 = __toESM(require("express"), 1);
 var import_cors = __toESM(require("cors"), 1);
 var import_helmet = __toESM(require("helmet"), 1);
 var import_compression = __toESM(require("compression"), 1);
@@ -2599,6 +2790,7 @@ var import_client8 = require("@prisma/client");
 init_db();
 init_errorHandler();
 init_store();
+init_push();
 init_orders();
 async function getDashboardMetrics(_req, res) {
   const startOfToday = /* @__PURE__ */ new Date();
@@ -2727,6 +2919,10 @@ async function updateOrder(req, res) {
       include: { items: true }
     });
   });
+  if (data2.status && data2.status !== order.status) {
+    if (data2.status === import_client8.OrderStatus.SHIPPED) notifyOrderPush(order.id, "shipped");
+    else if (data2.status === import_client8.OrderStatus.DELIVERED) notifyOrderPush(order.id, "delivered");
+  }
   const { accessKey, ...o } = updated;
   res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }
@@ -3240,6 +3436,48 @@ async function deleteCollection(req, res) {
   await prisma.collection.delete({ where: { id: req.params.id } });
   res.json({ success: true });
 }
+var pushSchema = import_zod9.z.object({
+  title: import_zod9.z.string().trim().min(2, "Add a title").max(80),
+  body: import_zod9.z.string().trim().min(2, "Add a message").max(240),
+  url: import_zod9.z.string().trim().max(500).refine((v) => !v || v.startsWith("/") || /^https:\/\//.test(v), "Link must start with / or https://").default("/"),
+  imageUrl: import_zod9.z.string().trim().max(2e3).optional().nullable()
+});
+async function getPushOverview(_req, res) {
+  const [total, android, ios, desktop, signedIn, campaigns] = await Promise.all([
+    prisma.pushSubscription.count(),
+    prisma.pushSubscription.count({ where: { platform: "android" } }),
+    prisma.pushSubscription.count({ where: { platform: "ios" } }),
+    prisma.pushSubscription.count({ where: { platform: "desktop" } }),
+    prisma.pushSubscription.count({ where: { userId: { not: null } } }),
+    prisma.pushCampaign.findMany({ orderBy: { createdAt: "desc" }, take: 30 })
+  ]);
+  res.set("Cache-Control", "no-store");
+  res.json({ subscribers: { total, android, ios, desktop, signedIn }, campaigns });
+}
+async function sendPushCampaign(req, res) {
+  const data2 = pushSchema.parse(req.body);
+  const result = await pushToAll({ title: data2.title, body: data2.body, url: data2.url || "/", image: data2.imageUrl || null, tag: "levix-drop" });
+  const campaign = await prisma.pushCampaign.create({
+    data: {
+      title: data2.title,
+      body: data2.body,
+      url: data2.url || "/",
+      imageUrl: data2.imageUrl || null,
+      targetCount: result.target,
+      sentCount: result.sent,
+      failedCount: result.failed
+    }
+  });
+  res.json({ success: true, campaign, removed: result.removed });
+}
+async function sendPushTest(req, res) {
+  const data2 = pushSchema.parse(req.body);
+  const result = await pushToUser(req.user.id, { title: data2.title, body: data2.body, url: data2.url || "/", image: data2.imageUrl || null, tag: "levix-test" });
+  if (!result.target) {
+    throw new AppError("This device is not subscribed yet. Turn on notifications on your phone (signed in as admin), then try again.", 400);
+  }
+  res.json({ success: true, ...result });
+}
 
 // src/controllers/homeController.ts
 init_bestsellers();
@@ -3595,6 +3833,9 @@ router7.use((req, res, next) => {
   next();
 });
 router7.get("/metrics", asyncHandler(getDashboardMetrics));
+router7.get("/push", asyncHandler(getPushOverview));
+router7.post("/push/send", asyncHandler(sendPushCampaign));
+router7.post("/push/test", asyncHandler(sendPushTest));
 router7.post("/media", import_express7.default.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }), asyncHandler(uploadMedia));
 router7.post("/media/video", import_express7.default.raw({ type: ["video/*", "application/octet-stream"], limit: "5mb" }), asyncHandler(uploadVideoChunk));
 router7.get("/orders", asyncHandler(getAllOrders));
@@ -3731,8 +3972,63 @@ router9.post("/merge", verifyFirebaseToken, asyncHandler(mergeWishlist));
 router9.post("/:productId", verifyFirebaseToken, asyncHandler(toggleWishlist));
 var wishlistRoutes_default = router9;
 
+// src/routes/pushRoutes.ts
+var import_express10 = require("express");
+var import_zod12 = require("zod");
+init_errorHandler();
+init_db();
+init_push();
+var router10 = (0, import_express10.Router)();
+router10.get(
+  "/key",
+  asyncHandler(async (_req, res) => {
+    const { publicKey } = await getVapidKeys();
+    res.set("Cache-Control", "no-cache");
+    res.json({ publicKey });
+  })
+);
+var subSchema = import_zod12.z.object({
+  subscription: import_zod12.z.object({
+    endpoint: import_zod12.z.string().url().max(700).refine((u) => u.startsWith("https://"), "Invalid push endpoint"),
+    keys: import_zod12.z.object({ p256dh: import_zod12.z.string().min(40).max(255), auth: import_zod12.z.string().min(8).max(64) })
+  }),
+  platform: import_zod12.z.enum(["android", "ios", "desktop"]).optional()
+});
+router10.post(
+  "/subscribe",
+  authRateLimiter,
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const { subscription, platform } = subSchema.parse(req.body);
+    const data2 = {
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+      platform: platform || null,
+      failCount: 0,
+      // Link to the signed-in customer (for order updates); keep an existing link if signed out now.
+      ...req.user ? { userId: req.user.id } : {}
+    };
+    await prisma.pushSubscription.upsert({
+      where: { endpoint: subscription.endpoint },
+      update: data2,
+      create: { endpoint: subscription.endpoint, ...data2 }
+    });
+    res.json({ success: true });
+  })
+);
+router10.post(
+  "/unsubscribe",
+  authRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { endpoint } = import_zod12.z.object({ endpoint: import_zod12.z.string().url().max(700) }).parse(req.body);
+    await prisma.pushSubscription.deleteMany({ where: { endpoint } });
+    res.json({ success: true });
+  })
+);
+var pushRoutes_default = router10;
+
 // src/app.ts
-var app = (0, import_express10.default)();
+var app = (0, import_express11.default)();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 var FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || "levix-8bb56"}.firebaseapp.com`;
@@ -3803,14 +4099,14 @@ app.use(
   })
 );
 app.use(
-  import_express10.default.json({
+  import_express11.default.json({
     limit: "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     }
   })
 );
-app.use(import_express10.default.urlencoded({ extended: false, limit: "1mb" }));
+app.use(import_express11.default.urlencoded({ extended: false, limit: "1mb" }));
 app.get("/api/health", async (_req, res) => {
   let database = "ok";
   let databaseProblem;
@@ -3864,6 +4160,7 @@ app.use(["/api/orders", "/api/payments"], (req, res, next) => {
 app.use("/api/orders", orderRoutes_default);
 app.use("/api/payments", paymentRoutes_default);
 app.use("/api/wishlist", wishlistRoutes_default);
+app.use("/api/push", pushRoutes_default);
 app.use("/api/admin", adminRoutes_default);
 app.use("/api", notFoundApi);
 app.get("/media/:file", asyncHandler(serveMedia));
@@ -3937,7 +4234,7 @@ var frontendDist = possiblePaths.find((p) => {
 if (frontendDist) {
   console.log(`\u2713 Serving storefront from: ${frontendDist}`);
   app.use(
-    import_express10.default.static(frontendDist, {
+    import_express11.default.static(frontendDist, {
       index: false,
       setHeaders: (res, filePath) => {
         if (filePath.includes(`${import_path2.default.sep}assets${import_path2.default.sep}`)) {

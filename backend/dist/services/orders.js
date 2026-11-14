@@ -69,6 +69,7 @@ export async function markOrderPaid(orderId, info) {
 export function notifyOrder(orderId) {
     // A new paid / COD order can change the best-seller order on the shop.
     import('./bestsellers.js').then((m) => m.scheduleSalesRecompute()).catch(() => { });
+    import('./push.js').then((m) => m.notifyOrderPush(orderId, 'confirmed')).catch(() => { });
     import('./orderEmails.js')
         .then((m) => m.sendOrderEmails(orderId))
         .catch((err) => console.error('Order email error:', err?.message || err));

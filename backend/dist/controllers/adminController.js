@@ -5,6 +5,7 @@ import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { productFullInclude, serializeProduct, slugify } from '../utils/serialize.js';
 import { getSettings, saveSettings } from '../services/store.js';
+import { notifyOrderPush, pushToAll, pushToUser } from '../services/push.js';
 import { formatAddress } from '../services/orders.js';
 /* ----------------------------------------------------------------------------------------------
  * Dashboard
@@ -145,6 +146,13 @@ export async function updateOrder(req, res) {
             include: { items: true }
         });
     });
+    // Push the customer (if they allowed notifications) when the order moves forward.
+    if (data.status && data.status !== order.status) {
+        if (data.status === OrderStatus.SHIPPED)
+            notifyOrderPush(order.id, 'shipped');
+        else if (data.status === OrderStatus.DELIVERED)
+            notifyOrderPush(order.id, 'delivered');
+    }
     const { accessKey, ...o } = updated;
     res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }
@@ -722,4 +730,55 @@ export async function updateCollection(req, res) {
 export async function deleteCollection(req, res) {
     await prisma.collection.delete({ where: { id: req.params.id } });
     res.json({ success: true });
+}
+/* ----------------------------------------------------------------------------------------------
+ * Notifications (web push)
+ * --------------------------------------------------------------------------------------------*/
+const pushSchema = z.object({
+    title: z.string().trim().min(2, 'Add a title').max(80),
+    body: z.string().trim().min(2, 'Add a message').max(240),
+    url: z
+        .string()
+        .trim()
+        .max(500)
+        .refine((v) => !v || v.startsWith('/') || /^https:\/\//.test(v), 'Link must start with / or https://')
+        .default('/'),
+    imageUrl: z.string().trim().max(2000).optional().nullable()
+});
+export async function getPushOverview(_req, res) {
+    const [total, android, ios, desktop, signedIn, campaigns] = await Promise.all([
+        prisma.pushSubscription.count(),
+        prisma.pushSubscription.count({ where: { platform: 'android' } }),
+        prisma.pushSubscription.count({ where: { platform: 'ios' } }),
+        prisma.pushSubscription.count({ where: { platform: 'desktop' } }),
+        prisma.pushSubscription.count({ where: { userId: { not: null } } }),
+        prisma.pushCampaign.findMany({ orderBy: { createdAt: 'desc' }, take: 30 })
+    ]);
+    res.set('Cache-Control', 'no-store');
+    res.json({ subscribers: { total, android, ios, desktop, signedIn }, campaigns });
+}
+export async function sendPushCampaign(req, res) {
+    const data = pushSchema.parse(req.body);
+    const result = await pushToAll({ title: data.title, body: data.body, url: data.url || '/', image: data.imageUrl || null, tag: 'levix-drop' });
+    const campaign = await prisma.pushCampaign.create({
+        data: {
+            title: data.title,
+            body: data.body,
+            url: data.url || '/',
+            imageUrl: data.imageUrl || null,
+            targetCount: result.target,
+            sentCount: result.sent,
+            failedCount: result.failed
+        }
+    });
+    res.json({ success: true, campaign, removed: result.removed });
+}
+/** Sends the notification only to the admin's own devices (to preview before sending to everyone). */
+export async function sendPushTest(req, res) {
+    const data = pushSchema.parse(req.body);
+    const result = await pushToUser(req.user.id, { title: data.title, body: data.body, url: data.url || '/', image: data.imageUrl || null, tag: 'levix-test' });
+    if (!result.target) {
+        throw new AppError('This device is not subscribed yet. Turn on notifications on your phone (signed in as admin), then try again.', 400);
+    }
+    res.json({ success: true, ...result });
 }
