@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { CheckCircle2, Clock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Clock, ArrowRight, ShieldCheck, XCircle } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { Order } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { ShipmentTracker } from '../components/ShipmentTracker';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 
 export const OrderSuccessPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
   const [params] = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const supportEmail = useSettingsStore((s) => s.settings.supportEmail);
+  // Updates live when the store changes this order (status, tracking, refund).
+  const live = useLiveRefresh();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -34,7 +37,7 @@ export const OrderSuccessPage: React.FC = () => {
         const res = await apiClient.get(`/orders/${orderNumber}`, key ? { key } : undefined);
         setOrder(res.data.order);
         // Payment confirmation can take a few seconds (webhook) — poll briefly.
-        if (res.data.order?.paymentStatus !== 'PAID' && res.data.order?.paymentMethod !== 'COD' && attempts < 6) {
+        if (res.data.order?.paymentStatus === 'PENDING' && res.data.order?.paymentMethod !== 'COD' && res.data.order?.status !== 'CANCELLED' && attempts < 6) {
           attempts++;
           timer = setTimeout(load, 3000);
         }
@@ -47,7 +50,7 @@ export const OrderSuccessPage: React.FC = () => {
     load();
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderNumber, authLoading, user?.uid]);
+  }, [orderNumber, authLoading, user?.uid, live]);
 
   if (loading) {
     return <div className="max-w-2xl mx-auto px-4 py-24 text-center font-mono text-xs uppercase tracking-widest text-neutral-500">Loading your order...</div>;
@@ -67,20 +70,26 @@ export const OrderSuccessPage: React.FC = () => {
   }
 
   const cod = order.paymentMethod === 'COD';
-  const paid = order.paymentStatus === 'PAID' || cod;
+  const paid = order.paymentStatus === 'PAID' || order.paymentStatus === 'REFUNDED' || cod;
+  const cancelled = order.status === 'CANCELLED';
+  const refunded = order.refundStatus === 'PROCESSED' || order.paymentStatus === 'REFUNDED';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16 sm:py-24 text-center space-y-8">
       <div className="flex flex-col items-center space-y-3">
-        {paid ? <CheckCircle2 className="w-16 h-16 text-black stroke-[1.5]" /> : <Clock className="w-16 h-16 text-black stroke-[1.5]" />}
+        {cancelled ? <XCircle className="w-16 h-16 text-black stroke-[1.5]" /> : paid ? <CheckCircle2 className="w-16 h-16 text-black stroke-[1.5]" /> : <Clock className="w-16 h-16 text-black stroke-[1.5]" />}
         <span className="text-[11px] font-mono uppercase tracking-widest text-[#FF5400] font-bold">
-          {paid ? 'ORDER CONFIRMED' : 'CONFIRMING PAYMENT'}
+          {cancelled ? (refunded ? 'ORDER CANCELLED · REFUNDED' : 'ORDER CANCELLED') : paid ? 'ORDER CONFIRMED' : 'CONFIRMING PAYMENT'}
         </span>
         <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black">
-          {paid ? 'Thank You For Your Order' : 'Almost There'}
+          {cancelled ? 'Order Cancelled' : paid ? 'Thank You For Your Order' : 'Almost There'}
         </h1>
         <p className="text-xs text-neutral-600 max-w-md">
-          {cod
+          {cancelled
+            ? cod && order.paymentStatus !== 'PAID'
+              ? 'This order has been cancelled. Nothing was charged.'
+              : 'This order has been cancelled. Your refund status is shown below.'
+            : cod
             ? `Your Cash on Delivery order is confirmed. Please keep RS. ${(order.totalPaise / 100).toLocaleString('en-IN')} ready — pay the courier in cash or by UPI when it arrives. We will share courier tracking as soon as it ships.`
             : paid
             ? 'Your payment was successful. We will pack your order and share courier tracking as soon as it ships.'
@@ -102,7 +111,7 @@ export const OrderSuccessPage: React.FC = () => {
 
         {order.status !== 'PENDING' && (
           <div className="border-b border-black/10 pb-5">
-            <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} />
+            <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} paymentMethod={order.paymentMethod} paymentStatus={order.paymentStatus} refundStatus={order.refundStatus} refundAmountPaise={order.refundAmountPaise} refundedAt={order.refundedAt} refundRequestedAt={order.refundRequestedAt} totalPaise={order.totalPaise} />
           </div>
         )}
 
@@ -132,6 +141,12 @@ export const OrderSuccessPage: React.FC = () => {
             <div className="flex justify-between text-neutral-600"><span>Cash on Delivery fee</span><span className="font-mono">RS. {((order.codFeePaise || 0) / 100).toLocaleString('en-IN')}</span></div>
           )}
           <div className="flex justify-between font-bold text-black text-sm pt-1"><span>{cod && order.paymentStatus !== 'PAID' ? 'To pay on delivery' : 'Total Paid'}</span><span className="font-mono">RS. {(order.totalPaise / 100).toLocaleString('en-IN')}</span></div>
+          {(order.refundStatus === 'PROCESSED' || order.refundStatus === 'PROCESSING' || order.paymentStatus === 'REFUNDED') && (
+            <div className={`flex justify-between font-bold text-sm ${order.refundStatus === 'PROCESSING' ? 'text-amber-700' : 'text-green-700'}`}>
+              <span>{order.refundStatus === 'PROCESSING' ? 'Refund on its way' : 'Refunded'}</span>
+              <span className="font-mono">− RS. {(((order.refundAmountPaise || order.totalPaise) as number) / 100).toLocaleString('en-IN')}</span>
+            </div>
+          )}
         </div>
 
         {order.shippingAddress && (

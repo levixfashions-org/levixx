@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { RotateCcw, AlertTriangle } from 'lucide-react';
 import { 
   ShoppingBag, 
   Search, 
@@ -36,6 +37,9 @@ export const AdminOrdersPage: React.FC = () => {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [savingCourier, setSavingCourier] = useState(false);
   const [showUnpaid, setShowUnpaid] = useState(false);
+  // Refund prompt shown when cancelling a paid online order.
+  const [refundPrompt, setRefundPrompt] = useState<any | null>(null);
+  const [refundBusy, setRefundBusy] = useState(false);
 
   const navigate = useNavigate();
 
@@ -84,9 +88,42 @@ export const AdminOrdersPage: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (orderId: string, newStatus: string) => {
+  /** Paid online with Razorpay and not refunded yet (or the last refund attempt failed). */
+  const canRefund = (o: any) =>
+    o && o.paymentMethod !== 'COD' && o.paymentStatus === 'PAID' && Boolean(o.payment?.razorpayPaymentId) && (!o.refundStatus || o.refundStatus === 'FAILED');
+
+  const doRefund = async (o: any) => {
+    setRefundBusy(true);
+    mergeOrder(o.id, { status: 'CANCELLED', refundStatus: 'REQUESTING', refundError: null });
+    try {
+      const res = await apiClient.post(`/admin/orders/${o.id}/refund`);
+      if (res.data?.order) mergeOrder(o.id, res.data.order);
+      flashMsg(
+        res.data?.alreadyRefunded
+          ? `✓ Order ${o.orderNumber} was already refunded in Razorpay — recorded as Refunded.`
+          : `✓ Refund of RS. ${Math.round(o.totalPaise / 100).toLocaleString('en-IN')} started for ${o.orderNumber}. The customer can see it in My Orders.`
+      );
+      setRefundPrompt(null);
+    } catch (err: any) {
+      // The server keeps the order cancelled when the refund call failed; show why.
+      mergeOrder(o.id, { status: 'CANCELLED', refundStatus: 'FAILED', refundError: err.message });
+      flashMsg(`✗ ${err.message || 'Refund failed'}`);
+      setRefundPrompt((cur: any) => (cur ? { ...cur, error: err.message || 'Refund failed' } : cur));
+      // Reload this order's real state from the server in the background.
+      loadOrders(true);
+    } finally {
+      setRefundBusy(false);
+    }
+  };
+
+  const handleStatusChange = async (orderId: string, newStatus: string, skipRefundPrompt = false) => {
     const before = orders.find((o: any) => o.id === orderId) as any;
     if (!before || before.status === newStatus) return;
+    // Cancelling a paid online order → ask whether to refund it through Razorpay.
+    if (newStatus === 'CANCELLED' && !skipRefundPrompt && canRefund(before)) {
+      setRefundPrompt({ ...before });
+      return;
+    }
     // Instant: update the screen first, save in the background, undo only if the server refuses.
     mergeOrder(orderId, { status: newStatus });
     flashMsg(`✓ Order ${before.orderNumber} marked as ${newStatus}.`);
@@ -289,6 +326,13 @@ export const AdminOrdersPage: React.FC = () => {
                       {ord.paymentMethod === 'COD' && (
                         <span className="ml-1 px-2 py-0.5 text-[10px] font-bold uppercase bg-[#FF5400] text-white">COD</span>
                       )}
+                      {ord.refundStatus && (
+                        <span className={`block mt-1 w-max px-2 py-0.5 text-[9.5px] font-bold uppercase ${
+                          ord.refundStatus === 'PROCESSED' ? 'bg-green-600 text-white' : ord.refundStatus === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {ord.refundStatus === 'PROCESSED' ? 'Refunded' : ord.refundStatus === 'FAILED' ? 'Refund failed' : 'Refund processing'}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 font-mono font-bold text-black">
                       RS. {(ord.totalPaise / 100).toLocaleString('en-IN')}
@@ -396,6 +440,38 @@ export const AdminOrdersPage: React.FC = () => {
                   )}
                   {selectedOrder.payment?.razorpayPaymentId && (
                     <p><span className="font-semibold text-black">Payment ID:</span> <span className="font-mono">{selectedOrder.payment.razorpayPaymentId}</span></p>
+                  )}
+                  {(selectedOrder.refundStatus || (selectedOrder.status === 'CANCELLED' && canRefund(selectedOrder))) && (
+                    <div className={`col-span-2 p-3 border space-y-2 ${
+                      selectedOrder.refundStatus === 'PROCESSED' ? 'bg-green-50 border-green-200' : selectedOrder.refundStatus === 'FAILED' ? 'bg-red-50 border-red-200' : selectedOrder.refundStatus ? 'bg-amber-50 border-amber-200' : 'bg-neutral-50 border-black/10'
+                    }`}>
+                      <p className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[11px]">
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {selectedOrder.refundStatus === 'PROCESSED'
+                          ? `Refunded RS. ${Math.round((selectedOrder.refundAmountPaise || selectedOrder.totalPaise) / 100).toLocaleString('en-IN')}`
+                          : selectedOrder.refundStatus === 'PROCESSING' || selectedOrder.refundStatus === 'REQUESTING'
+                            ? `Refund of RS. ${Math.round((selectedOrder.refundAmountPaise || selectedOrder.totalPaise) / 100).toLocaleString('en-IN')} processing (5–7 working days)`
+                            : selectedOrder.refundStatus === 'FAILED'
+                              ? 'Refund failed'
+                              : 'Not refunded yet'}
+                      </p>
+                      {selectedOrder.refundId && <p className="text-[11px]">Refund ID: <span className="font-mono">{selectedOrder.refundId}</span></p>}
+                      {selectedOrder.refundStatus === 'FAILED' && selectedOrder.refundError && (
+                        <p className="text-[11px] text-red-700 flex items-start gap-1"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /> {selectedOrder.refundError}</p>
+                      )}
+                      {canRefund(selectedOrder) && selectedOrder.status === 'CANCELLED' && (
+                        <button
+                          type="button"
+                          disabled={refundBusy}
+                          onClick={() => {
+                            if (window.confirm(`Refund RS. ${Math.round(selectedOrder.totalPaise / 100).toLocaleString('en-IN')} to ${selectedOrder.customerName} through Razorpay?`)) doRefund(selectedOrder);
+                          }}
+                          className="px-3 py-1.5 bg-black text-white text-[10.5px] font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-50"
+                        >
+                          {refundBusy ? 'Refunding…' : selectedOrder.refundStatus === 'FAILED' ? 'Try refund again' : `Refund RS. ${Math.round(selectedOrder.totalPaise / 100).toLocaleString('en-IN')}`}
+                        </button>
+                      )}
+                    </div>
                   )}
                   {selectedOrder.couponCode && (
                     <p><span className="font-semibold text-black">Coupon:</span> {selectedOrder.couponCode} (- RS. {(selectedOrder.discountPaise / 100).toLocaleString('en-IN')})</p>
@@ -532,6 +608,56 @@ export const AdminOrdersPage: React.FC = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Refund prompt (cancelling a paid online order) */}
+      {refundPrompt && (
+        <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Refund order">
+          <div className="w-full max-w-md bg-white shadow-2xl">
+            <div className="p-5 border-b border-black/10 flex items-start gap-3">
+              <span className="w-10 h-10 flex-shrink-0 rounded-full bg-[#FF5400]/10 text-[#FF5400] flex items-center justify-center"><RotateCcw className="w-5 h-5" /></span>
+              <div>
+                <h3 className="font-display font-black text-lg uppercase tracking-tight">Cancel {refundPrompt.orderNumber}?</h3>
+                <p className="text-xs text-neutral-600 mt-1">
+                  <b>{refundPrompt.customerName}</b> paid <b>RS. {Math.round(refundPrompt.totalPaise / 100).toLocaleString('en-IN')}</b> online (Razorpay). Do you want to refund it now?
+                </p>
+              </div>
+            </div>
+            <div className="p-5 space-y-2.5 text-[11.5px] text-neutral-600">
+              <p>• The full amount goes back to the customer's original payment method (UPI / card / bank) in about 5–7 working days.</p>
+              <p>• The customer sees "Refund on its way" in My Orders right away{' '}— and gets a notification if they turned them on.</p>
+              <p>• Stock is put back automatically.</p>
+              {refundPrompt.error && (
+                <p className="mt-2 p-2.5 bg-red-50 border border-red-200 text-red-700 flex items-start gap-1.5"><AlertTriangle className="w-4 h-4 flex-shrink-0" /> {refundPrompt.error} The order is cancelled — you can retry the refund from the order details.</p>
+              )}
+            </div>
+            <div className="p-5 pt-0 flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={refundBusy}
+                onClick={() => doRefund(refundPrompt)}
+                className="w-full py-3 bg-[#FF5400] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#e04a00] disabled:opacity-60"
+              >
+                {refundBusy ? 'Refunding…' : `Cancel & refund RS. ${Math.round(refundPrompt.totalPaise / 100).toLocaleString('en-IN')}`}
+              </button>
+              <button
+                type="button"
+                disabled={refundBusy}
+                onClick={() => {
+                  const o = refundPrompt;
+                  setRefundPrompt(null);
+                  handleStatusChange(o.id, 'CANCELLED', true);
+                }}
+                className="w-full py-2.5 border border-black text-xs font-bold uppercase tracking-wider hover:bg-black hover:text-white disabled:opacity-60"
+              >
+                Cancel without refund
+              </button>
+              <button type="button" disabled={refundBusy} onClick={() => setRefundPrompt(null)} className="w-full py-2 text-[11px] text-neutral-500 hover:text-black uppercase tracking-wider font-semibold">
+                Keep the order
+              </button>
+            </div>
           </div>
         </div>
       )}

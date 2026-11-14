@@ -123,7 +123,7 @@ export const OrderHistoryPage: React.FC = () => {
 
                 {/* Order progress + courier tracking */}
                 <div className="px-4 sm:px-6 py-5 border-b border-black/5">
-                  <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} />
+                  <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} paymentMethod={order.paymentMethod} paymentStatus={order.paymentStatus} refundStatus={order.refundStatus} refundAmountPaise={order.refundAmountPaise} refundedAt={order.refundedAt} refundRequestedAt={order.refundRequestedAt} totalPaise={order.totalPaise} />
                 </div>
 
                 {/* Items */}

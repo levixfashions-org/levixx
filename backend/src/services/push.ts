@@ -107,11 +107,11 @@ export async function pushToUser(userId: string, msg: PushMessage) {
 }
 
 /** Fire-and-forget order updates; never throws into the order flow. */
-export function notifyOrderPush(orderId: string, kind: 'confirmed' | 'shipped' | 'delivered') {
+export function notifyOrderPush(orderId: string, kind: 'confirmed' | 'shipped' | 'delivered' | 'refund_started' | 'refunded') {
   (async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { userId: true, orderNumber: true, courier: true, trackingNumber: true }
+      select: { userId: true, orderNumber: true, courier: true, trackingNumber: true, refundAmountPaise: true, totalPaise: true }
     });
     if (!order?.userId) return;
     const msgs: Record<typeof kind, PushMessage> = {
@@ -122,7 +122,19 @@ export function notifyOrderPush(orderId: string, kind: 'confirmed' | 'shipped' |
         url: '/account/orders',
         tag: `order-${order.orderNumber}`
       },
-      delivered: { title: 'Delivered 📦', body: `Order ${order.orderNumber} has been delivered. Enjoy your LEVIX fit!`, url: '/account/orders', tag: `order-${order.orderNumber}` }
+      delivered: { title: 'Delivered 📦', body: `Order ${order.orderNumber} has been delivered. Enjoy your LEVIX fit!`, url: '/account/orders', tag: `order-${order.orderNumber}` },
+      refund_started: {
+        title: 'Refund started 💸',
+        body: `Your refund of ₹${Math.round((order.refundAmountPaise || order.totalPaise) / 100).toLocaleString('en-IN')} for order ${order.orderNumber} is on its way to your original payment method (about 5–7 working days).`,
+        url: '/account/orders',
+        tag: `order-${order.orderNumber}`
+      },
+      refunded: {
+        title: 'Refund completed ✅',
+        body: `₹${Math.round((order.refundAmountPaise || order.totalPaise) / 100).toLocaleString('en-IN')} for order ${order.orderNumber} has been sent back to your original payment method.`,
+        url: '/account/orders',
+        tag: `order-${order.orderNumber}`
+      }
     };
     await pushToUser(order.userId, msgs[kind]);
   })().catch((err) => console.error('Order push failed:', err?.message || err));

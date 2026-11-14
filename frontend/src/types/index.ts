@@ -136,6 +136,10 @@ export interface Order {
   couponCode?: string | null;
   courier?: string | null;
   trackingNumber?: string | null;
+  refundStatus?: 'REQUESTING' | 'PROCESSING' | 'PROCESSED' | 'FAILED' | null;
+  refundAmountPaise?: number | null;
+  refundedAt?: string | null;
+  refundRequestedAt?: string | null;
   shippingAddress?: string;
   adminNotes?: string | null;
   paidAt?: string | null;

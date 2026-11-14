@@ -249,6 +249,12 @@ model Order {
   trackingNumber          String?
   adminNotes              String?       @db.Text
   stockDeducted           Boolean       @default(false)
+  refundStatus            String?       @db.VarChar(12) // REQUESTING | PROCESSING | PROCESSED | FAILED (Razorpay refunds)
+  refundId                String?       @db.VarChar(40)
+  refundAmountPaise       Int?
+  refundError             String?       @db.VarChar(300)
+  refundRequestedAt       DateTime?
+  refundedAt              DateTime?
   paidAt                  DateTime?
   payment                 Payment?
   items                   OrderItem[]

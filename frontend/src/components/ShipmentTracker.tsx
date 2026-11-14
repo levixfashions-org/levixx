@@ -39,15 +39,62 @@ function stepIndex(status: string): number {
 }
 
 /** Order progress + courier details for customers (My Orders, receipt). */
-export const ShipmentTracker: React.FC<{ status: string; courier?: string | null; trackingNumber?: string | null }> = ({ status, courier, trackingNumber }) => {
+interface RefundInfo {
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  refundStatus?: string | null;
+  refundAmountPaise?: number | null;
+  refundedAt?: string | null;
+  refundRequestedAt?: string | null;
+  totalPaise?: number;
+}
+
+const rupees = (p?: number | null) => `₹${Math.round((p || 0) / 100).toLocaleString('en-IN')}`;
+const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '');
+
+/** What a customer sees for a cancelled order: refund progress (online payments) or a simple note (COD). */
+const CancelledNote: React.FC<RefundInfo> = (r) => {
+  const amount = rupees(r.refundAmountPaise || r.totalPaise);
+  if (r.refundStatus === 'PROCESSED' || r.paymentStatus === 'REFUNDED') {
+    return (
+      <div className="px-4 py-3.5 bg-green-50 border border-green-200 text-green-800 text-[12px] space-y-0.5">
+        <p className="font-bold flex items-center gap-2"><Check className="w-4 h-4" /> Refund of {amount} completed{r.refundedAt ? ` on ${day(r.refundedAt)}` : ''}</p>
+        <p className="text-green-700/90 pl-6">The money has been sent back to your original payment method. Some banks take 1–2 days to show it.</p>
+      </div>
+    );
+  }
+  if (r.refundStatus === 'PROCESSING' || r.refundStatus === 'REQUESTING') {
+    return (
+      <div className="px-4 py-3.5 bg-amber-50 border border-amber-200 text-amber-900 text-[12px] space-y-2">
+        <p className="font-bold flex items-center gap-2"><Clock className="w-4 h-4" /> Refund of {amount} on its way{r.refundRequestedAt ? ` · started ${day(r.refundRequestedAt)}` : ''}</p>
+        <div className="pl-6">
+          <div className="h-1.5 bg-amber-200/70 rounded-full overflow-hidden"><div className="h-full w-1/2 bg-amber-500 rounded-full" /></div>
+          <p className="mt-1.5 text-amber-800/90">It reaches your original payment method (UPI / card / bank) in about 5–7 working days.</p>
+        </div>
+      </div>
+    );
+  }
+  const paidOnline = r.paymentMethod !== 'COD' && r.paymentStatus === 'PAID';
+  return (
+    <div className="flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-100 text-red-700 text-[12px] font-semibold">
+      <XCircle className="w-4 h-4 flex-shrink-0 mt-px" />
+      <span>
+        This order was cancelled.{' '}
+        {paidOnline
+          ? `Your refund of ${amount} is being arranged — you'll see its progress right here.`
+          : r.paymentMethod === 'COD' && r.paymentStatus !== 'PAID'
+            ? 'Nothing was charged.'
+            : ''}
+      </span>
+    </div>
+  );
+};
+
+export const ShipmentTracker: React.FC<{ status: string; courier?: string | null; trackingNumber?: string | null } & RefundInfo> = ({ status, courier, trackingNumber, ...refund }) => {
   const [copied, setCopied] = useState(false);
 
   if (status === 'CANCELLED') {
-    return (
-      <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-100 text-red-700 text-[12px] font-semibold">
-        <XCircle className="w-4 h-4" /> This order was cancelled. If you paid online, the refund goes back to your original payment method.
-      </div>
-    );
+    return <CancelledNote {...refund} />;
   }
 
   const idx = stepIndex(status);

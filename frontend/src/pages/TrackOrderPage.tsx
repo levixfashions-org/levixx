@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { ShipmentTracker } from '../components/ShipmentTracker';
 
 interface TrackResult {
   orderNumber: string;
@@ -9,11 +10,13 @@ interface TrackResult {
   paymentStatus: string;
   courier?: string | null;
   trackingNumber?: string | null;
+  paymentMethod?: string | null;
+  refundStatus?: string | null;
+  refundAmountPaise?: number | null;
+  refundedAt?: string | null;
   createdAt: string;
   itemCount: number;
 }
-
-const STEPS = ['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
 
 export const TrackOrderPage: React.FC = () => {
   const [orderNumber, setOrderNumber] = useState('');
@@ -48,7 +51,6 @@ export const TrackOrderPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
-  const stepIdx = result ? STEPS.indexOf(result.status) : -1;
 
   return (
     <div className="pt-8 pb-16 px-4 max-w-lg mx-auto">
@@ -69,26 +71,21 @@ export const TrackOrderPage: React.FC = () => {
             <span className="font-mono font-bold">{result.orderNumber}</span>
             <span>{new Date(result.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
           </div>
-          {result.status === 'CANCELLED' ? (
-            <p className="mt-4 text-[13px] font-semibold text-red-600">This order was cancelled.</p>
-          ) : result.paymentStatus !== 'PAID' ? (
+          {result.status !== 'CANCELLED' && result.paymentStatus === 'PENDING' && result.paymentMethod !== 'COD' ? (
             <p className="mt-4 text-[13px] font-semibold">Payment not completed for this order.</p>
           ) : (
-            <div className="mt-5 grid grid-cols-4 gap-1">
-              {STEPS.map((s, i) => (
-                <div key={s} className="text-center">
-                  <div className={`h-1.5 rounded-full ${i <= stepIdx ? 'bg-black' : 'bg-black/10'}`} />
-                  <p className={`text-[9.5px] mt-1.5 uppercase ${i <= stepIdx ? 'text-black font-semibold' : 'text-neutral-400'}`}>
-                    {s === 'PAID' ? 'Confirmed' : s.toLowerCase()}
-                  </p>
-                </div>
-              ))}
+            <div className="mt-5">
+              <ShipmentTracker
+                status={result.status}
+                courier={result.courier}
+                trackingNumber={result.trackingNumber}
+                paymentMethod={result.paymentMethod}
+                paymentStatus={result.paymentStatus}
+                refundStatus={result.refundStatus}
+                refundAmountPaise={result.refundAmountPaise}
+                refundedAt={result.refundedAt}
+              />
             </div>
-          )}
-          {result.trackingNumber && (
-            <p className="mt-4 text-[12px]">
-              <span className="text-neutral-500">{result.courier || 'Courier'}:</span> <span className="font-mono font-semibold">{result.trackingNumber}</span>
-            </p>
           )}
           <p className="mt-3 text-[11px] text-neutral-500">{result.itemCount} item(s)</p>
         </div>
