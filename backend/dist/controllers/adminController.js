@@ -567,6 +567,7 @@ function toDiscountDto(c) {
         // percentage → percent; fixed → rupees
         value: c.discountType === DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
         minOrderPaise: c.minOrderPaise,
+        maxDiscountPaise: c.maxDiscountPaise ?? null,
         isActive: c.isActive,
         expiresAt: c.validUntil ? c.validUntil.toISOString().slice(0, 10) : '',
         maxUses: c.maxUses,
@@ -584,6 +585,7 @@ const discountSchema = z.object({
     type: z.enum(['PERCENTAGE', 'FIXED']),
     value: z.coerce.number().positive(),
     minOrderINR: z.coerce.number().min(0).default(0),
+    maxDiscountINR: z.coerce.number().min(0).max(1000000).optional().nullable(),
     expiresAt: z.string().optional().or(z.literal('')),
     isActive: z.boolean().default(true),
     maxUses: z.coerce.number().int().positive().optional().nullable()
@@ -608,6 +610,7 @@ export async function createAdminDiscount(req, res) {
             discountType: data.type === 'FIXED' ? DiscountType.FIXED : DiscountType.PERCENTAGE,
             discountValue: data.type === 'FIXED' ? Math.round(data.value * 100) : Math.round(data.value),
             minOrderPaise: Math.round(data.minOrderINR * 100),
+            maxDiscountPaise: data.type === 'PERCENTAGE' && data.maxDiscountINR && data.maxDiscountINR > 0 ? Math.round(data.maxDiscountINR * 100) : null,
             isActive: data.isActive,
             validUntil,
             maxUses: data.maxUses ?? null

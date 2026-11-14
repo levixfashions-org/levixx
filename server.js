@@ -953,8 +953,10 @@ async function evaluateCoupon(rawCode, subtotalPaise) {
     );
   }
   let discountPaise = coupon.discountType === import_client5.DiscountType.PERCENTAGE ? Math.round(subtotalPaise * Math.min(100, coupon.discountValue) / 100) : coupon.discountValue;
+  const cap = coupon.discountType === import_client5.DiscountType.PERCENTAGE && coupon.maxDiscountPaise && coupon.maxDiscountPaise > 0 ? coupon.maxDiscountPaise : null;
+  if (cap) discountPaise = Math.min(discountPaise, cap);
   discountPaise = Math.max(0, Math.min(discountPaise, subtotalPaise));
-  const description = coupon.discountType === import_client5.DiscountType.PERCENTAGE ? `${coupon.discountValue}% off` : `Rs. ${(coupon.discountValue / 100).toLocaleString("en-IN")} off`;
+  const description = coupon.discountType === import_client5.DiscountType.PERCENTAGE ? `${coupon.discountValue}% off${cap ? ` (up to Rs. ${(cap / 100).toLocaleString("en-IN")})` : ""}` : `Rs. ${(coupon.discountValue / 100).toLocaleString("en-IN")} off`;
   return { code, discountPaise, description };
 }
 async function markOrderPaid(orderId, info) {
@@ -3291,6 +3293,7 @@ function toDiscountDto(c) {
     // percentage → percent; fixed → rupees
     value: c.discountType === import_client8.DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
     minOrderPaise: c.minOrderPaise,
+    maxDiscountPaise: c.maxDiscountPaise ?? null,
     isActive: c.isActive,
     expiresAt: c.validUntil ? c.validUntil.toISOString().slice(0, 10) : "",
     maxUses: c.maxUses,
@@ -3302,6 +3305,7 @@ var discountSchema = import_zod9.z.object({
   type: import_zod9.z.enum(["PERCENTAGE", "FIXED"]),
   value: import_zod9.z.coerce.number().positive(),
   minOrderINR: import_zod9.z.coerce.number().min(0).default(0),
+  maxDiscountINR: import_zod9.z.coerce.number().min(0).max(1e6).optional().nullable(),
   expiresAt: import_zod9.z.string().optional().or(import_zod9.z.literal("")),
   isActive: import_zod9.z.boolean().default(true),
   maxUses: import_zod9.z.coerce.number().int().positive().optional().nullable()
@@ -3324,6 +3328,7 @@ async function createAdminDiscount(req, res) {
       discountType: data2.type === "FIXED" ? import_client8.DiscountType.FIXED : import_client8.DiscountType.PERCENTAGE,
       discountValue: data2.type === "FIXED" ? Math.round(data2.value * 100) : Math.round(data2.value),
       minOrderPaise: Math.round(data2.minOrderINR * 100),
+      maxDiscountPaise: data2.type === "PERCENTAGE" && data2.maxDiscountINR && data2.maxDiscountINR > 0 ? Math.round(data2.maxDiscountINR * 100) : null,
       isActive: data2.isActive,
       validUntil,
       maxUses: data2.maxUses ?? null
