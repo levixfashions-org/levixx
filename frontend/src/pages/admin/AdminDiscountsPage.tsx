@@ -20,6 +20,7 @@ export const AdminDiscountsPage: React.FC = () => {
   const [type, setType] = useState<'PERCENTAGE' | 'FIXED'>('PERCENTAGE');
   const [value, setValue] = useState('20');
   const [minOrderINR, setMinOrderINR] = useState('1999');
+  const [maxDiscountINR, setMaxDiscountINR] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [isActive, setIsActive] = useState(true);
 
@@ -49,11 +50,30 @@ export const AdminDiscountsPage: React.FC = () => {
     setCode('');
     setType('PERCENTAGE');
     setValue('20');
+    setMaxDiscountINR('');
     setMinOrderINR('1999');
     setExpiresAt('');
     setIsActive(true);
     setShowModal(true);
   };
+
+  // Highest active offer, shown in the summary card (with its cap if it has one).
+  const bestOffer = (() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const live = discounts.filter((d) => d.isActive && (!d.expiresAt || d.expiresAt >= today));
+    if (!live.length) return null;
+    const pct = live.filter((d) => d.type === 'PERCENTAGE').sort((a, b) => b.value - a.value)[0];
+    const flat = live.filter((d) => d.type === 'FIXED').sort((a, b) => b.value - a.value)[0];
+    const pick = pct || flat;
+    if (!pick) return null;
+    if (pick.type === 'PERCENTAGE') {
+      return {
+        title: `${pick.value}% OFF`,
+        note: pick.maxDiscountPaise ? `${pick.code} · max RS. ${(pick.maxDiscountPaise / 100).toLocaleString('en-IN')} per order` : `${pick.code} · no maximum limit`
+      };
+    }
+    return { title: `RS. ${pick.value} OFF`, note: `${pick.code} · flat discount` };
+  })();
 
   const handleSaveDiscount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +85,7 @@ export const AdminDiscountsPage: React.FC = () => {
         type,
         value: parseFloat(value),
         minOrderINR: parseFloat(minOrderINR) || 0,
+        maxDiscountINR: type === 'PERCENTAGE' && parseFloat(maxDiscountINR) > 0 ? parseFloat(maxDiscountINR) : null,
         expiresAt,
         isActive
       });
@@ -167,11 +188,11 @@ export const AdminDiscountsPage: React.FC = () => {
           </div>
 
           <div className="bg-white p-6 border border-black/10 shadow-sm space-y-1">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">Max Discount</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">Best active offer</span>
             <p className="font-display font-black text-3xl text-black font-mono">
-              25% OFF
+              {bestOffer ? bestOffer.title : '—'}
             </p>
-            <p className="text-[11px] text-neutral-600 font-medium">Applied on qualifying orders</p>
+            <p className="text-[11px] text-neutral-600 font-medium">{bestOffer ? bestOffer.note : 'No active coupons right now'}</p>
           </div>
         </div>
 
@@ -216,6 +237,9 @@ export const AdminDiscountsPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 font-bold text-black text-sm">
                       {d.type === 'PERCENTAGE' ? `${d.value}% OFF` : `RS. ${d.value} OFF`}
+                      {d.type === 'PERCENTAGE' && d.maxDiscountPaise ? (
+                        <span className="block text-[10.5px] font-semibold text-[#FF5400]">up to RS. {(d.maxDiscountPaise / 100).toLocaleString('en-IN')}</span>
+                      ) : null}
                     </td>
                     <td className="py-3.5 px-4 font-mono text-neutral-700">
                       Orders over RS. {(d.minOrderPaise / 100).toLocaleString('en-IN')}
@@ -316,6 +340,27 @@ export const AdminDiscountsPage: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {type === 'PERCENTAGE' && (
+                <div className="bg-orange-50 border border-orange-200 p-3">
+                  <label className="block uppercase font-bold text-neutral-700 tracking-wider mb-1">
+                    Max discount per order (INR) — optional
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={maxDiscountINR}
+                    onChange={(e) => setMaxDiscountINR(e.target.value)}
+                    placeholder="e.g. 200  (leave empty for no limit)"
+                    className="w-full border border-black/20 p-2.5 font-mono font-bold bg-white focus:border-black focus:outline-none"
+                  />
+                  <p className="text-[10.5px] text-neutral-600 mt-1">
+                    {parseFloat(maxDiscountINR) > 0
+                      ? `Customers get ${value || 0}% off, but never more than RS. ${parseFloat(maxDiscountINR).toLocaleString('en-IN')} on one order.`
+                      : `No limit — ${value || 0}% off the whole order, however big it is.`}
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

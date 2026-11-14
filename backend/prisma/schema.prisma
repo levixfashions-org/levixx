@@ -302,6 +302,7 @@ model Coupon {
   discountType  DiscountType
   discountValue Int          // percentage (e.g. 10 for 10%) or fixed paise (e.g. 50000 for Rs. 500)
   minOrderPaise Int          @default(0)
+  maxDiscountPaise Int?      // Cap for percentage coupons, e.g. 20% off up to Rs. 200 (null = no cap)
   maxUses       Int?
   usedCount     Int          @default(0)
   isActive      Boolean      @default(true)

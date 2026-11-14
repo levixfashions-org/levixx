@@ -125,6 +125,7 @@ export interface DiscountCode {
   type: 'PERCENTAGE' | 'FIXED';
   value: number; // percent, or rupees for FIXED
   minOrderPaise: number;
+  maxDiscountPaise?: number | null; // cap for % coupons (paise)
   isActive: boolean;
   expiresAt: string;
   maxUses?: number | null;

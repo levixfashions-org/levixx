@@ -60,11 +60,14 @@ export async function evaluateCoupon(rawCode: string, subtotalPaise: number): Pr
     coupon.discountType === DiscountType.PERCENTAGE
       ? Math.round((subtotalPaise * Math.min(100, coupon.discountValue)) / 100)
       : coupon.discountValue;
+  // Percentage coupons can have a maximum discount (e.g. 20% off, up to Rs. 200).
+  const cap = coupon.discountType === DiscountType.PERCENTAGE && coupon.maxDiscountPaise && coupon.maxDiscountPaise > 0 ? coupon.maxDiscountPaise : null;
+  if (cap) discountPaise = Math.min(discountPaise, cap);
   discountPaise = Math.max(0, Math.min(discountPaise, subtotalPaise));
 
   const description =
     coupon.discountType === DiscountType.PERCENTAGE
-      ? `${coupon.discountValue}% off`
+      ? `${coupon.discountValue}% off${cap ? ` (up to Rs. ${(cap / 100).toLocaleString('en-IN')})` : ''}`
       : `Rs. ${(coupon.discountValue / 100).toLocaleString('en-IN')} off`;
 
   return { code, discountPaise, description };
