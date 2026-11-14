@@ -220,7 +220,18 @@ export const HomePage: React.FC = () => {
               </section>
             )}
             {(data?.categorySections || []).map((c) => (
-              <ProductRail key={`cat-${c.id}`} title={c.name} products={c.products} href={`/collections/${c.slug}`} />
+              // Each category: 4 products in a 2 × 2 grid on phones (one row of 4 on computers).
+              <section key={`cat-${c.id}`} className="lx-panel mx-2 md:mx-[10px] pt-4 md:pt-5 pb-5 md:pb-6">
+                <div className="flex items-center justify-between px-4 md:px-[22px] mb-3 md:mb-4">
+                  <h2 className="lx-title">{c.name}</h2>
+                  <Link to={`/collections/${c.slug}`} className="px-4 py-[5px] rounded-full bg-black text-white text-[10px] font-medium hover:bg-neutral-800 transition-colors">
+                    Discover more
+                  </Link>
+                </div>
+                <div className="px-2.5 md:px-[16px]">
+                  <ProductGrid products={c.products.slice(0, 4)} />
+                </div>
+              </section>
             ))}
             {first && renderSection(first)}
             <GallerySlider slides={slides} />
