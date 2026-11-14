@@ -173,9 +173,36 @@ export const Footer: React.FC = () => {
             </form>
           </div>
         </div>
-        <p className="text-[9px] text-neutral-400 uppercase tracking-wide mt-10 md:text-right">
-          © {new Date().getFullYear()} {settings.legalName && settings.legalName !== 'LEVIX' ? `${settings.legalName} (LEVIX)` : 'LEVIX'}. All rights reserved.{settings.gstin ? ` · GSTIN ${settings.gstin}` : ''}
-        </p>
+        <div className="mt-10 flex flex-col-reverse md:flex-row md:items-center md:justify-between gap-3">
+          {/* Developer credit */}
+          <a
+            href="https://www.instagram.com/kittus.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Website designed and developed by kittus.dev on Instagram"
+            className="group self-start inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full bg-white border border-black/[0.07] shadow-[0_1px_4px_rgba(0,0,0,0.04)] hover:border-black/15 hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)] transition-all"
+          >
+            <span className="w-6 h-6 rounded-full flex items-center justify-center text-white bg-[radial-gradient(circle_at_30%_110%,#fdf497_0%,#fd5949_45%,#d6249f_60%,#285AEB_90%)] group-hover:scale-110 transition-transform">
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="5" />
+                <circle cx="12" cy="12" r="4" />
+                <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+              </svg>
+            </span>
+            <span className="text-[10px] text-neutral-500 tracking-wide">
+              Designed &amp; developed by{' '}
+              <span className="font-semibold text-black group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-[#fd5949] group-hover:via-[#d6249f] group-hover:to-[#285AEB] transition-colors">
+                @kittus.dev
+              </span>
+            </span>
+            <svg viewBox="0 0 24 24" className="w-3 h-3 text-neutral-400 group-hover:text-black group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+              <path d="M7 17 17 7M9 7h8v8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+          <p className="text-[9px] text-neutral-400 uppercase tracking-wide md:text-right">
+            © {new Date().getFullYear()} {settings.legalName && settings.legalName !== 'LEVIX' ? `${settings.legalName} (LEVIX)` : 'LEVIX'}. All rights reserved.{settings.gstin ? ` · GSTIN ${settings.gstin}` : ''}
+          </p>
+        </div>
       </div>
     </footer>
   );
