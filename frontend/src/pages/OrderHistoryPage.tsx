@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { Order } from '../types';
 import { Package, ArrowLeft, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
 
@@ -10,6 +11,20 @@ export const OrderHistoryPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  // Goes up whenever the store (e.g. the admin updating an order) changes → reload silently.
+  const live = useLiveRefresh();
+  const [focusTick, setFocusTick] = useState(0);
+
+  // Also refresh when the customer comes back to this tab / app.
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === 'visible' && setFocusTick((t) => t + 1);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -17,9 +32,10 @@ export const OrderHistoryPage: React.FC = () => {
       return;
     }
 
+    const silent = live > 0 || focusTick > 0;
     async function loadOrders() {
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         const res = await apiClient.get('/orders/my-orders');
         setOrders(res.data.orders || []);
       } catch (err) {
@@ -32,7 +48,7 @@ export const OrderHistoryPage: React.FC = () => {
     if (user) {
       loadOrders();
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, live, focusTick]);
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-10 space-y-8">

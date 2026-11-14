@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
+import { useLiveRefresh } from '../hooks/useLiveRefresh';
 
 interface TrackResult {
   orderNumber: string;
@@ -35,6 +36,17 @@ export const TrackOrderPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // While a tracked order is on screen, update it live when the store changes it.
+  const live = useLiveRefresh();
+  useEffect(() => {
+    if (!live || !result) return;
+    apiClient
+      .post('/orders/track', { orderNumber: result.orderNumber, email: email.trim() })
+      .then((res) => res.data?.order && setResult(res.data.order))
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
 
   const stepIdx = result ? STEPS.indexOf(result.status) : -1;
 
