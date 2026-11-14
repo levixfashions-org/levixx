@@ -39,9 +39,19 @@ export const AdminOrdersPage: React.FC = () => {
 
   const navigate = useNavigate();
 
-  const loadOrders = async () => {
+  /** Put one order's fresh data into the list (and the open details panel) without reloading everything. */
+  const mergeOrder = (orderId: string, patch: Record<string, any>) => {
+    setOrders((list: any[]) => list.map((o: any) => (o.id === orderId ? { ...o, ...patch } : o)));
+    setSelectedOrder((cur: any) => (cur && cur.id === orderId ? { ...cur, ...patch } : cur));
+  };
+  const flashMsg = (m: string) => {
+    setActionMsg(m);
+    window.setTimeout(() => setActionMsg((cur) => (cur === m ? null : cur)), 3000);
+  };
+
+  const loadOrders = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await apiClient.get('/admin/orders', { includeUnpaid: showUnpaid ? 'true' : undefined, limit: 200 });
       setOrders(res.data.orders || []);
     } catch (err) {
@@ -61,36 +71,31 @@ export const AdminOrdersPage: React.FC = () => {
   }, [user, isAdmin, authLoading, navigate, showUnpaid]);
 
   const markCodPaid = async (orderId: string) => {
+    const before = orders.find((o: any) => o.id === orderId) as any;
+    // Show it instantly; the server saves in the background.
+    mergeOrder(orderId, { paymentStatus: 'PAID' });
+    flashMsg(`✓ Cash received — order ${before?.orderNumber || ''} marked as paid.`);
     try {
-      setUpdatingId(orderId);
-      await apiClient.patch(`/admin/orders/${orderId}/status`, { markCodPaid: true });
-      const ordNo = orders.find((o) => o.id === orderId)?.orderNumber || '';
-      setActionMsg(`✓ Cash received — order ${ordNo} marked as paid.`);
-      await loadOrders();
-      if (selectedOrder && selectedOrder.id === orderId) setSelectedOrder({ ...selectedOrder, paymentStatus: 'PAID' });
-      setTimeout(() => setActionMsg(null), 4000);
+      const res = await apiClient.patch(`/admin/orders/${orderId}/status`, { markCodPaid: true });
+      if (res.data?.order) mergeOrder(orderId, res.data.order);
     } catch (err: any) {
-      alert(err.message || 'Failed to mark as paid');
-    } finally {
-      setUpdatingId(null);
+      if (before) mergeOrder(orderId, { paymentStatus: before.paymentStatus });
+      flashMsg(`✗ ${err.message || 'Failed to mark as paid'} — change undone.`);
     }
   };
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
+    const before = orders.find((o: any) => o.id === orderId) as any;
+    if (!before || before.status === newStatus) return;
+    // Instant: update the screen first, save in the background, undo only if the server refuses.
+    mergeOrder(orderId, { status: newStatus });
+    flashMsg(`✓ Order ${before.orderNumber} marked as ${newStatus}.`);
     try {
-      setUpdatingId(orderId);
-      await apiClient.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
-      const ordNo = orders.find((o) => o.id === orderId)?.orderNumber || '';
-      setActionMsg(`✓ Order ${ordNo} marked as ${newStatus}.`);
-      await loadOrders();
-      if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder({ ...selectedOrder, status: newStatus });
-      }
-      setTimeout(() => setActionMsg(null), 4000);
+      const res = await apiClient.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
+      if (res.data?.order) mergeOrder(orderId, res.data.order);
     } catch (err: any) {
-      alert(err.message || 'Failed to update order status');
-    } finally {
-      setUpdatingId(null);
+      mergeOrder(orderId, { status: before.status });
+      flashMsg(`✗ ${err.message || 'Failed to update order status'} — change undone.`);
     }
   };
 
@@ -102,14 +107,8 @@ export const AdminOrdersPage: React.FC = () => {
         courier: courierName.trim(),
         trackingNumber: trackingNumber.trim()
       });
-      setActionMsg(`✓ Courier & tracking number updated for Order ${selectedOrder.orderNumber}!`);
-      await loadOrders();
-      setSelectedOrder({
-        ...selectedOrder,
-        courier: courierName.trim(),
-        trackingNumber: trackingNumber.trim()
-      });
-      setTimeout(() => setActionMsg(null), 4000);
+      mergeOrder(selectedOrder.id, { courier: courierName.trim(), trackingNumber: trackingNumber.trim() });
+      flashMsg(`✓ Courier & tracking number updated for Order ${selectedOrder.orderNumber}!`);
     } catch (err: any) {
       alert(err.message || 'Failed to update tracking');
     } finally {
@@ -131,8 +130,7 @@ export const AdminOrdersPage: React.FC = () => {
       const res = await apiClient.delete(`/admin/orders/${orderId}${paid ? '?test=1' : ''}`);
       setActionMsg(`✓ Order ${orderNumber} deleted${res.data?.stockRestored ? ' — stock put back' : ''}.`);
       if (selectedOrder?.id === orderId) setSelectedOrder(null);
-      await loadOrders();
-      setTimeout(() => setActionMsg(null), 4000);
+      setOrders((list: any[]) => list.filter((o: any) => o.id !== orderId));
     } catch (err: any) {
       alert(err.message || 'Failed to delete order');
     }
@@ -179,7 +177,7 @@ export const AdminOrdersPage: React.FC = () => {
               <input type="checkbox" checked={showUnpaid} onChange={(e) => setShowUnpaid(e.target.checked)} className="accent-black" />
               Show abandoned / unpaid checkouts
             </label>
-            <button onClick={loadOrders} className="px-4 py-2.5 border border-black text-black text-xs font-bold uppercase tracking-wider hover:bg-black hover:text-white">
+            <button onClick={() => loadOrders()} className="px-4 py-2.5 border border-black text-black text-xs font-bold uppercase tracking-wider hover:bg-black hover:text-white">
               Refresh
             </button>
           </div>
