@@ -25,7 +25,7 @@ interface AdminCollection {
 }
 
 const LAYOUTS = [
-  { value: 'NONE', label: 'Not on homepage' },
+  { value: 'NONE', label: 'Hide from homepage' },
   { value: 'CAROUSEL', label: 'Homepage carousel (swipe row)' },
   { value: 'GRID', label: 'Homepage grid (2 rows of 4)' }
 ];

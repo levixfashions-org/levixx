@@ -688,7 +688,7 @@ const collectionSchema = z.object({
   mobileBannerUrl: imageUrl.optional().nullable().or(z.literal('')),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().default(0),
-  homeLayout: z.enum(['NONE', 'CAROUSEL', 'GRID']).default('NONE'),
+  homeLayout: z.enum(['NONE', 'CAROUSEL', 'GRID']).default('CAROUSEL'),
   showInGallery: z.boolean().default(false),
   showInMenu: z.boolean().default(true),
   productIds: z.array(z.string().max(64)).max(500).optional()

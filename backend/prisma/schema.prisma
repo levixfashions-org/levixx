@@ -95,7 +95,7 @@ model Collection {
   mobileBannerUrl String?             @db.Text
   isActive        Boolean             @default(true)
   sortOrder       Int                 @default(0)
-  homeLayout      String              @default("NONE") // NONE | CAROUSEL | GRID — how it appears on the homepage
+  homeLayout      String              @default("CAROUSEL") // NONE | CAROUSEL | GRID — how it appears on the homepage
   showInGallery   Boolean             @default(false)  // appears in the homepage banner slideshow
   showInMenu      Boolean             @default(true)
   products        CollectionProduct[]
