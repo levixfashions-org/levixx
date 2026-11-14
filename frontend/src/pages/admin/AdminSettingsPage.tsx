@@ -449,6 +449,19 @@ export const AdminSettingsPage: React.FC = () => {
               </label>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs border border-black/10 bg-neutral-50 p-4">
+              <p className="md:col-span-2 text-[11px] font-black uppercase tracking-wider text-black">Opening animation text <span className="font-normal normal-case text-neutral-500">(shown under the big LEVIX when the site opens)</span></p>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Main line</label>
+                <input maxLength={80} value={settings.introTagline ?? ''} onChange={(e) => setSettings({ ...settings, introTagline: e.target.value })} placeholder="Level up your style" className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Small line below</label>
+                <input maxLength={80} value={settings.introSubline ?? ''} onChange={(e) => setSettings({ ...settings, introSubline: e.target.value })} placeholder="The 1st Drop is live" className="w-full border border-black/20 p-2.5 focus:border-black focus:outline-none" />
+              </div>
+              <p className="md:col-span-2 text-[10px] text-neutral-500">Keep each line short (up to ~30 characters looks best on phones). Leave a box empty to hide that line. Press Save at the bottom.</p>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
               <div>
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">Footer SEO heading</label>

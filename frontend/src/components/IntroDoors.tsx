@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useSettingsStore } from '../store/settingsStore';
 
 const SEEN_KEY = 'levix_intro_seen';
 
@@ -27,6 +28,19 @@ function shouldShow(pathname: string): boolean {
  */
 export const IntroDoors: React.FC = () => {
   const { pathname } = useLocation();
+  const tagline = useSettingsStore((s) => s.settings.introTagline);
+  const subline = useSettingsStore((s) => s.settings.introSubline);
+  const loaded = useSettingsStore((s) => s.loaded);
+  // First visit: wait for your saved text (max ~1.2s) so the old default never flashes.
+  const [hadCache] = useState(() => {
+    try { return !!localStorage.getItem('levix_settings_cache'); } catch { return false; }
+  });
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setWaited(true), 1200);
+    return () => clearTimeout(t);
+  }, []);
+  const textReady = loaded || hadCache || waited;
   const [show] = useState(() => shouldShow(pathname));
   const [phase, setPhase] = useState<Phase>('closed');
   const timers = useRef<number[]>([]);
@@ -91,8 +105,10 @@ export const IntroDoors: React.FC = () => {
             ))}
           </h1>
           <span className="lx-intro-line" />
-          <p className="lx-intro-tag">Level up your style</p>
-          <p className="lx-intro-sub">The 1st Drop is live</p>
+          <div style={{ opacity: textReady ? 1 : 0, transition: 'opacity .4s ease' }}>
+            {tagline?.trim() && <p className="lx-intro-tag">{tagline}</p>}
+            {subline?.trim() && <p className="lx-intro-sub">{subline}</p>}
+          </div>
         </div>
       </div>
 

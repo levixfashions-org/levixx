@@ -321,6 +321,8 @@ model StoreSetting {
   shippingFee           Int      @default(150)  // rupees
   announcementEnabled   Boolean  @default(false)
   googleSiteVerification String?  @db.Text
+  introTagline           String?  @db.VarChar(80)  // Opening animation: big line under LEVIX
+  introSubline           String?  @db.VarChar(80)  // Opening animation: small line under the tagline
   menCoverImage         String?  @db.Text
   womenCoverImage       String?  @db.Text
   heroDesktopImage      String?  @db.Text

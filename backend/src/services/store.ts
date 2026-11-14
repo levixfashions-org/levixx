@@ -12,6 +12,8 @@ export interface PublicStoreSettings {
   announcementEnabled: boolean;
   menCoverImage: string;
   googleSiteVerification: string;
+  introTagline: string;
+  introSubline: string;
   womenCoverImage: string;
   heroDesktopImage: string;
   heroMobileImage: string;
@@ -47,6 +49,8 @@ export const DEFAULT_SETTINGS: PublicStoreSettings = {
   announcementEnabled: false,
   menCoverImage: '',
   googleSiteVerification: '',
+  introTagline: 'Level up your style',
+  introSubline: 'The 1st Drop is live',
   womenCoverImage: '',
   heroDesktopImage: '',
   heroMobileImage: '',
