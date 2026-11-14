@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { usePwa } from '../context/PwaContext';
-import { Download, X, Sparkles, Smartphone, Check } from 'lucide-react';
+import { Download, X, Sparkles, Check, Share, PlusSquare, MoreHorizontal, Copy } from 'lucide-react';
 
 const DISMISS_KEY = 'levix_pwa_banner_closed_at';
 const HIDE_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const GlassyPwaNotification: React.FC = () => {
-  const { isInstallable, isInstalled, isIOS, promptInstall } = usePwa();
+  const { isInstalled, isIOS, iosBrowser, inAppName, promptInstall } = usePwa();
+  const [showGuide, setShowGuide] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [visible, setVisible] = useState(false);
   const [installedSuccess, setInstalledSuccess] = useState(false);
 
@@ -31,6 +33,16 @@ export const GlassyPwaNotification: React.FC = () => {
     return () => clearTimeout(timer);
   }, [isInstalled]);
 
+  // "Install the app" in the footer opens the steps, even if the banner was closed earlier.
+  useEffect(() => {
+    const open = () => {
+      setShowGuide(true);
+      setVisible(true);
+    };
+    window.addEventListener('levix:install-help', open);
+    return () => window.removeEventListener('levix:install-help', open);
+  }, []);
+
   const handleDismiss = (e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
@@ -50,8 +62,85 @@ export const GlassyPwaNotification: React.FC = () => {
       setTimeout(() => {
         setVisible(false);
       }, 3000);
+      return;
     }
+    // No automatic install here (always the case on iPhone) → show the steps.
+    setShowGuide(true);
   };
+
+  const copyLink = async () => {
+    const url = window.location.origin + '/';
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const t = document.createElement('textarea');
+      t.value = url;
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      t.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const step = (n: number, body: React.ReactNode) => (
+    <li className="flex items-start gap-2.5">
+      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#FF5400] text-white text-[10px] font-black flex items-center justify-center mt-0.5">{n}</span>
+      <span className="text-[12px] leading-snug text-white/90">{body}</span>
+    </li>
+  );
+  const chip = (icon: React.ReactNode, label: string) => (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded bg-white/15 text-white font-semibold whitespace-nowrap align-middle">{icon}{label}</span>
+  );
+  const shareChip = chip(<Share className="w-3 h-3" />, 'Share');
+  const addChip = chip(<PlusSquare className="w-3 h-3" />, 'Add to Home Screen');
+
+  const guide = (() => {
+    if (!isIOS) {
+      return (
+        <ol className="space-y-2">
+          {step(1, <>Open your browser menu {chip(<MoreHorizontal className="w-3.5 h-3.5" />, '')}</>)}
+          {step(2, <>Tap <b>Install app</b> or <b>Add to Home screen</b></>)}
+          {step(3, <>Tap <b>Install</b> — LEVIX appears on your home screen</>)}
+        </ol>
+      );
+    }
+    if (iosBrowser === 'inapp' || iosBrowser === 'other') {
+      return (
+        <div className="space-y-2.5">
+          <p className="text-[12px] text-white/90 leading-snug">
+            You're inside {inAppName ? <b>{inAppName}</b> : 'an app'}'s browser. iPhone only lets you add apps from <b>Safari</b>.
+          </p>
+          <ol className="space-y-2">
+            {step(1, <>Tap {chip(<MoreHorizontal className="w-3.5 h-3.5" />, '')} (top or bottom right) → <b>Open in Safari</b></>)}
+            {step(2, <>Or copy the link and paste it in Safari</>)}
+            {step(3, <>In Safari, tap <b>How to install</b> again for the steps</>)}
+          </ol>
+          <button type="button" onClick={copyLink} className="px-3 py-1.5 rounded-lg bg-white text-black text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied ? 'Link copied' : 'Copy link'}
+          </button>
+        </div>
+      );
+    }
+    if (iosBrowser === 'safari') {
+      return (
+        <ol className="space-y-2">
+          {step(1, <>Tap {shareChip} in Safari's toolbar. On newer iPhones tap {chip(<MoreHorizontal className="w-3.5 h-3.5" />, '')} first, then {shareChip}</>)}
+          {step(2, <>Scroll down and tap {addChip}</>)}
+          {step(3, <>Keep <b>Open as Web App</b> on and tap <b>Add</b></>)}
+        </ol>
+      );
+    }
+    // Chrome / Edge / Firefox on iPhone (iOS 16.4+)
+    return (
+      <ol className="space-y-2">
+        {step(1, <>Tap {shareChip} {iosBrowser === 'chrome' ? 'at the top-right of the address bar' : iosBrowser === 'edge' ? 'in the bottom menu' : 'in the menu'}</>)}
+        {step(2, <>Tap {addChip} (scroll or tap <b>More</b> if you don't see it)</>)}
+        {step(3, <>Tap <b>Add</b>. Not there? Open thelevix.shop in <b>Safari</b> and try again</>)}
+      </ol>
+    );
+  })();
 
   if (!visible || isInstalled) return null;
 
@@ -102,13 +191,17 @@ export const GlassyPwaNotification: React.FC = () => {
               Install App on Mobile
             </h2>
 
+            {showGuide ? (
+              <div className="pt-1.5">{guide}</div>
+            ) : (
             <p className="text-[11px] text-white/70 leading-relaxed">
               Add LEVIX directly to your home screen for 1-tap checkout, instant drop alerts & faster navigation.
             </p>
+            )}
 
             {/* Action Buttons */}
             <div className="pt-2.5 flex items-center gap-2.5">
-              {installedSuccess ? (
+              {showGuide ? null : installedSuccess ? (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600/90 text-white rounded-lg text-xs font-bold uppercase tracking-wider">
                   <Check className="w-3.5 h-3.5" />
                   <span>Installed!</span>
@@ -119,7 +212,7 @@ export const GlassyPwaNotification: React.FC = () => {
                   className="px-4 py-2 bg-gradient-to-r from-[#FF5400] to-[#ff6a20] hover:from-[#e04a00] hover:to-[#FF5400] text-white rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-[#FF5400]/30 transition-all hover:scale-[1.02] cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Install App</span>
+                  <span>{isIOS ? 'How to install' : 'Install App'}</span>
                 </button>
               )}
 
@@ -128,7 +221,7 @@ export const GlassyPwaNotification: React.FC = () => {
                 onClick={handleDismiss}
                 className="px-3 py-2 text-[11px] text-white/60 hover:text-white uppercase tracking-wider font-semibold transition-colors cursor-pointer"
               >
-                Not Now
+                {showGuide ? 'Close' : 'Not Now'}
               </button>
             </div>
           </div>

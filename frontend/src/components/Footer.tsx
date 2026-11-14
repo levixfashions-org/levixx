@@ -139,7 +139,7 @@ export const Footer: React.FC = () => {
             <FLink to="/account">Members login</FLink>
             <FLink to="/wishlist">Saved items</FLink>
             {!isInstalled && (
-              <button onClick={promptInstall} className="block text-[11px] text-neutral-500 hover:text-black py-[3px]">Install the app</button>
+              <button onClick={async () => { if (!(await promptInstall())) window.dispatchEvent(new Event('levix:install-help')); }} className="block text-[11px] text-neutral-500 hover:text-black py-[3px]">Install the app</button>
             )}
           </div>
           <div className="col-span-2 md:col-span-5 flex flex-col md:items-end justify-between gap-6">
