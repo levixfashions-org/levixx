@@ -1,3 +1,4 @@
+import { sortBestSellers } from '../services/bestsellers.js';
 import { prisma } from '../config/db.js';
 import { getSettings } from '../services/store.js';
 import { productListInclude, serializeProduct } from '../utils/serialize.js';
@@ -93,8 +94,32 @@ export async function getHome(_req, res) {
         layout: c.homeLayout,
         products: c.products.map((cp) => serializeProduct(cp.product))
     });
+    // One row per category on the homepage (best sellers first when the category auto-sorts).
+    const catProducts = await prisma.product.findMany({
+        where: { isActive: true, categoryId: { in: categories.map((c) => c.id) } },
+        orderBy: [{ position: 'asc' }, { createdAt: 'desc' }],
+        take: 600,
+        include: productListInclude
+    });
+    const categorySections = categories
+        .map((c) => {
+        const list = catProducts.filter((p) => p.categoryId === c.id);
+        const ordered = c.autoSort ? sortBestSellers(list) : list;
+        return {
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            description: c.description,
+            bannerImageUrl: c.imageUrl,
+            mobileBannerUrl: null,
+            layout: 'CAROUSEL',
+            products: ordered.slice(0, 16).map(serializeProduct)
+        };
+    })
+        .filter((s) => s.products.length > 0);
     const body = {
         settings,
+        categorySections,
         latestDrop: latest.map(serializeProduct),
         sections: collections
             .filter((c) => (c.homeLayout === 'CAROUSEL' || c.homeLayout === 'GRID') && c.products.length > 0)

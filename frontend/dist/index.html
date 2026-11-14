@@ -1,23 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-IN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>LEVIX | Premium Streetwear</title>
-    <meta name="description" content="LEVIX — premium heavyweight streetwear. Overlength tees, waffle boxy full sleeves and acid wash tees. Shipped across India." />
+    <!--seo-->
+    <title>LEVIX | Premium Streetwear — Overlength, Waffle & Acid Wash Tees</title>
+    <meta name="description" content="LEVIX — premium heavyweight streetwear from India. Overlength tees, waffle boxy full sleeves and acid wash tees. Free delivery on every order." />
     <link rel="canonical" href="https://thelevix.shop/" />
-
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="LEVIX" />
     <meta property="og:title" content="LEVIX | Premium Streetwear" />
-    <meta property="og:description" content="Premium heavyweight streetwear. Limited drops, shipped across India." />
+    <meta property="og:description" content="Premium heavyweight streetwear. Limited drops, free delivery across India." />
     <meta property="og:url" content="https://thelevix.shop/" />
     <meta property="og:image" content="https://thelevix.shop/hero_desktop.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
+    <!--/seo-->
 
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#0A0A0A" />
+    <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -29,12 +31,70 @@
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="preload" as="image" href="/hero_desktop.jpg" media="(min-width: 951px)" />
     <link rel="preload" as="image" href="/hero_mobile.jpg" media="(max-width: 950px)" />
-    <script type="module" crossorigin src="/assets/index-DFgs65G1.js"></script>
+    <script type="module" crossorigin src="/assets/index-D_BxwqBM.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/react-BEDKma9L.js">
     <link rel="modulepreload" crossorigin href="/assets/firebase-Dzhtz4Cf.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-p9N0gcor.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-CVRcIUwL.css">
   </head>
   <body class="bg-[#EFEFEF] text-black font-sans antialiased selection:bg-black selection:text-white min-h-screen">
+    <!-- Launch screen: shown only when LEVIX is opened as the installed app -->
+    <style>
+      #lx-splash{position:fixed;inset:0;z-index:2147483647;display:none;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(120% 80% at 50% 38%,#1c1c1e 0%,#0a0a0a 55%,#000 100%);color:#fff;overflow:hidden;transition:opacity .55s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+      html.lx-app #lx-splash{display:flex}
+      html.lx-app,html.lx-app body{background:#0a0a0a}
+      #lx-splash.lx-out{opacity:0;transform:scale(1.06);pointer-events:none}
+      #lx-splash .lx-glow{position:absolute;width:78vmin;height:78vmin;border-radius:50%;background:radial-gradient(circle,rgba(255,84,0,.32) 0%,rgba(255,84,0,.08) 45%,transparent 70%);filter:blur(8px);animation:lxPulse 2.4s ease-in-out infinite}
+      #lx-splash .lx-ring{position:absolute;width:46vmin;height:46vmin;max-width:260px;max-height:260px;border-radius:50%;border:1px solid rgba(255,255,255,.08);animation:lxRing 2.2s cubic-bezier(.2,.8,.2,1) infinite}
+      #lx-splash svg{position:relative;width:26vmin;max-width:150px;height:auto;overflow:visible;filter:drop-shadow(0 6px 22px rgba(255,84,0,.55))}
+      #lx-splash svg path{fill:url(#lxOr);fill-opacity:0;stroke:#FF5400;stroke-width:4;stroke-linejoin:round;stroke-dasharray:900;stroke-dashoffset:900;animation:lxDraw .9s cubic-bezier(.6,0,.2,1) forwards,lxFill .45s ease .75s forwards}
+      #lx-splash svg path:nth-child(3){animation-delay:.12s,.85s}
+      #lx-splash svg path:nth-child(4){animation-delay:.22s,.95s}
+      #lx-splash .lx-word{position:relative;margin-top:5.5vmin;font:900 clamp(22px,6.4vmin,34px)/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;letter-spacing:.9em;padding-left:.9em;opacity:0;animation:lxWord .9s cubic-bezier(.2,.8,.2,1) .7s forwards}
+      #lx-splash .lx-tag{position:relative;margin-top:14px;font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.42em;padding-left:.42em;color:rgba(255,255,255,.55);text-transform:uppercase;opacity:0;animation:lxUp .7s ease 1.05s forwards}
+      #lx-splash .lx-tag b{color:#FF5400;font-weight:700}
+      #lx-splash .lx-bar{position:absolute;left:50%;bottom:calc(9vh + env(safe-area-inset-bottom));width:120px;height:2px;margin-left:-60px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden}
+      #lx-splash .lx-bar i{position:absolute;inset:0;width:40%;border-radius:2px;background:linear-gradient(90deg,transparent,#FF5400,transparent);animation:lxBar 1.1s ease-in-out infinite}
+      @keyframes lxDraw{to{stroke-dashoffset:0}}
+      @keyframes lxFill{to{fill-opacity:1;stroke-opacity:0}}
+      @keyframes lxWord{from{opacity:0;letter-spacing:1.6em;filter:blur(6px)}to{opacity:1;letter-spacing:.9em;filter:blur(0)}}
+      @keyframes lxUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+      @keyframes lxPulse{0%,100%{transform:scale(.92);opacity:.75}50%{transform:scale(1.05);opacity:1}}
+      @keyframes lxRing{from{transform:scale(.7);opacity:.9}to{transform:scale(1.6);opacity:0}}
+      @keyframes lxBar{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
+      @media (prefers-reduced-motion:reduce){#lx-splash *{animation:none!important}#lx-splash svg path{fill-opacity:1;stroke-opacity:0;stroke-dashoffset:0}#lx-splash .lx-word,#lx-splash .lx-tag{opacity:1}}
+    </style>
+    <script>
+      (function () {
+        try {
+          var app = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+          if (!app || sessionStorage.getItem('lx_splash_seen')) return;
+          sessionStorage.setItem('lx_splash_seen', '1');
+          document.documentElement.classList.add('lx-app');
+          var start = Date.now();
+          var hide = function () {
+            var el = document.getElementById('lx-splash');
+            if (!el || el.classList.contains('lx-out')) return;
+            setTimeout(function () {
+              el.classList.add('lx-out');
+              setTimeout(function () { el.remove(); document.documentElement.classList.remove('lx-app'); }, 700);
+            }, Math.max(0, 1700 - (Date.now() - start)));
+          };
+          window.addEventListener('load', hide);
+          setTimeout(hide, 4500); // never block the shop for long
+        } catch (e) {}
+      })();
+    </script>
+    <div id="lx-splash" aria-hidden="true">
+      <div class="lx-glow"></div>
+      <div class="lx-ring"></div>
+      <svg viewBox="0 0 230 255" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="lxOr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF7A2E"/><stop offset=".55" stop-color="#FF5400"/><stop offset="1" stop-color="#E64600"/></linearGradient></defs>
+        <path d="M0 0H51V203H230V255H0Z"/><path d="M65 38H111L184 203H138Z"/><path d="M144 38H190L116 203H70Z"/>
+      </svg>
+      <div class="lx-word">LEVIX</div>
+      <div class="lx-tag">Premium <b>/</b> Streetwear</div>
+      <div class="lx-bar"><i></i></div>
+    </div>
     <noscript>Please enable JavaScript to shop at LEVIX.</noscript>
     <div id="root"></div>
   </body>

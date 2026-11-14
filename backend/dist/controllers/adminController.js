@@ -293,6 +293,18 @@ export async function reorderProducts(req, res) {
     await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
     res.json({ success: true, count: unique.length });
 }
+/** PUT /admin/products/:id/pin — body { pinned }: pinned products stay on top of auto-sorted categories. */
+export async function pinProduct(req, res) {
+    const { pinned } = z.object({ pinned: z.boolean() }).parse(req.body);
+    const product = await prisma.product.update({ where: { id: req.params.id }, data: { pinned }, select: { id: true, pinned: true } });
+    res.json({ product });
+}
+/** POST /admin/products/recount-sales — recount best sellers now. */
+export async function recountSales(_req, res) {
+    const { recomputeSalesScores } = await import('../services/bestsellers.js');
+    const changed = await recomputeSalesScores();
+    res.json({ success: true, changed });
+}
 /** PUT /admin/categories/reorder — body { ids } in display order (menu, slideshow, stories). */
 export async function reorderCategories(req, res) {
     const { ids } = z.object({ ids: z.array(z.string().min(1).max(64)).min(1).max(500) }).parse(req.body);
@@ -452,7 +464,8 @@ const categorySchema = z.object({
     group: z.enum(['TOP', 'BOTTOM', 'ACCESSORIES']).optional().nullable(),
     description: z.string().max(2000).optional().nullable(),
     imageUrl: imageUrl.optional().nullable().or(z.literal('')),
-    sortOrder: z.number().int().optional()
+    sortOrder: z.number().int().optional(),
+    autoSort: z.boolean().optional()
 });
 export async function createCategory(req, res) {
     const data = categorySchema.parse(req.body);
@@ -463,7 +476,8 @@ export async function createCategory(req, res) {
             description: data.description || null,
             imageUrl: data.imageUrl || null,
             sortOrder: data.sortOrder ?? 0,
-            group: data.group || 'TOP'
+            group: data.group || 'TOP',
+            autoSort: data.autoSort ?? true
         }
     });
     res.status(201).json({ category });
@@ -477,7 +491,8 @@ export async function updateCategory(req, res) {
             ...(data.description !== undefined ? { description: data.description || null } : {}),
             ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl || null } : {}),
             ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-            ...(data.group !== undefined ? { group: data.group || 'TOP' } : {})
+            ...(data.group !== undefined ? { group: data.group || 'TOP' } : {}),
+            ...(data.autoSort !== undefined ? { autoSort: data.autoSort } : {})
         }
     });
     res.json({ category });
@@ -500,6 +515,9 @@ const settingsSchema = patchSchema(z.object({
     freeShippingThreshold: z.coerce.number().int().min(0).max(1000000),
     shippingFee: z.coerce.number().int().min(0).max(100000),
     announcementEnabled: z.boolean(),
+    googleSiteVerification: z.string().trim().max(300),
+    introTagline: z.string().trim().max(80),
+    introSubline: z.string().trim().max(80),
     menCoverImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Cover image must be uploaded or a full URL'),
     womenCoverImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Cover image must be uploaded or a full URL'),
     heroDesktopImage: z.string().trim().max(2000).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith('/'), 'Hero image must be a full URL'),

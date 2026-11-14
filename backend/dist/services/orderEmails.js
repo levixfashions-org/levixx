@@ -46,7 +46,7 @@ ${order.codFeePaise ? `<tr><td style="padding:6px 0;color:#555">COD fee</td><td 
 <tr><td style="border-top:1px solid #eee;padding:16px 28px;font-size:11px;color:#888;text-align:center">LEVIX · <a href="${SITE}" style="color:#888">thelevix.shop</a> · Damaged item? Reply within 48 hours of delivery with photos and an unboxing video.</td></tr>
 </table></td></tr></table></body></html>`;
     const name = (order.customerName || '').trim().split(' ')[0] || 'there';
-    const customerHtml = wrap(cod ? 'Order placed' : 'Order confirmed', `Hi ${esc(name)}, thank you for shopping with LEVIX! ${cod ? 'Your Cash on Delivery order is confirmed.' : 'We have received your payment.'} We pack and dispatch within 1–3 business days and will share tracking as soon as it ships.`, 'customer');
+    const customerHtml = wrap(cod ? 'Order placed' : 'Order confirmed', `Hi ${esc(name)}, thank you for shopping with LEVIX! ${cod ? 'Your Cash on Delivery order is confirmed.' : 'We have received your payment.'} We pack and dispatch within 2–5 business days and will share tracking as soon as it ships.`, 'customer');
     const text = `Order ${order.orderNumber} — ${cod ? 'to pay on delivery' : 'paid'} ${rs(order.totalPaise)}\n${order.items.map((i) => `${i.productName} ${[i.color, i.size].filter(Boolean).join('/')} x${i.quantity}`).join('\n')}\nDelivering to: ${formatAddress(order.shippingAddressSnapshot)}\nView: ${link}`;
     const jobs = [
         sendMail(order.customerEmail, `${cod ? 'Order placed' : 'Order confirmed'} — ${order.orderNumber} | LEVIX`, customerHtml, text)

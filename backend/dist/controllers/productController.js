@@ -1,6 +1,7 @@
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { productListInclude, productFullInclude, serializeProduct, genderFilter } from '../utils/serialize.js';
+import { sortBestSellers } from '../services/bestsellers.js';
 function buildOrderBy(sort) {
     switch (sort) {
         case 'price-asc':
@@ -69,6 +70,26 @@ export async function getProducts(req, res) {
             { category: { name: { contains: q } } }
         ];
         where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { OR: searchOr }];
+    }
+    // A category with "Auto-sort by best sellers" on: pinned first, then most sold (only for the default order).
+    const autoCat = catSlug && (!sort || sort === 'featured') && !['all', 'all-products', 'new-in', 'men', 'women'].includes(catSlug)
+        ? await prisma.category.findUnique({ where: { slug: catSlug }, select: { autoSort: true } })
+        : null;
+    if (autoCat?.autoSort) {
+        const all = await prisma.product.findMany({
+            where,
+            select: { id: true, pinned: true, salesScore: true, position: true, createdAt: true },
+            take: 2000
+        });
+        const ids = sortBestSellers(all).slice(skip, skip + take).map((p) => p.id);
+        const rows = await prisma.product.findMany({ where: { id: { in: ids } }, include: productListInclude });
+        const byId = new Map(rows.map((r) => [r.id, r]));
+        res.set('Cache-Control', 'no-cache');
+        res.json({
+            products: ids.map((id) => byId.get(id)).filter(Boolean).map(serializeProduct),
+            pagination: { page, limit: take, total: all.length, totalPages: Math.ceil(all.length / take) }
+        });
+        return;
     }
     const [total, products] = await Promise.all([
         prisma.product.count({ where }),
