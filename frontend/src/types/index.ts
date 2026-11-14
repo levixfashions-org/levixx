@@ -188,6 +188,7 @@ export interface MenuCategory {
 
 export interface HomeData {
   latestDrop: Product[];
+  categorySections?: HomeSection[];
   sections: HomeSection[];
   gallery: { id: string; name: string; slug: string; bannerImageUrl?: string | null; mobileBannerUrl?: string | null }[];
   menu: {

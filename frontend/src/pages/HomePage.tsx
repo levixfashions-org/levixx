@@ -219,6 +219,9 @@ export const HomePage: React.FC = () => {
                 </div>
               </section>
             )}
+            {(data?.categorySections || []).map((c) => (
+              <ProductRail key={`cat-${c.id}`} title={c.name} products={c.products} href={`/collections/${c.slug}`} />
+            ))}
             {first && renderSection(first)}
             <GallerySlider slides={slides} />
             {rest.map(renderSection)}
