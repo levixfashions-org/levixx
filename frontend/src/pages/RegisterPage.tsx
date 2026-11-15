@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PasswordInput } from '../components/PasswordInput';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { authService, friendlyAuthError } from '../services/authService';
@@ -76,19 +77,19 @@ export const RegisterPage: React.FC = () => {
       <form onSubmit={handleRegister} className="space-y-3.5">
         <div>
           <label htmlFor="reg-name" className={authLabel}>Full name</label>
-          <input id="reg-name" type="text" required autoComplete="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" className={authInput} />
+          <input id="reg-name" type="text" required autoComplete="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Enter your name" className={authInput} />
         </div>
         <div>
           <label htmlFor="reg-email" className={authLabel}>Email</label>
-          <input id="reg-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@domain.com" className={authInput} />
+          <input id="reg-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email" className={authInput} />
         </div>
         <div>
           <label htmlFor="reg-pass" className={authLabel}>Password</label>
-          <input id="reg-pass" type="password" required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" className={authInput} />
+          <PasswordInput id="reg-pass" required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" className={authInput} />
         </div>
         <div>
           <label htmlFor="reg-confirm" className={authLabel}>Confirm password</label>
-          <input id="reg-confirm" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat password" className={authInput} />
+          <PasswordInput id="reg-confirm" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Re-enter your password" className={authInput} />
         </div>
         <button type="submit" disabled={loading} className={authButton}>
           <span>{loading ? 'Creating account…' : 'Create account'}</span>

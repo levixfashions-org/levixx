@@ -50,7 +50,7 @@ export const ForgotPasswordPage: React.FC = () => {
           {errorMsg && <AuthError>{errorMsg}</AuthError>}
           <div>
             <label htmlFor="fp-email" className={authLabel}>Email</label>
-            <input id="fp-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@domain.com" className={authInput} />
+            <input id="fp-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email" className={authInput} />
           </div>
           <button type="submit" disabled={loading} className={authButton}>
             <span>{loading ? 'Sending…' : 'Send reset link'}</span>

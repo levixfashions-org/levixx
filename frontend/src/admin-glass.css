@@ -410,3 +410,6 @@ body.lx-admin main .fixed.inset-0 div.border:not([class*='rounded']) { border-ra
 @keyframes lxFadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes lxSheetUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .lx-acct-card, .lx-sheet, .lx-sheet-backdrop { animation: none; } }
+
+/* Hide Edge/IE built-in password eye — we show our own */
+input::-ms-reveal, input::-ms-clear { display: none; }

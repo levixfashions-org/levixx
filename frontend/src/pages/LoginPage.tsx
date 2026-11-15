@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { authService, friendlyAuthError } from '../services/authService';
 import { apiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { PasswordInput } from '../components/PasswordInput';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
 
 export const LoginPage: React.FC = () => {
@@ -125,7 +126,7 @@ export const LoginPage: React.FC = () => {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@domain.com"
+              placeholder="Enter your email"
               className="lx-field w-full h-12 px-4 text-[15px]"
             />
           </div>
@@ -139,14 +140,13 @@ export const LoginPage: React.FC = () => {
                 Forgot?
               </Link>
             </div>
-            <input
+            <PasswordInput
               id="login-password"
-              type="password"
               required
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
+              placeholder="Enter your password"
               className="lx-field w-full h-12 px-4 text-[15px]"
             />
           </div>
