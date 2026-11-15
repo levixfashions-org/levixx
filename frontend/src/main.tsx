@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import './index.css';
+import './admin-glass.css';
 
 // PWA service worker (production only, so local development never serves stale files).
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

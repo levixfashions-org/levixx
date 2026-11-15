@@ -1,0 +1,384 @@
+/* =============================================================================================
+ * LEVIX Admin — frosted glass theme (iOS-style)
+ * Everything is scoped to body.lx-admin, which is set only on /admin routes, so the shop is untouched.
+ * ============================================================================================= */
+
+body.lx-admin {
+  --g-ink: #0b0b0f;
+  --g-ink-2: #3a3a3f;
+  --g-ink-3: #6e6e73;
+  --g-hair: rgba(17, 17, 26, 0.08);
+  --g-hair-2: rgba(17, 17, 26, 0.12);
+  --g-glass: rgba(255, 255, 255, 0.56);
+  --g-glass-2: rgba(255, 255, 255, 0.72);
+  --g-glass-3: rgba(255, 255, 255, 0.86);
+  --g-edge: rgba(255, 255, 255, 0.75);
+  --g-blur: blur(28px) saturate(190%);
+  --g-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 0 0 0.5px rgba(17, 17, 26, 0.05),
+    0 1px 2px rgba(17, 17, 26, 0.04),
+    0 12px 32px -14px rgba(17, 17, 26, 0.16);
+  --g-radius: 22px;
+  --g-orange: #ff5400;
+
+  background: #eceef3;
+  color: var(--g-ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+/* Wallpaper: soft colour light behind the glass, like an iPhone home screen. */
+body.lx-admin::before {
+  content: '';
+  position: fixed;
+  inset: -10vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 30vmax at 8% 4%, rgba(255, 138, 76, 0.42), transparent 70%),
+    radial-gradient(34vmax 28vmax at 92% 8%, rgba(126, 146, 255, 0.34), transparent 70%),
+    radial-gradient(40vmax 32vmax at 78% 96%, rgba(255, 112, 170, 0.22), transparent 70%),
+    radial-gradient(34vmax 30vmax at 4% 92%, rgba(86, 204, 196, 0.22), transparent 70%),
+    radial-gradient(30vmax 24vmax at 50% 50%, rgba(255, 255, 255, 0.55), transparent 70%),
+    linear-gradient(180deg, #f5f6fa 0%, #eceef3 100%);
+  filter: saturate(115%);
+}
+/* Fine grain so the gradients never band. */
+body.lx-admin::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+body.lx-admin .lx-app-root,
+body.lx-admin main .bg-\[\#EFEFEF\] { background: transparent !important; }
+
+body.lx-admin ::selection { background: rgba(255, 84, 0, 0.18); color: inherit; }
+
+/* ---------- Navigation bar ---------- */
+.lx-glass-bar {
+  background: rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 0.5px rgba(17, 17, 26, 0.06),
+    0 8px 30px -12px rgba(17, 17, 26, 0.22);
+}
+.lx-app-icon {
+  background: linear-gradient(180deg, #232327 0%, #0a0a0c 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 4px 10px -4px rgba(0, 0, 0, 0.45);
+}
+.lx-segment {
+  background: rgba(17, 17, 26, 0.05);
+  border-radius: 13px;
+  box-shadow: inset 0 0.5px 1px rgba(17, 17, 26, 0.06);
+}
+.lx-seg-item {
+  color: #4a4a50;
+  transition: background-color 0.25s ease, color 0.2s ease, box-shadow 0.25s ease;
+}
+.lx-seg-item:hover { color: #0b0b0f; background: rgba(255, 255, 255, 0.5); }
+.lx-seg-item.is-active {
+  color: #0b0b0f;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 0.5px rgba(17, 17, 26, 0.06), 0 2px 8px -2px rgba(17, 17, 26, 0.16), 0 1px 1px rgba(17, 17, 26, 0.04);
+}
+.lx-seg-item.is-active svg { color: var(--g-orange, #ff5400); }
+.lx-icon-btn { color: #3a3a3f; transition: background-color 0.2s ease, color 0.2s ease; }
+.lx-icon-btn:hover { background: rgba(17, 17, 26, 0.06); color: #0b0b0f; }
+.lx-avatar {
+  color: #fff;
+  background: linear-gradient(160deg, #ff8a45, #ff5400 60%, #e64600);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 6px -2px rgba(255, 84, 0, 0.55);
+}
+.lx-tabs-scroll { scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 14px), transparent); }
+.lx-tabs-scroll::-webkit-scrollbar { display: none; }
+@media (min-width: 1100px) { .lx-tabs-scroll { -webkit-mask-image: none; mask-image: none; } }
+
+/* ---------- Typography: calm, Apple-like ---------- */
+body.lx-admin main .uppercase { text-transform: none; }
+body.lx-admin main .tracking-widest,
+body.lx-admin main .tracking-wider,
+body.lx-admin main .tracking-wide,
+body.lx-admin main .tracking-tight,
+body.lx-admin main .tracking-tighter { letter-spacing: -0.005em !important; }
+body.lx-admin main .font-display {
+  font-family: inherit !important;
+  letter-spacing: -0.028em !important;
+}
+body.lx-admin main .font-black { font-weight: 700 !important; }
+body.lx-admin main h1 { letter-spacing: -0.03em !important; }
+/* Numbers & codes: Apple-style tabular figures instead of a "terminal" font */
+body.lx-admin main .font-mono { font-family: inherit !important; font-variant-numeric: tabular-nums; letter-spacing: -0.005em; }
+body.lx-admin main td .font-mono,
+body.lx-admin main td.font-mono { white-space: nowrap; }
+body.lx-admin main .text-neutral-500,
+body.lx-admin main .text-neutral-400 { color: var(--g-ink-3) !important; }
+body.lx-admin main .text-neutral-600,
+body.lx-admin main .text-neutral-700 { color: var(--g-ink-2) !important; }
+
+/* ---------- Glass surfaces ---------- */
+body.lx-admin main :is(div, section, form, aside, article, table, details).bg-white {
+  background: var(--g-glass) !important;
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+}
+/* Any glass block gets soft corners */
+body.lx-admin main :is(div, section, form, aside, article, details).bg-white:not([class*='rounded']) { border-radius: 14px; }
+/* Cards (have a border or shadow) get the full glass treatment. */
+body.lx-admin main :is(div, section, form, aside, article, details).bg-white:is(.border, [class*='shadow']):not([class*='rounded']) {
+  border-radius: var(--g-radius);
+}
+body.lx-admin main :is(div, section, form, aside, article, details).bg-white:is(.border, [class*='shadow']) {
+  border: 1px solid var(--g-edge) !important;
+  box-shadow: var(--g-shadow) !important;
+}
+/* Glass inside glass: lighter, no second blur (keeps scrolling smooth). */
+body.lx-admin main .bg-white :is(div, section, form, aside, article, table).bg-white {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.55) !important;
+}
+body.lx-admin main .bg-white .bg-white:is(.border, [class*='shadow']) {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 0.5px rgba(17, 17, 26, 0.05) !important;
+}
+body.lx-admin main .bg-white .bg-white:is(.border, [class*='shadow']):not([class*='rounded']) { border-radius: 16px; }
+
+/* Grey panels inside cards → soft tinted wells */
+body.lx-admin main div.bg-neutral-50,
+body.lx-admin main div.bg-neutral-100 {
+  background: rgba(17, 17, 26, 0.035) !important;
+  border-color: rgba(255, 255, 255, 0.6) !important;
+}
+body.lx-admin main div.bg-neutral-50:not([class*='rounded']),
+body.lx-admin main div.bg-neutral-100.border:not([class*='rounded']) { border-radius: 14px; }
+
+/* Hairlines */
+body.lx-admin main .border-black\/5,
+body.lx-admin main .border-black\/10 { border-color: var(--g-hair) !important; }
+body.lx-admin main .border-black\/15,
+body.lx-admin main .border-black\/20 { border-color: var(--g-hair-2) !important; }
+body.lx-admin main .divide-black\/5 > * + *,
+body.lx-admin main .divide-black\/10 > * + *,
+body.lx-admin main .divide-y > * + * { border-color: var(--g-hair) !important; }
+
+/* ---------- Tables ---------- */
+body.lx-admin main table { border-collapse: separate; border-spacing: 0; }
+body.lx-admin main thead,
+body.lx-admin main thead tr,
+body.lx-admin main thead th { background: transparent !important; }
+body.lx-admin main th { color: var(--g-ink-3) !important; font-weight: 600 !important; font-size: 11.5px !important; font-family: inherit !important; white-space: nowrap; }
+body.lx-admin main tbody tr { transition: background-color 0.18s ease; }
+body.lx-admin main tbody tr:hover { background: rgba(255, 255, 255, 0.45) !important; }
+body.lx-admin main td,
+body.lx-admin main th { border-color: var(--g-hair) !important; }
+
+/* ---------- Form fields ---------- */
+body.lx-admin main :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']), select, textarea) {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(17, 17, 26, 0.1) !important;
+  box-shadow: inset 0 1px 2px rgba(17, 17, 26, 0.04);
+  color: var(--g-ink);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+body.lx-admin main :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']), select, textarea):not([class*='rounded']) { border-radius: 12px !important; }
+body.lx-admin main :is(input, select, textarea):hover { border-color: rgba(17, 17, 26, 0.18) !important; }
+body.lx-admin main :is(input, select, textarea):focus {
+  outline: none !important;
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(255, 84, 0, 0.55) !important;
+  box-shadow: 0 0 0 4px rgba(255, 84, 0, 0.12) !important;
+}
+body.lx-admin main ::placeholder { color: rgba(60, 60, 67, 0.45) !important; }
+body.lx-admin main input[type='checkbox'],
+body.lx-admin main input[type='radio'] { accent-color: #0b0b0f; }
+
+/* ---------- Buttons ---------- */
+body.lx-admin main :is(button, a, label).bg-black {
+  background: linear-gradient(180deg, #2b2b30 0%, #0c0c0f 100%) !important;
+  color: #fff;
+  border-color: transparent !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.4), 0 6px 16px -8px rgba(0, 0, 0, 0.55) !important;
+  transition: transform 0.15s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+body.lx-admin main :is(button, a, label).bg-\[\#FF5400\] {
+  background: linear-gradient(180deg, #ff7b36 0%, #ff5400 55%, #f04c00 100%) !important;
+  color: #fff;
+  border-color: transparent !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 0 0.5px rgba(200, 60, 0, 0.5), 0 8px 18px -8px rgba(255, 84, 0, 0.65) !important;
+  transition: transform 0.15s ease, filter 0.2s ease;
+}
+body.lx-admin main :is(button, a, label):is(.bg-black, .bg-\[\#FF5400\]):hover { filter: brightness(1.08); }
+body.lx-admin main :is(button, a, label):is(.bg-black, .bg-\[\#FF5400\]):active { transform: scale(0.98); }
+body.lx-admin main :is(button, a, label):is(.bg-black, .bg-\[\#FF5400\]):not([class*='rounded']) { border-radius: 12px; }
+
+/* Outline / light buttons → glass buttons */
+body.lx-admin main :is(button, a, label).border:not(.bg-black):not(.bg-\[\#FF5400\]),
+body.lx-admin main :is(button, a).bg-white {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border-color: rgba(17, 17, 26, 0.1) !important;
+  color: var(--g-ink) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(17, 17, 26, 0.05);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+body.lx-admin main :is(button, a, label).border:not(.bg-black):not(.bg-\[\#FF5400\]):not([class*='rounded']),
+body.lx-admin main :is(button, a).bg-white:not([class*='rounded']) { border-radius: 12px; }
+body.lx-admin main :is(button, a, label).border:not(.bg-black):not(.bg-\[\#FF5400\]):hover,
+body.lx-admin main :is(button, a).bg-white:hover { background: rgba(255, 255, 255, 0.92) !important; }
+body.lx-admin main :is(button, a, label).border:not(.bg-black):not(.bg-\[\#FF5400\]):active { transform: scale(0.98); }
+/* Outline buttons that turn black on hover stay readable in glass */
+body.lx-admin main :is(button, a).hover\:bg-black:hover { background: rgba(17, 17, 26, 0.88) !important; color: #fff !important; }
+body.lx-admin main :is(button, a).hover\:bg-black:hover * { color: #fff !important; }
+body.lx-admin main button:disabled { filter: saturate(0.6); }
+
+/* Every button gets soft corners (unless it already chose its own) */
+body.lx-admin main button:not([class*='rounded']),
+body.lx-admin main a[class*='px-']:not([class*='rounded']) { border-radius: 10px; }
+/* Light chips / filters */
+body.lx-admin main button:is(.bg-neutral-100, .bg-neutral-50, .bg-neutral-200) { background: rgba(255, 255, 255, 0.55) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 0.5px rgba(17, 17, 26, 0.07); }
+body.lx-admin main button:is(.bg-neutral-100, .bg-neutral-50, .bg-neutral-200):hover { background: rgba(255, 255, 255, 0.9) !important; }
+/* Coloured action buttons (Mark as shipped / delivered / cancel …): glossy */
+body.lx-admin main button:is([class*='bg-blue-6'], [class*='bg-blue-7'], [class*='bg-green-6'], [class*='bg-green-7'], [class*='bg-red-6'], [class*='bg-red-7'], [class*='bg-neutral-8'], [class*='bg-neutral-9']) {
+  border-radius: 12px;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 55%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 14px -8px rgba(0, 0, 0, 0.45);
+}
+
+/* Small square icon buttons (edit, delete …) */
+body.lx-admin main button.p-2:not([class*='rounded']),
+body.lx-admin main button.p-1\.5:not([class*='rounded']),
+body.lx-admin main a.p-2:not([class*='rounded']) { border-radius: 10px; }
+body.lx-admin main button.p-2.hover\:bg-neutral-100:hover { background: rgba(17, 17, 26, 0.06) !important; }
+
+/* ---------- Badges / chips ---------- */
+body.lx-admin main span:is(.bg-black, .bg-\[\#FF5400\], [class*='bg-green-'], [class*='bg-yellow-'], [class*='bg-red-'], [class*='bg-blue-'], [class*='bg-pink-'], [class*='bg-amber-'], [class*='bg-orange-'], .bg-neutral-100, .bg-neutral-200):not([class*='rounded']) {
+  border-radius: 999px;
+}
+body.lx-admin main span.bg-black { background: rgba(17, 17, 26, 0.86) !important; }
+
+/* Coloured notice boxes → soft glass tints */
+body.lx-admin main div:is([class*='bg-green-50'], [class*='bg-red-50'], [class*='bg-yellow-50'], [class*='bg-orange-50'], [class*='bg-amber-50'], [class*='bg-blue-50']):not([class*='rounded']) { border-radius: 14px; }
+
+/* Black toast / message bars */
+body.lx-admin main div.bg-black:not([class*='rounded']) { border-radius: 14px; }
+body.lx-admin main div.bg-black {
+  background: rgba(20, 20, 24, 0.86) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 30px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* ---------- Pop-ups / modals ---------- */
+body.lx-admin main .fixed.inset-0:is(.bg-black\/70, .bg-black\/60, .bg-black\/50, .bg-black\/40) {
+  background: rgba(16, 16, 22, 0.28) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+body.lx-admin main .fixed.inset-0 > :is(div, form).bg-white {
+  background: var(--g-glass-3) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  border-radius: 26px !important;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 30px 80px -20px rgba(17, 17, 26, 0.45) !important;
+  animation: lxGlassIn 0.32s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+@keyframes lxGlassIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+/* Images & thumbnails get soft corners */
+body.lx-admin main td img,
+body.lx-admin main .bg-neutral-100 > img { border-radius: 10px; }
+body.lx-admin main td > div.overflow-hidden:not([class*='rounded']) { border-radius: 10px; }
+
+/* Thin, quiet scrollbars */
+body.lx-admin main * { scrollbar-width: thin; scrollbar-color: rgba(17, 17, 26, 0.18) transparent; }
+body.lx-admin main *::-webkit-scrollbar { width: 8px; height: 8px; }
+body.lx-admin main *::-webkit-scrollbar-thumb { background: rgba(17, 17, 26, 0.16); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+
+/* Entrance: content floats in once */
+body.lx-admin main > * > :not(header) { animation: lxRise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* opacity only: a transform here would break fixed-position pop-ups inside */
+@keyframes lxRise { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.lx-admin main *,
+  body.lx-admin main > * > * { animation: none !important; transition: none !important; }
+}
+
+/* Browsers without backdrop-filter: slightly more opaque glass so text stays readable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  body.lx-admin { --g-glass: rgba(255, 255, 255, 0.88); --g-glass-3: rgba(255, 255, 255, 0.97); }
+  .lx-glass-bar { background: rgba(255, 255, 255, 0.94); }
+}
+
+/* =============================================================================================
+ * Sign-in screen — same glass language
+ * ============================================================================================= */
+.lx-login { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+.lx-login-wallpaper {
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(34% 30% at 18% 22%, rgba(255, 138, 76, 0.5), transparent 70%),
+    radial-gradient(30% 28% at 84% 18%, rgba(126, 146, 255, 0.42), transparent 70%),
+    radial-gradient(36% 32% at 74% 86%, rgba(255, 112, 170, 0.3), transparent 70%),
+    radial-gradient(32% 30% at 16% 84%, rgba(86, 204, 196, 0.28), transparent 70%),
+    linear-gradient(180deg, #f5f6fa, #eceef3);
+  animation: lxDrift 18s ease-in-out infinite alternate;
+}
+@keyframes lxDrift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-2%, 1.5%, 0) scale(1.04); } }
+.lx-login-card {
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.58);
+  -webkit-backdrop-filter: blur(36px) saturate(200%);
+  backdrop-filter: blur(36px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 30px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 0.5px rgba(17, 17, 26, 0.05),
+    0 30px 80px -30px rgba(17, 17, 26, 0.35),
+    0 8px 24px -12px rgba(17, 17, 26, 0.12);
+  animation: lxCardIn 0.6s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@keyframes lxCardIn { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
+.lx-field {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 17, 26, 0.1);
+  border-radius: 14px;
+  color: #0b0b0f;
+  box-shadow: inset 0 1px 2px rgba(17, 17, 26, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.lx-field::placeholder { color: rgba(60, 60, 67, 0.42); }
+.lx-field:hover { border-color: rgba(17, 17, 26, 0.18); }
+.lx-field:focus { outline: none; background: rgba(255, 255, 255, 0.95); border-color: rgba(255, 84, 0, 0.55); box-shadow: 0 0 0 4px rgba(255, 84, 0, 0.13); }
+.lx-btn-primary {
+  color: #fff;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2b2b30 0%, #0c0c0f 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 0 0.5px rgba(0, 0, 0, 0.5), 0 10px 22px -10px rgba(0, 0, 0, 0.6);
+  transition: transform 0.15s ease, filter 0.2s ease;
+}
+.lx-btn-primary:hover { filter: brightness(1.12); }
+.lx-btn-primary:active { transform: scale(0.985); }
+.lx-login-google button { border-radius: 14px !important; background: rgba(255, 255, 255, 0.78) !important; border: 1px solid rgba(17, 17, 26, 0.1) !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(17, 17, 26, 0.05) !important; height: 48px; text-transform: none !important; letter-spacing: 0 !important; font-size: 14.5px !important; font-weight: 600 !important; }
+.lx-login-google button:hover { background: rgba(255, 255, 255, 0.95) !important; }
+@media (prefers-reduced-motion: reduce) { .lx-login-wallpaper, .lx-login-card { animation: none; } }
+
+/* Bordered boxes (item lists, info panels) get soft corners too */
+body.lx-admin main div.border:is(.border-black\/5, .border-black\/10, .border-black\/15):not([class*='rounded']) { border-radius: 14px; }
+body.lx-admin main .fixed.inset-0 div.border:not([class*='rounded']) { border-radius: 14px; overflow: hidden; }

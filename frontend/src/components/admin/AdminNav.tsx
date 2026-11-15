@@ -1,106 +1,98 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  LayoutDashboard, 
-  Package, 
-  ShoppingBag, 
-  Tag, 
-  Sliders, 
-  Layers, 
-  ExternalLink, 
-  LogOut, 
-  Shield,
-  Bell
-} from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Tag, SlidersHorizontal, Layers, LogOut, Bell, ArrowUpRight } from 'lucide-react';
 
+const NAV = [
+  { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+  { name: 'Products', path: '/admin/products', icon: Package },
+  { name: 'Collections', path: '/admin/collections', icon: Layers },
+  { name: 'Orders', path: '/admin/orders', icon: ShoppingBag },
+  { name: 'Discounts', path: '/admin/discounts', icon: Tag },
+  { name: 'Notifications', path: '/admin/notifications', icon: Bell },
+  { name: 'Settings', path: '/admin/settings', icon: SlidersHorizontal }
+];
+
+/** Floating frosted-glass navigation bar for the admin app. */
 export const AdminNav: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const activeRef = useRef<HTMLAnchorElement>(null);
 
-  const navItems = [
-    { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-    { name: 'Products', path: '/admin/products', icon: Package },
-    { name: 'Collections & Home', path: '/admin/collections', icon: Layers },
-    { name: 'Customer Orders', path: '/admin/orders', icon: ShoppingBag },
-    { name: 'Promo Discounts', path: '/admin/discounts', icon: Tag },
-    { name: 'Notifications', path: '/admin/notifications', icon: Bell },
-    { name: 'Store Settings', path: '/admin/settings', icon: Sliders },
-  ];
+  // On phones the tab row scrolls — keep the current tab in view.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  return (
-    <div className="bg-black text-white border-b border-white/10 sticky top-16 z-40 shadow-md">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12">
-        <div className="flex flex-col md:flex-row md:items-center justify-between py-3 gap-3">
-          
-          {/* Brand & Badge */}
-          <div className="flex items-center space-x-3">
-            <Link to="/admin" className="flex items-center space-x-2">
-              <span className="font-display font-black text-2xl uppercase tracking-tighter text-white">
-                LEVIX
-              </span>
-              <span className="px-2 py-0.5 bg-[#FF5400] text-white text-[9px] font-mono font-bold uppercase tracking-wider rounded-xs">
-                Admin Console
-              </span>
-            </Link>
-            <span className="hidden sm:inline-block text-neutral-600 text-xs">|</span>
-            <span className="hidden sm:inline-block text-neutral-400 text-[11px] font-mono">
-              levixfashions@gmail.com
-            </span>
-          </div>
+  const initial = (user?.displayName || user?.email || 'A').trim().charAt(0).toUpperCase();
 
-          {/* Navigation Links */}
-          <nav className="flex items-center space-x-1 sm:space-x-2 overflow-x-auto py-1 scrollbar-none">
-            {navItems.map((item) => {
+  return (
+    <header className="lx-adminbar-wrap sticky top-0 z-40 px-2.5 sm:px-5 pt-2.5 sm:pt-3 pb-2">
+      <div className="lx-glass-bar mx-auto max-w-[1440px] flex items-center gap-2 sm:gap-3 pl-2 pr-2 sm:pr-2.5 py-2">
+        {/* Brand */}
+        <Link to="/admin" className="flex items-center gap-2.5 pl-0.5 pr-1 sm:pr-2 flex-shrink-0" aria-label="LEVIX Admin home">
+          <span className="lx-app-icon w-9 h-9 rounded-[11px] flex items-center justify-center">
+            <svg viewBox="0 0 230 255" className="w-[15px] h-[17px]" aria-hidden="true">
+              <defs>
+                <linearGradient id="lxNavOr" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#FF8A45" />
+                  <stop offset="1" stopColor="#FF5400" />
+                </linearGradient>
+              </defs>
+              <g fill="url(#lxNavOr)">
+                <path d="M0 0H51V203H230V255H0Z" />
+                <path d="M65 38H111L184 203H138Z" />
+                <path d="M144 38H190L116 203H70Z" />
+              </g>
+            </svg>
+          </span>
+          <span className="hidden lg:block leading-tight">
+            <span className="block text-[15px] font-semibold tracking-[-0.01em] text-[#0b0b0f]">LEVIX</span>
+            <span className="block text-[11px] text-[#6e6e73]">Admin</span>
+          </span>
+        </Link>
+
+        {/* Tabs */}
+        <nav className="lx-tabs-scroll flex-1 min-w-0 overflow-x-auto" aria-label="Admin sections">
+          <div className="lx-segment inline-flex items-center gap-0.5 p-[3px]">
+            {NAV.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              const active = item.path === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(item.path);
               return (
                 <Link
                   key={item.path}
+                  ref={active ? activeRef : undefined}
                   to={item.path}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap rounded-xs ${
-                    isActive
-                      ? 'bg-white text-black shadow-xs'
-                      : 'text-neutral-300 hover:text-white hover:bg-white/10'
-                  }`}
+                  aria-current={active ? 'page' : undefined}
+                  className={`lx-seg-item flex items-center gap-1.5 px-3 sm:px-3.5 h-8 rounded-[10px] text-[13px] font-medium whitespace-nowrap ${active ? 'is-active' : ''}`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#FF5400]' : 'text-neutral-400'}`} />
+                  <Icon className="w-[15px] h-[15px]" strokeWidth={active ? 2.2 : 1.9} />
                   <span>{item.name}</span>
                 </Link>
               );
             })}
-          </nav>
-
-          {/* Right Actions */}
-          <div className="hidden lg:flex items-center space-x-3">
-            <Link
-              to="/"
-              target="_blank"
-              className="text-xs text-neutral-300 hover:text-white flex items-center space-x-1 font-mono uppercase tracking-wider px-2 py-1 hover:bg-white/5 transition-all"
-              title="Open Live Storefront in new tab"
-            >
-              <span>Live Store</span>
-              <ExternalLink className="w-3.5 h-3.5 text-neutral-400" />
-            </Link>
-
-            <button
-              onClick={handleLogout}
-              className="text-xs text-neutral-400 hover:text-red-400 flex items-center space-x-1 font-mono uppercase tracking-wider px-2 py-1 transition-all"
-              title="Sign Out of Admin Console"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Exit</span>
-            </button>
           </div>
+        </nav>
 
+        {/* Actions */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Link to="/" target="_blank" className="lx-icon-btn hidden sm:flex h-8 px-3 rounded-[10px] items-center gap-1 text-[12.5px] font-medium" title="Open the live store in a new tab">
+            Store <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+          <button type="button" onClick={handleLogout} className="lx-icon-btn w-8 h-8 rounded-[10px] flex items-center justify-center" title="Sign out" aria-label="Sign out">
+            <LogOut className="w-[15px] h-[15px]" />
+          </button>
+          <span className="lx-avatar hidden sm:flex w-8 h-8 rounded-full items-center justify-center text-[12.5px] font-semibold" title={user?.email || ''}>
+            {initial}
+          </span>
         </div>
       </div>
-    </div>
+    </header>
   );
 };

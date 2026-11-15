@@ -59,12 +59,31 @@ const PageLoader = () => (
 
 const admin = (el: React.ReactNode) => <AdminGuard>{el}</AdminGuard>;
 
+/** Admin panel = its own glass app: hide the shop's header/footer/pop-ups and switch on the admin theme. */
+const useIsAdminRoute = () => useLocation().pathname.startsWith('/admin');
+const ShopOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => (useIsAdminRoute() ? null : <>{children}</>);
+const AdminTheme: React.FC = () => {
+  const isAdmin = useIsAdminRoute();
+  useEffect(() => {
+    document.body.classList.toggle('lx-admin', isAdmin);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const prev = meta?.getAttribute('content');
+    if (isAdmin) meta?.setAttribute('content', '#EEF0F5');
+    return () => {
+      document.body.classList.remove('lx-admin');
+      if (isAdmin && prev) meta?.setAttribute('content', prev);
+    };
+  }, [isAdmin]);
+  return null;
+};
+
 /** Pushes page content below the fixed header everywhere except the homepage (hero sits under the header). */
 const Main: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { pathname } = useLocation();
   const announce = useSettingsStore((s) => s.settings.announcementEnabled && Boolean(s.settings.announcementText?.trim()));
   const isHome = pathname === '/';
-  const top = (isHome ? 0 : 64) + (announce ? 32 : 0);
+  const isAdmin = pathname.startsWith('/admin');
+  const top = isAdmin ? 0 : (isHome ? 0 : 64) + (announce ? 32 : 0);
   return (
     <main className="flex-1" style={{ paddingTop: top }}>
       {children}
@@ -85,16 +104,19 @@ export const App: React.FC = () => {
           <ScrollToTop />
           <IntroDoors />
           <LiveSync />
-          <div className="flex flex-col min-h-screen bg-[#EFEFEF] text-black">
-            <AnnouncementBar />
-            <Header />
+          <AdminTheme />
+          <div className="lx-app-root flex flex-col min-h-screen bg-[#EFEFEF] text-black">
+            <ShopOnly>
+              <AnnouncementBar />
+              <Header />
 
-            <CartDrawer />
-            <SearchDrawer />
-            <MobileNavDrawer />
-            <SizeGuideModal />
-            <GlassyPwaNotification />
-            <PushPrompt />
+              <CartDrawer />
+              <SearchDrawer />
+              <MobileNavDrawer />
+              <SizeGuideModal />
+              <GlassyPwaNotification />
+              <PushPrompt />
+            </ShopOnly>
 
             <Main>
               <Suspense fallback={<PageLoader />}>
@@ -143,7 +165,9 @@ export const App: React.FC = () => {
               </Suspense>
             </Main>
 
-            <Footer />
+            <ShopOnly>
+              <Footer />
+            </ShopOnly>
           </div>
         </BrowserRouter>
       </PwaProvider>
