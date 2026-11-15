@@ -197,6 +197,7 @@ const imageSchema = z.object({
     url: imageUrl,
     altText: z.string().max(200).optional().nullable(),
     color: z.string().trim().max(40).optional().nullable(),
+    gender: z.enum(['MEN', 'WOMEN']).optional().nullable(),
     isCover: z.boolean().optional(),
     sortOrder: z.number().int().optional()
 });
@@ -249,11 +250,13 @@ async function resolveCategoryId(categoryId, categoryName) {
     }
     return null;
 }
-function normaliseImages(images) {
+function normaliseImages(images, productGender) {
     return images.map((img, idx) => ({
         url: img.url,
         altText: img.altText || null,
         color: img.color?.trim() || null,
+        // Photo tags only matter for tees sold to both men & women; a Men-only or Women-only product's photos follow the product.
+        gender: productGender === 'MEN' || productGender === 'WOMEN' ? productGender : img.gender || null,
         sortOrder: idx,
         isCover: idx === 0
     }));
@@ -360,7 +363,7 @@ export async function createProduct(req, res) {
             colorGroup: data.colorGroup || null,
             gender: data.gender,
             categoryId,
-            images: { create: normaliseImages(data.images) },
+            images: { create: normaliseImages(data.images, data.gender) },
             variants: {
                 create: variants.map((v) => ({
                     size: v.size,
@@ -413,7 +416,7 @@ export async function updateProduct(req, res) {
         });
         if (data.images) {
             await tx.productImage.deleteMany({ where: { productId: id } });
-            await tx.productImage.createMany({ data: normaliseImages(data.images).map((img) => ({ ...img, productId: id })) });
+            await tx.productImage.createMany({ data: normaliseImages(data.images, req.body.gender !== undefined && data.gender ? data.gender : existing.gender).map((img) => ({ ...img, productId: id })) });
         }
         if (data.variants) {
             const incoming = dedupeVariants(data.variants);

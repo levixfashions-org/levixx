@@ -3103,6 +3103,7 @@ var imageSchema = import_zod9.z.object({
   url: imageUrl,
   altText: import_zod9.z.string().max(200).optional().nullable(),
   color: import_zod9.z.string().trim().max(40).optional().nullable(),
+  gender: import_zod9.z.enum(["MEN", "WOMEN"]).optional().nullable(),
   isCover: import_zod9.z.boolean().optional(),
   sortOrder: import_zod9.z.number().int().optional()
 });
@@ -3148,11 +3149,13 @@ async function resolveCategoryId(categoryId, categoryName) {
   }
   return null;
 }
-function normaliseImages(images) {
+function normaliseImages(images, productGender) {
   return images.map((img, idx) => ({
     url: img.url,
     altText: img.altText || null,
     color: img.color?.trim() || null,
+    // Photo tags only matter for tees sold to both men & women; a Men-only or Women-only product's photos follow the product.
+    gender: productGender === "MEN" || productGender === "WOMEN" ? productGender : img.gender || null,
     sortOrder: idx,
     isCover: idx === 0
   }));
@@ -3252,7 +3255,7 @@ async function createProduct(req, res) {
       colorGroup: data2.colorGroup || null,
       gender: data2.gender,
       categoryId,
-      images: { create: normaliseImages(data2.images) },
+      images: { create: normaliseImages(data2.images, data2.gender) },
       variants: {
         create: variants.map((v) => ({
           size: v.size,
@@ -3301,7 +3304,7 @@ async function updateProduct(req, res) {
       });
       if (data2.images) {
         await tx.productImage.deleteMany({ where: { productId: id } });
-        await tx.productImage.createMany({ data: normaliseImages(data2.images).map((img) => ({ ...img, productId: id })) });
+        await tx.productImage.createMany({ data: normaliseImages(data2.images, req.body.gender !== void 0 && data2.gender ? data2.gender : existing.gender).map((img) => ({ ...img, productId: id })) });
       }
       if (data2.variants) {
         const incoming = dedupeVariants(data2.variants);
@@ -3701,7 +3704,7 @@ async function getHome(_req, res) {
         gender: true,
         categoryId: true,
         collections: { select: { collectionId: true } },
-        images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } }
+        images: { orderBy: { sortOrder: "asc" }, take: 8, select: { url: true, gender: true } }
       },
       orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
       take: 2e3
@@ -3720,7 +3723,8 @@ async function getHome(_req, res) {
       key,
       name: key === "men" ? "Men" : "Women",
       count: rows.length,
-      coverImage: (key === "men" ? settings.menCoverImage : settings.womenCoverImage) || rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+      coverImage: (key === "men" ? settings.menCoverImage : settings.womenCoverImage) || rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || // A tee sold to both: use a photo tagged for this department.
+      rows.flatMap((r) => r.images).find((im) => im.gender === want)?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
       categories: categories.filter((c) => catCount.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || "TOP", count: catCount.get(c.id) || 0 })),
       collections: collections.filter((c) => c.showInMenu && colIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
     };
