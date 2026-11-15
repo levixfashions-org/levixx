@@ -145,8 +145,16 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}, ret
 
   let res: Response;
   try {
-    res = await fetch(url, { ...options, headers });
-  } catch {
+    // Give up after 25 s so nothing waits forever on a stalled connection.
+    const ctrl = options.signal ? null : new AbortController();
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 25000) : null;
+    try {
+      res = await fetch(url, { ...options, headers, ...(ctrl ? { signal: ctrl.signal } : {}) });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError' && !options.signal) throw new ApiError('The server is taking too long to answer — please try again.', 0);
     throw new ApiError('Network error — please check your internet connection and try again.', 0);
   }
 

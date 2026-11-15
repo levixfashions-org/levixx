@@ -17,18 +17,25 @@ export const LoginPage: React.FC = () => {
   const location = useLocation();
   const from: string | undefined = (location.state as any)?.from?.pathname || (location.state as any)?.from;
 
+  // Sign-in itself is done by Firebase; only the role check talks to our server.
+  // Never let a slow server keep the button stuck on "Signing in…" — move on after a few seconds.
   const goAfterLogin = async () => {
+    let role: string | undefined;
     try {
-      const res = await apiClient.get('/auth/profile');
-      await refreshProfile();
-      if (res.data?.user?.role === 'ADMIN') {
-        navigate(from && from.startsWith('/admin') ? from : '/admin', { replace: true });
-        return;
-      }
+      const res: any = await Promise.race([
+        apiClient.get('/auth/profile'),
+        new Promise((resolve) => setTimeout(() => resolve(null), 4000))
+      ]);
+      role = res?.data?.user?.role;
     } catch {
       /* profile load failure shouldn't block login */
     }
-    navigate(from && !from.startsWith('/admin') ? from : '/account', { replace: true });
+    refreshProfile().catch(() => undefined); // keep the app's copy fresh, in the background
+    if (role === 'ADMIN') {
+      navigate(from && from.startsWith('/admin') ? from : '/admin', { replace: true });
+      return;
+    }
+    navigate(from || '/account', { replace: true });
   };
 
   // Already signed in (e.g. returning from a Google redirect) → move on.
