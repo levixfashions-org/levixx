@@ -157,7 +157,8 @@ export interface UserProfile {
   role: 'CUSTOMER' | 'ADMIN';
   emailVerified?: boolean;
   addresses: Address[];
-  _count?: { orders: number };
+  createdAt?: string;
+  _count?: { orders: number; reviews?: number };
 }
 
 export interface HomeSection {

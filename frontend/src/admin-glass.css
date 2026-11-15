@@ -382,3 +382,31 @@ body.lx-admin main > * > :not(header) { animation: lxRise 0.5s cubic-bezier(0.2,
 /* Bordered boxes (item lists, info panels) get soft corners too */
 body.lx-admin main div.border:is(.border-black\/5, .border-black\/10, .border-black\/15):not([class*='rounded']) { border-radius: 14px; }
 body.lx-admin main .fixed.inset-0 div.border:not([class*='rounded']) { border-radius: 14px; overflow: hidden; }
+
+/* ───────── Customer account (My Account / My Orders) — same glass language as sign-in ───────── */
+.lx-acct { position: relative; overflow: hidden; min-height: calc(100svh - 64px); }
+.lx-acct > .lx-login-wallpaper { position: fixed; }
+.lx-acct-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 0 0 0.5px rgba(17, 17, 26, 0.05), 0 18px 50px -28px rgba(17, 17, 26, 0.3);
+  animation: lxCardIn 0.5s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.lx-acct-card div.border:not([class*='rounded']) { border-radius: 14px; }
+.lx-acct-tile { transition: transform 0.18s ease, box-shadow 0.2s ease; }
+.lx-acct-tile:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 0 0 0.5px rgba(17, 17, 26, 0.06), 0 22px 50px -24px rgba(17, 17, 26, 0.35); }
+.lx-acct-row { background: rgba(255, 255, 255, 0.7); border: 1px solid rgba(17, 17, 26, 0.07); border-radius: 18px; }
+.lx-acct-avatar { background: linear-gradient(145deg, #ff8a45, #ff5400); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 10px 24px -10px rgba(255, 84, 0, 0.7); }
+.lx-btn-soft { border-radius: 12px; background: rgba(255, 255, 255, 0.75); border: 1px solid rgba(17, 17, 26, 0.1); color: #0b0b0f; transition: background-color 0.2s ease, transform 0.15s ease; }
+.lx-btn-soft:hover { background: #fff; }
+.lx-btn-soft:active { transform: scale(0.985); }
+.lx-pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.lx-sheet-backdrop { background: rgba(10, 10, 14, 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: lxFadeIn 0.2s ease both; }
+.lx-sheet { background: rgba(250, 250, 252, 0.94); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%); border: 1px solid rgba(255, 255, 255, 0.9); box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.4); animation: lxSheetUp 0.32s cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+@keyframes lxFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lxSheetUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .lx-acct-card, .lx-sheet, .lx-sheet-backdrop { animation: none; } }

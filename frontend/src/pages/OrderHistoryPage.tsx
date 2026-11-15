@@ -5,7 +5,8 @@ import { apiClient } from '../services/api';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { ShipmentTracker } from '../components/ShipmentTracker';
 import { Order } from '../types';
-import { Package, ArrowLeft, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
+import { Package, ArrowLeft, ArrowRight } from 'lucide-react';
+import { StatusPill, isActiveOrder, orderDate, rupees } from '../components/account/orderStatus';
 
 export const OrderHistoryPage: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -51,134 +52,117 @@ export const OrderHistoryPage: React.FC = () => {
     }
   }, [user, authLoading, navigate, live, focusTick]);
 
+  const [tab, setTab] = useState<'all' | 'active' | 'delivered' | 'cancelled'>('all');
+  const counts = {
+    all: orders.length,
+    active: orders.filter((o) => isActiveOrder(o.status)).length,
+    delivered: orders.filter((o) => o.status === 'DELIVERED').length,
+    cancelled: orders.filter((o) => o.status === 'CANCELLED').length
+  };
+  const shown = orders.filter((o) =>
+    tab === 'all' ? true : tab === 'active' ? isActiveOrder(o.status) : tab === 'delivered' ? o.status === 'DELIVERED' : o.status === 'CANCELLED'
+  );
+
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-10 space-y-8">
-      
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-black/10 pb-6 gap-2">
-        <div>
-          <Link
-            to="/account"
-            className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 hover:text-black flex items-center gap-1 mb-2"
-          >
-            <ArrowLeft className="w-3 h-3" />
-            <span>Back to Profile</span>
+    <div className="lx-acct px-4 sm:px-6 py-6 sm:py-10">
+      <div className="lx-login-wallpaper" aria-hidden="true" />
+      <div className="relative z-[1] max-w-[880px] mx-auto space-y-4 sm:space-y-5">
+        <div className="px-1">
+          <Link to="/account" className="inline-flex items-center gap-1 text-[13px] font-medium text-[#6e6e73] hover:text-[#0b0b0f]">
+            <ArrowLeft className="w-4 h-4" /> My account
           </Link>
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black">
-            Order History
-          </h1>
-          <p className="text-xs text-neutral-600 mt-1">
-            Track your orders and courier details.
-          </p>
+          <h1 className="mt-2 text-[28px] sm:text-[34px] leading-tight font-semibold tracking-[-0.035em] text-[#0b0b0f]">My orders</h1>
+          <p className="text-[13.5px] text-[#6e6e73]">Live status, courier tracking and refunds — updates by itself.</p>
         </div>
-      </div>
 
-      {loading ? (
-        <div className="py-20 text-center font-mono text-xs uppercase text-neutral-500">
-          Loading order archive...
-        </div>
-      ) : orders.length > 0 ? (
-        <div className="space-y-6">
-          {orders.map((order) => {
-            const formattedTotal = (order.totalPaise / 100).toLocaleString('en-IN');
-            const dateStr = new Date(order.createdAt).toLocaleDateString('en-IN', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            });
-
-            return (
-              <div
-                key={order.id}
-                className="bg-white p-6 border border-black/10 shadow-sm space-y-5"
+        {!loading && orders.length > 0 && (
+          <div className="lx-segment inline-flex items-center gap-0.5 p-[3px] max-w-full overflow-x-auto">
+            {(['all', 'active', 'delivered', 'cancelled'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`lx-seg-item px-3.5 h-8 rounded-[10px] text-[13px] font-medium whitespace-nowrap capitalize ${tab === t ? 'is-active' : ''}`}
               >
-                {/* Order Top Bar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-black/10 pb-4 gap-3">
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-mono text-neutral-500">Order Number</span>
-                    <p className="font-mono font-bold text-sm text-black">{order.orderNumber}</p>
-                    <span className="text-[11px] text-neutral-500">{dateStr}</span>
-                  </div>
+                {t} <span className="opacity-60">{counts[t]}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-                  <div className="flex items-center space-x-4">
-                    <div className="text-right">
-                      <span className="text-[10px] uppercase font-mono text-neutral-500">Status</span>
-                      <p className="text-xs font-bold uppercase tracking-wider text-black">
-                        {order.status}
+        {loading ? (
+          <div className="space-y-4">
+            {[0, 1].map((i) => (
+              <div key={i} className="lx-acct-card p-6 animate-pulse space-y-3">
+                <div className="h-4 w-1/3 bg-black/5 rounded" />
+                <div className="h-3 w-1/4 bg-black/5 rounded" />
+                <div className="h-20 bg-black/5 rounded-[14px]" />
+              </div>
+            ))}
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="lx-acct-card py-14 px-6 text-center">
+            <Package className="w-12 h-12 text-black/20 mx-auto" strokeWidth={1.3} />
+            <h3 className="mt-3 text-[18px] font-semibold tracking-[-0.02em] text-[#0b0b0f]">No orders yet</h3>
+            <p className="mt-1 text-[13.5px] text-[#6e6e73]">When you shop a drop, your receipts and live tracking appear here.</p>
+            <Link to="/collections/all-products" className="lx-btn-primary inline-flex mt-5 h-11 px-6 items-center text-[14px] font-semibold">
+              Explore drops
+            </Link>
+          </div>
+        ) : shown.length === 0 ? (
+          <div className="lx-acct-card py-10 text-center text-[13.5px] text-[#6e6e73]">No {tab} orders.</div>
+        ) : (
+          <div className="space-y-4">
+            {shown.map((order) => {
+              const qty = order.items.reduce((n, i) => n + i.quantity, 0);
+              return (
+                <article key={order.id} className="lx-acct-card overflow-hidden">
+                  <header className="px-5 sm:px-6 pt-5 pb-4 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06]">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[13.5px] font-semibold text-[#0b0b0f]">{order.orderNumber}</p>
+                      <p className="text-[12.5px] text-[#8e8e93]">
+                        {orderDate(order.createdAt)} · {qty} item{qty === 1 ? '' : 's'} · {order.paymentMethod === 'COD' ? (order.paymentStatus === 'PAID' ? 'COD · Paid' : 'Cash on Delivery') : 'Paid online'}
                       </p>
-                      {order.paymentMethod === 'COD' && (
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#FF5400] mt-0.5">
-                          {order.paymentStatus === 'PAID' ? 'Cash on Delivery · Paid' : 'Cash on Delivery'}
-                        </p>
-                      )}
                     </div>
+                    <StatusPill order={order} />
+                  </header>
 
-                    <Link
-                      to={`/order-success/${order.orderNumber}`}
-                      className="px-4 py-2 border border-black text-black text-xs font-bold uppercase tracking-wider hover:bg-black hover:text-white transition-colors"
-                    >
-                      View Receipt
-                    </Link>
+                  <div className="px-5 sm:px-6 py-5 border-b border-black/[0.06]">
+                    <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} paymentMethod={order.paymentMethod} paymentStatus={order.paymentStatus} refundStatus={order.refundStatus} refundAmountPaise={order.refundAmountPaise} refundedAt={order.refundedAt} refundRequestedAt={order.refundRequestedAt} totalPaise={order.totalPaise} />
                   </div>
-                </div>
 
-                {/* Order progress + courier tracking */}
-                <div className="px-4 sm:px-6 py-5 border-b border-black/5">
-                  <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} paymentMethod={order.paymentMethod} paymentStatus={order.paymentStatus} refundStatus={order.refundStatus} refundAmountPaise={order.refundAmountPaise} refundedAt={order.refundedAt} refundRequestedAt={order.refundRequestedAt} totalPaise={order.totalPaise} />
-                </div>
-
-                {/* Items */}
-                <div className="divide-y divide-black/5">
-                  {order.items.map((it) => (
-                    <div key={it.id} className="py-3 flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-14 bg-neutral-200 overflow-hidden flex-shrink-0">
-                          {it.imageUrl && (
-                            <img src={it.imageUrl} alt={it.productName} className="w-full h-full object-cover" />
-                          )}
+                  <ul className="px-5 sm:px-6 divide-y divide-black/[0.06]">
+                    {order.items.map((it) => (
+                      <li key={it.id} className="py-3 flex items-center gap-3">
+                        <div className="w-14 h-[68px] rounded-[12px] overflow-hidden bg-black/5 ring-1 ring-black/5 flex-shrink-0">
+                          {it.imageUrl && <img src={it.imageUrl} alt={it.productName} className="w-full h-full object-cover" loading="lazy" />}
                         </div>
-                        <div>
-                          <p className="font-semibold text-black">{it.productName}</p>
-                          <p className="text-[11px] font-mono text-neutral-500">
-                            Size: {it.size}{it.color ? ` • ${it.color}` : ''} • Qty: {it.quantity}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[14px] font-medium text-[#0b0b0f] truncate">{it.productName}</p>
+                          <p className="text-[12.5px] text-[#8e8e93]">
+                            Size {it.size}{it.color ? ` · ${it.color}` : ''} · Qty {it.quantity}
                           </p>
                         </div>
-                      </div>
-                      <span className="font-mono font-bold text-black">
-                        RS. {(it.subtotalPaise / 100).toLocaleString('en-IN')}
-                      </span>
+                        <span className="text-[14px] font-semibold text-[#0b0b0f]">{rupees(it.subtotalPaise)}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <footer className="px-5 sm:px-6 py-4 bg-white/40 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[12px] text-[#8e8e93]">{order.status === 'CANCELLED' ? 'Order total' : order.paymentMethod === 'COD' && order.paymentStatus !== 'PAID' ? 'To pay on delivery' : 'Total paid'}</p>
+                      <p className="text-[18px] font-semibold tracking-[-0.02em] text-[#0b0b0f]">{rupees(order.totalPaise)}</p>
                     </div>
-                  ))}
-                </div>
-
-                {/* Total */}
-                <div className="border-t border-black/10 pt-3 flex justify-between items-center text-xs">
-                  <span className="uppercase text-neutral-600 font-semibold tracking-wider">Total Paid</span>
-                  <span className="font-mono font-bold text-base text-black">RS. {formattedTotal}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="py-20 text-center space-y-4 bg-white border border-black/10 p-8">
-          <Package className="w-12 h-12 text-neutral-400 mx-auto stroke-1" />
-          <div className="space-y-1">
-            <h3 className="font-display font-bold text-lg uppercase tracking-tight text-black">
-              No orders placed yet
-            </h3>
-            <p className="text-xs text-neutral-500">
-              When you purchase garments from our drops, your receipts and tracking will appear here.
-            </p>
+                    <Link to={`/order-success/${order.orderNumber}`} className="lx-btn-soft h-10 px-4 inline-flex items-center gap-1 text-[13.5px] font-semibold">
+                      Receipt <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </footer>
+                </article>
+              );
+            })}
           </div>
-          <Link
-            to="/collections/all-products"
-            className="inline-block mt-2 px-6 py-3 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-neutral-800"
-          >
-            Explore Drops
-          </Link>
-        </div>
-      )}
-
+        )}
+      </div>
     </div>
   );
 };

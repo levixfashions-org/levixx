@@ -3,7 +3,7 @@ import { Bell, BellOff } from 'lucide-react';
 import { disablePush, enablePush, isPushOn, pushState, type PushState } from '../utils/push';
 
 /** On/off switch for notifications on this device (account page). */
-export const PushToggle: React.FC = () => {
+export const PushToggle: React.FC<{ className?: string }> = ({ className }) => {
   const [state, setState] = useState<PushState>('default');
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -43,7 +43,7 @@ export const PushToggle: React.FC = () => {
   const canToggle = state === 'default' || state === 'granted';
 
   return (
-    <div className="p-5 bg-white border border-black/10 space-y-3 shadow-sm">
+    <div className={className || 'p-5 bg-white border border-black/10 space-y-3 shadow-sm'}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {on ? <Bell className="w-5 h-5 text-[#FF5400]" /> : <BellOff className="w-5 h-5 text-neutral-400" />}
