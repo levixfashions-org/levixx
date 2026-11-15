@@ -37,21 +37,7 @@ export const AdminNav: React.FC = () => {
       <div className="lx-glass-bar mx-auto max-w-[1440px] flex items-center gap-2 sm:gap-3 pl-2 pr-2 sm:pr-2.5 py-2">
         {/* Brand */}
         <Link to="/admin" className="flex items-center gap-2.5 pl-0.5 pr-1 sm:pr-2 flex-shrink-0" aria-label="LEVIX Admin home">
-          <span className="lx-app-icon w-9 h-9 rounded-[11px] flex items-center justify-center">
-            <svg viewBox="0 0 230 255" className="w-[15px] h-[17px]" aria-hidden="true">
-              <defs>
-                <linearGradient id="lxNavOr" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#FF8A45" />
-                  <stop offset="1" stopColor="#FF5400" />
-                </linearGradient>
-              </defs>
-              <g fill="url(#lxNavOr)">
-                <path d="M0 0H51V203H230V255H0Z" />
-                <path d="M65 38H111L184 203H138Z" />
-                <path d="M144 38H190L116 203H70Z" />
-              </g>
-            </svg>
-          </span>
+          <img src="/icons/icon-192.png?v=3" alt="" aria-hidden="true" className="w-9 h-9 rounded-[11px] flex items-center justify-center object-cover shadow-[0_6px_16px_-6px_rgba(255,84,0,0.55)]" />
           <span className="hidden lg:block leading-tight">
             <span className="block text-[15px] font-semibold tracking-[-0.01em] text-[#0b0b0f]">LEVIX</span>
             <span className="block text-[11px] text-[#6e6e73]">Admin</span>

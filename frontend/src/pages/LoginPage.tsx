@@ -79,21 +79,7 @@ export const LoginPage: React.FC = () => {
       <div className="lx-login-wallpaper" aria-hidden="true" />
       <div className="lx-login-card relative w-full max-w-[400px] px-6 py-8 sm:px-9 sm:py-10">
         <div className="flex flex-col items-center text-center">
-          <span className="lx-app-icon w-[60px] h-[60px] rounded-[17px] flex items-center justify-center">
-            <svg viewBox="0 0 230 255" className="w-[24px] h-[27px]" aria-hidden="true">
-              <defs>
-                <linearGradient id="lxLoginOr" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor="#FF8A45" />
-                  <stop offset="1" stopColor="#FF5400" />
-                </linearGradient>
-              </defs>
-              <g fill="url(#lxLoginOr)">
-                <path d="M0 0H51V203H230V255H0Z" />
-                <path d="M65 38H111L184 203H138Z" />
-                <path d="M144 38H190L116 203H70Z" />
-              </g>
-            </svg>
-          </span>
+          <img src="/icons/icon-192.png?v=3" alt="" aria-hidden="true" className="w-[60px] h-[60px] rounded-[17px] flex items-center justify-center object-cover shadow-[0_6px_16px_-6px_rgba(255,84,0,0.55)]" />
           <h1 className="mt-5 text-[26px] leading-tight font-semibold tracking-[-0.03em] text-[#0b0b0f]">Welcome back</h1>
           <p className="mt-1 text-[13.5px] text-[#6e6e73]">Sign in to your LEVIX account</p>
         </div>
