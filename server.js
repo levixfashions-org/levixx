@@ -1851,6 +1851,20 @@ init_errorHandler();
 var import_zod4 = require("zod");
 init_db();
 init_errorHandler();
+
+// src/utils/instagram.ts
+function normalizeInstagram(raw) {
+  if (typeof raw !== "string") return null;
+  let v = raw.trim();
+  if (!v) return null;
+  const m = v.match(/instagram\.com\/([^/?#\s]+)/i);
+  if (m) v = m[1];
+  v = v.replace(/^@+/, "").replace(/\/+$/, "").trim().toLowerCase();
+  return v || null;
+}
+var INSTAGRAM_RE = /^(?!\.)(?!.*\.\.)(?!.*\.$)[a-z0-9._]{1,30}$/;
+
+// src/controllers/authController.ts
 var phoneSchema = import_zod4.z.string().trim().transform((v) => v.replace(/[\s-]/g, "")).refine((v) => /^(\+91)?[6-9]\d{9}$/.test(v), "Enter a valid 10-digit Indian mobile number");
 var addressSchema = import_zod4.z.object({
   fullName: import_zod4.z.string().trim().min(2).max(100),
@@ -1878,13 +1892,15 @@ async function getProfile(req, res) {
 }
 async function updateProfile(req, res) {
   if (!req.user) throw new AppError("Please sign in to continue.", 401);
-  const { name, phone } = import_zod4.z.object({
+  const { name, phone, instagram: ig } = import_zod4.z.object({
     name: import_zod4.z.string().trim().min(2).max(100).optional(),
-    phone: phoneSchema.optional()
+    phone: phoneSchema.optional(),
+    // '' clears it; omitted leaves it unchanged
+    instagram: import_zod4.z.string().max(200).optional().transform((v) => v === void 0 ? void 0 : normalizeInstagram(v)).refine((v) => v == null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores.")
   }).parse(req.body);
   const user = await prisma.user.update({
     where: { id: req.user.id },
-    data: { ...name ? { name } : {}, ...phone ? { phone } : {} }
+    data: { ...name ? { name } : {}, ...phone ? { phone } : {}, ...ig !== void 0 ? { instagram: ig } : {} }
   });
   res.json({ user });
 }
@@ -2434,7 +2450,8 @@ var createOrderSchema = import_zod6.z.object({
   shippingAddress: addressSchema.omit({ isDefault: true }),
   couponCode: import_zod6.z.string().trim().max(40).optional().or(import_zod6.z.literal("")),
   saveAddress: import_zod6.z.boolean().optional(),
-  paymentMethod: import_zod6.z.enum(["ONLINE", "COD"]).default("ONLINE")
+  paymentMethod: import_zod6.z.enum(["ONLINE", "COD"]).default("ONLINE"),
+  instagram: import_zod6.z.string().max(200).optional().nullable().transform(normalizeInstagram).refine((v) => v === null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores.")
 });
 async function validateCoupon(req, res) {
   const { code } = import_zod6.z.object({ code: import_zod6.z.string().trim().min(1).max(40) }).parse(req.body);
@@ -2445,6 +2462,9 @@ async function validateCoupon(req, res) {
   res.json(result);
 }
 async function saveCheckoutAddress(req, data2) {
+  if (req.user && data2.instagram) {
+    await prisma.user.update({ where: { id: req.user.id }, data: { instagram: data2.instagram } }).catch(() => void 0);
+  }
   if (!req.user || !data2.saveAddress) return;
   const existing = await prisma.address.findFirst({
     where: { userId: req.user.id, line1: data2.shippingAddress.line1, postalCode: data2.shippingAddress.postalCode }
@@ -2518,6 +2538,7 @@ async function createOrder(req, res) {
     customerEmail: data2.customerEmail,
     customerName: data2.customerName,
     customerPhone: data2.customerPhone,
+    instagram: data2.instagram,
     shippingAddressSnapshot: { ...data2.shippingAddress, phone: data2.shippingAddress.phone },
     subtotalPaise,
     shippingPaise,
@@ -2941,6 +2962,11 @@ init_errorHandler();
 init_store();
 init_push();
 init_orders();
+var COUNTED_ORDER = {
+  status: { in: [import_client9.OrderStatus.PAID, import_client9.OrderStatus.PROCESSING, import_client9.OrderStatus.SHIPPED, import_client9.OrderStatus.DELIVERED, import_client9.OrderStatus.PENDING] },
+  paymentStatus: { not: import_client9.PaymentStatus.REFUNDED },
+  OR: [{ paymentStatus: import_client9.PaymentStatus.PAID }, { paymentMethod: "COD" }]
+};
 async function getDashboardMetrics(_req, res) {
   const startOfToday = /* @__PURE__ */ new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -3005,7 +3031,8 @@ async function getAllOrders(req, res) {
       { orderNumber: { contains: search } },
       { customerName: { contains: search } },
       { customerEmail: { contains: search } },
-      { customerPhone: { contains: search } }
+      { customerPhone: { contains: search } },
+      { instagram: { contains: search.replace(/^@/, "").toLowerCase() } }
     ];
   }
   const [total, orders] = await Promise.all([
@@ -3018,9 +3045,19 @@ async function getAllOrders(req, res) {
       include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } }
     })
   ]);
+  const handles = [...new Set(orders.map((o) => o.instagram).filter(Boolean))];
+  const igCounts = /* @__PURE__ */ new Map();
+  if (handles.length) {
+    const rows = await prisma.order.groupBy({ by: ["instagram"], where: { instagram: { in: handles }, ...COUNTED_ORDER }, _count: { _all: true } });
+    rows.forEach((r) => r.instagram && igCounts.set(r.instagram, r._count._all));
+  }
   res.set("Cache-Control", "no-store");
   res.json({
-    orders: orders.map(({ accessKey, ...o }) => ({ ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) })),
+    orders: orders.map(({ accessKey, ...o }) => ({
+      ...o,
+      instagramOrderCount: o.instagram ? igCounts.get(o.instagram) || 0 : 0,
+      shippingAddress: formatAddress(o.shippingAddressSnapshot)
+    })),
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
   });
 }
@@ -3654,6 +3691,41 @@ async function refundAdminOrder(req, res) {
   const { accessKey, ...o } = full;
   res.json({ success: true, alreadyRefunded: result.alreadyRefunded, order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
 }
+async function getInstagramCustomers(req, res) {
+  const take = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10) || 200));
+  const rows = await prisma.order.groupBy({
+    by: ["instagram"],
+    where: { instagram: { not: null }, ...COUNTED_ORDER },
+    _count: { _all: true },
+    _sum: { totalPaise: true },
+    _max: { createdAt: true },
+    orderBy: [{ _count: { instagram: "desc" } }],
+    take
+  });
+  const handles = rows.map((r) => r.instagram).filter(Boolean);
+  const latest = handles.length ? await prisma.order.findMany({
+    where: { instagram: { in: handles } },
+    orderBy: { createdAt: "desc" },
+    select: { instagram: true, customerName: true, customerEmail: true, customerPhone: true }
+  }) : [];
+  const who = /* @__PURE__ */ new Map();
+  latest.forEach((o) => o.instagram && !who.has(o.instagram) && who.set(o.instagram, o));
+  const totalWithIg = await prisma.order.count({ where: { instagram: { not: null }, ...COUNTED_ORDER } });
+  const totalAll = await prisma.order.count({ where: COUNTED_ORDER });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    customers: rows.map((r) => ({
+      instagram: r.instagram,
+      orders: r._count._all,
+      spentPaise: r._sum.totalPaise || 0,
+      lastOrderAt: r._max.createdAt,
+      name: who.get(r.instagram)?.customerName || null,
+      email: who.get(r.instagram)?.customerEmail || null,
+      phone: who.get(r.instagram)?.customerPhone || null
+    })).sort((a, b) => b.orders - a.orders || b.spentPaise - a.spentPaise),
+    summary: { handles: rows.length, ordersWithInstagram: totalWithIg, allOrders: totalAll }
+  });
+}
 
 // src/controllers/homeController.ts
 init_bestsellers();
@@ -4016,6 +4088,7 @@ router7.post("/push/test", asyncHandler(sendPushTest));
 router7.post("/media", import_express7.default.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }), asyncHandler(uploadMedia));
 router7.post("/media/video", import_express7.default.raw({ type: ["video/*", "application/octet-stream"], limit: "5mb" }), asyncHandler(uploadVideoChunk));
 router7.get("/orders", asyncHandler(getAllOrders));
+router7.get("/instagram-customers", asyncHandler(getInstagramCustomers));
 router7.patch("/orders/:id", asyncHandler(updateOrder));
 router7.patch("/orders/:id/status", asyncHandler(updateOrder));
 router7.post("/orders/:id/refund", asyncHandler(refundAdminOrder));

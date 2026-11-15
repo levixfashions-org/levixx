@@ -37,6 +37,7 @@ router.post('/push/test', h(admin.sendPushTest));
 router.post('/media', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '8mb' }), h(uploadMedia));
 router.post('/media/video', express.raw({ type: ['video/*', 'application/octet-stream'], limit: '5mb' }), h(uploadVideoChunk));
 router.get('/orders', h(admin.getAllOrders));
+router.get('/instagram-customers', h(admin.getInstagramCustomers));
 router.patch('/orders/:id', h(admin.updateOrder));
 router.patch('/orders/:id/status', h(admin.updateOrder));
 router.post('/orders/:id/refund', h(admin.refundAdminOrder));
