@@ -71,3 +71,9 @@ body.lx-shop .lx-glass-sheet {
 
 /* Section titles on home / rails a little larger, Apple-style */
 body.lx-shop .lx-title { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: #0b0b0f; }
+
+/* Phone tab bar: keep page content and pop-ups clear of it */
+@media (max-width: 767px) {
+  body.lx-shop.lx-tabbar { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  body.lx-shop.lx-tabbar .lx-float-bottom { bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important; }
+}

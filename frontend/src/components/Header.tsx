@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../context/AuthContext';
 import { useWishlistStore } from '../store/wishlistStore';
@@ -7,7 +7,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { Logo } from './Logo';
 import { MegaMenu } from './MegaMenu';
 import { ScrollRing } from './ScrollRing';
-import { BagIcon, BookmarkIcon, CloseIcon, MenuIcon, SearchIcon, UserIcon } from './Icons';
+import { BagIcon, BookmarkIcon, ChevronIcon, CloseIcon, MenuIcon, SearchIcon, UserIcon } from './Icons';
 
 /**
  * Fixed header.
@@ -20,6 +20,8 @@ export const Header: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const wishCount = useWishlistStore((s) => s.ids.length);
   const location = useLocation();
+  const navigate = useNavigate();
+  const goBack = () => (((window.history.state as any)?.idx ?? 0) > 0 ? navigate(-1) : navigate('/'));
   const isHome = location.pathname === '/';
   const [scrolled, setScrolled] = useState(false);
   const [megaOpen, setMegaOpen] = useState(false);
@@ -93,9 +95,15 @@ export const Header: React.FC = () => {
       <header style={{ top: offset }} className="md:hidden fixed inset-x-0 z-50 pointer-events-none">
         <div className={`flex items-center justify-between px-3 pt-3 pb-2 transition-colors ${solid ? 'bg-[#EFEFEF]/90 backdrop-blur-md lx-head-solid' : ''}`}>
           <ScrollRing className="pointer-events-auto flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white/55 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.06)] lx-head-pill">
-            <button onClick={openMobileNav} aria-label="Open menu" className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center">
-              <MenuIcon className="w-4 h-4" />
-            </button>
+            {isHome ? (
+              <button onClick={openMobileNav} aria-label="Open menu" className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center">
+                <MenuIcon className="w-4 h-4" />
+              </button>
+            ) : (
+              <button onClick={goBack} aria-label="Go back" className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center active:scale-90 transition-transform">
+                <ChevronIcon dir="left" className="w-4 h-4" />
+              </button>
+            )}
             <Link to="/" aria-label="LEVIX home">
               <Logo className="text-[20px]" />
             </Link>

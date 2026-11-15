@@ -147,7 +147,7 @@ export const GlassyPwaNotification: React.FC = () => {
   return (
     <aside
       aria-label="App installation notification"
-      className="fixed z-50 bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md animate-in fade-in slide-in-from-bottom-6 duration-500"
+      className="lx-float-bottom fixed z-50 bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-md animate-in fade-in slide-in-from-bottom-6 duration-500"
     >
       {/* Outer Glassmorphic Card */}
       <div className="relative overflow-hidden rounded-2xl bg-black/85 backdrop-blur-2xl border border-white/20 p-4 sm:p-5 text-white shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all">

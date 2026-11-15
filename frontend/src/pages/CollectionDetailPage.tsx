@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 import { apiClient, COLOR_SWATCHES } from '../services/api';
 import { useHomeStore } from '../store/homeStore';
 import { Product } from '../types';
@@ -134,6 +135,14 @@ export const CollectionDetailPage: React.FC = () => {
         <div className="px-3 md:px-[22px] pt-6 sm:pt-8">
           <div className="flex items-end justify-between gap-4 px-1">
             <div>
+              <Breadcrumbs
+                className="mb-2"
+                items={[
+                  { label: 'Home', to: '/' },
+                  ...(!isDept && handle !== 'all-products' ? [deptName ? { label: deptName, to: `/collections/${gender}` } : { label: 'Shop', to: '/collections/all-products' }] : []),
+                  { label: title || 'Collection' }
+                ]}
+              />
               <h1 className="lx-h1">{title || (loading ? '\u00a0' : 'Collection')}</h1>
               {description && <p className="lx-sub mt-1.5 max-w-xl">{description}</p>}
             </div>

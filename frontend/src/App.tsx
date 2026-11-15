@@ -10,6 +10,7 @@ import { SearchDrawer } from './components/SearchDrawer';
 import { MobileNavDrawer } from './components/MobileNavDrawer';
 import { SizeGuideModal } from './components/SizeGuideModal';
 import { GlassyPwaNotification } from './components/GlassyPwaNotification';
+import { TabBar } from './components/TabBar';
 import { PushPrompt } from './components/PushPrompt';
 import { IntroDoors } from './components/IntroDoors';
 import { LiveSync } from './components/LiveSync';
@@ -118,6 +119,7 @@ export const App: React.FC = () => {
               <SizeGuideModal />
               <GlassyPwaNotification />
               <PushPrompt />
+              <TabBar />
             </ShopOnly>
 
             <Main>

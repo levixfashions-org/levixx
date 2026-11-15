@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Breadcrumbs } from '../components/Breadcrumbs';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { apiClient } from '../services/api';
 import { useCartStore } from '../store/cartStore';
@@ -177,6 +178,15 @@ export const ProductDetailPage: React.FC = () => {
   const infoPanel = (
     <div className="space-y-2">
       <div className="lx-panel p-5">
+        <Breadcrumbs
+          className="mb-2.5"
+          items={[
+            { label: 'Home', to: '/' },
+            dept ? { label: dept === 'men' ? 'Men' : 'Women', to: `/collections/${dept}` } : { label: 'Shop', to: '/collections/all-products' },
+            ...(product.category?.slug ? [{ label: product.category.name, to: `/collections/${product.category.slug}${dept ? `?gender=${dept}` : ''}` }] : []),
+            { label: product.name }
+          ]}
+        />
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-[19px] sm:text-[21px] font-semibold tracking-[-0.025em] leading-tight text-[#0b0b0f]">{product.name}</h1>
           <button

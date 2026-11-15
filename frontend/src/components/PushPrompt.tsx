@@ -73,7 +73,7 @@ export const PushPrompt: React.FC = () => {
   return (
     <aside
       aria-label="Notifications"
-      className="fixed z-50 bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm animate-in fade-in slide-in-from-bottom-6 duration-500"
+      className="lx-float-bottom fixed z-50 bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm animate-in fade-in slide-in-from-bottom-6 duration-500"
     >
       <div className="relative overflow-hidden rounded-2xl bg-black/90 backdrop-blur-2xl border border-white/15 p-4 text-white shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
         <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-[#FF5400]/25 rounded-full blur-2xl pointer-events-none" />
