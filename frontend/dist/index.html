@@ -24,17 +24,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="LEVIX" />
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=2" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=3" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="preload" as="image" href="/hero_desktop.jpg" media="(min-width: 951px)" />
     <link rel="preload" as="image" href="/hero_mobile.jpg" media="(max-width: 950px)" />
-    <script type="module" crossorigin src="/assets/index-BrOhhtjw.js"></script>
+    <script type="module" crossorigin src="/assets/index-B6cYvEzi.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/react-BEDKma9L.js">
     <link rel="modulepreload" crossorigin href="/assets/firebase-Dzhtz4Cf.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-CkTybY-4.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-FZkxOolw.css">
   </head>
   <body class="bg-[#EFEFEF] text-black font-sans antialiased selection:bg-black selection:text-white min-h-screen">
     <!-- Launch screen: shown only when LEVIX is opened as the installed app -->
@@ -45,8 +45,10 @@
       #lx-splash.lx-out{opacity:0;transform:scale(1.06);pointer-events:none}
       #lx-splash .lx-glow{position:absolute;width:78vmin;height:78vmin;border-radius:50%;background:radial-gradient(circle,rgba(255,84,0,.30) 0%,rgba(255,84,0,.12) 30%,rgba(255,84,0,.04) 52%,transparent 70%);will-change:transform,opacity;animation:lxsPulse 3.2s ease-in-out infinite}
       #lx-splash .lx-ring{position:absolute;width:46vmin;height:46vmin;max-width:260px;max-height:260px;border-radius:50%;border:1px solid rgba(255,255,255,.08);animation:lxsRing 3s cubic-bezier(.2,.8,.2,1) infinite}
-      #lx-splash .lx-logo{position:relative;width:26vmin;max-width:150px;aspect-ratio:230/255}
-      #lx-splash .lx-logo svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+      #lx-splash .lx-logo{position:relative;width:34vmin;max-width:180px;aspect-ratio:1;border-radius:23%;}
+      #lx-splash .lx-mark{position:absolute;inset:0;width:100%;height:100%;border-radius:23%;box-shadow:0 24px 60px -18px rgba(255,84,0,.65),0 0 0 1px rgba(255,255,255,.08);opacity:0;transform:scale(.86) translateY(6px);will-change:opacity,transform;animation:lxsMark 1.2s cubic-bezier(.2,.8,.2,1) .35s forwards}
+      #lx-splash .lx-shine{position:absolute;inset:0;border-radius:23%;overflow:hidden;pointer-events:none}
+      #lx-splash .lx-shine::after{content:"";position:absolute;top:-20%;bottom:-20%;left:-60%;width:45%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-18deg);opacity:0;animation:lxsShine 1.3s ease 1.5s forwards}
       #lx-splash .lx-halo{position:absolute;left:50%;top:50%;width:210%;height:210%;margin:-105% 0 0 -105%;border-radius:50%;background:radial-gradient(circle,rgba(255,96,20,.55) 0%,rgba(255,84,0,.22) 26%,rgba(255,84,0,.07) 46%,transparent 66%);opacity:0;will-change:opacity;animation:lxsHalo 1s ease 1.5s forwards}
       #lx-splash .lx-outline path{fill:none;stroke:#FF7A2E;stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:lxsDraw 1.4s cubic-bezier(.65,0,.35,1) forwards}
       #lx-splash .lx-outline path:nth-child(2){animation-delay:.2s}
@@ -63,7 +65,7 @@
       #lx-splash .lx-bar i{position:absolute;inset:0;width:40%;border-radius:2px;background:linear-gradient(90deg,transparent,#FF5400,transparent);animation:lxsBar 1.6s ease-in-out infinite}
       @keyframes lxsDraw{to{stroke-dashoffset:0}}
       @keyframes lxsLine{to{transform:scaleX(1)}}
-      @keyframes lxsSolid{to{opacity:1;transform:none}}
+      @keyframes lxsSolid{to{opacity:1;transform:none}}@keyframes lxsMark{to{opacity:1;transform:none}}@keyframes lxsShine{0%{left:-60%;opacity:1}100%{left:130%;opacity:1}}
       @keyframes lxsFade{to{opacity:0}}
       @keyframes lxsHalo{to{opacity:1}}
       @keyframes lxsWord{from{opacity:0;letter-spacing:1.6em;filter:blur(6px)}to{opacity:1;letter-spacing:.9em;filter:blur(0)}}
@@ -71,7 +73,7 @@
       @keyframes lxsPulse{0%,100%{transform:scale(.92);opacity:.75}50%{transform:scale(1.05);opacity:1}}
       @keyframes lxsRing{from{transform:scale(.7);opacity:.9}to{transform:scale(1.6);opacity:0}}
       @keyframes lxsBar{from{transform:translateX(-110%)}to{transform:translateX(260%)}}
-      @media (prefers-reduced-motion:reduce){#lx-splash *{animation:none!important}#lx-splash .lx-solid,#lx-splash .lx-halo{opacity:1;transform:none}#lx-splash .lx-outline{opacity:0}#lx-splash .lx-word,#lx-splash .lx-tag,#lx-splash .lx-sub,#lx-splash .lx-skip{opacity:1}#lx-splash .lx-line{transform:none}}
+      @media (prefers-reduced-motion:reduce){#lx-splash *{animation:none!important}#lx-splash .lx-mark,#lx-splash .lx-halo{opacity:1;transform:none}#lx-splash .lx-outline{opacity:0}#lx-splash .lx-word,#lx-splash .lx-tag,#lx-splash .lx-sub,#lx-splash .lx-skip{opacity:1}#lx-splash .lx-line{transform:none}}
     </style>
     <script>
       (function () {
@@ -100,13 +102,8 @@
       <div class="lx-ring"></div>
       <div class="lx-logo">
         <div class="lx-halo"></div>
-        <svg class="lx-solid" viewBox="0 0 230 255" xmlns="http://www.w3.org/2000/svg">
-          <defs><linearGradient id="lxOr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF7A2E"/><stop offset=".55" stop-color="#FF5400"/><stop offset="1" stop-color="#E64600"/></linearGradient></defs>
-          <g fill="url(#lxOr)"><path d="M0 0H51V203H230V255H0Z"/><path d="M65 38H111L184 203H138Z"/><path d="M144 38H190L116 203H70Z"/></g>
-        </svg>
-        <svg class="lx-outline" viewBox="0 0 230 255" xmlns="http://www.w3.org/2000/svg">
-          <path pathLength="1" d="M0 0H51V203H230V255H0Z"/><path pathLength="1" d="M65 38H111L184 203H138Z"/><path pathLength="1" d="M144 38H190L116 203H70Z"/>
-        </svg>
+        <img class="lx-mark" src="/icons/splash-mark.png?v=3" alt="" />
+        <i class="lx-shine"></i>
       </div>
       <div class="lx-word">LEVIX</div>
       <div class="lx-line"></div>

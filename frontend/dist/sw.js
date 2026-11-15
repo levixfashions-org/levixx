@@ -2,8 +2,8 @@
 // - Pages (HTML): network-first, so customers always get the latest deployment.
 // - Hashed JS/CSS in /assets: cache-first (file names change on every build).
 // - API calls and payments are never cached.
-const CACHE_NAME = 'levix-pwa-v5';
-const PRECACHE = ['/manifest.json', '/favicon.svg', '/icons/icon-192.png?v=2', '/icons/icon-512.png?v=2', '/icons/icon-maskable-512.png?v=2', '/icons/apple-touch-icon.png?v=2'];
+const CACHE_NAME = 'levix-pwa-v6';
+const PRECACHE = ['/manifest.json', '/favicon.svg', '/icons/icon-192.png?v=3', '/icons/icon-512.png?v=3', '/icons/icon-maskable-512.png?v=3', '/icons/apple-touch-icon.png?v=3', '/icons/splash-mark.png?v=3'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE)).catch(() => undefined));
@@ -88,8 +88,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'LEVIX';
   const options = {
     body: data.body || '',
-    icon: '/icons/icon-192.png?v=2',
-    badge: '/icons/badge-96.png',
+    icon: '/icons/icon-192.png?v=3',
+    badge: '/icons/badge-96.png?v=3',
     image: data.image || undefined,
     tag: data.tag || undefined,
     renotify: Boolean(data.tag),
