@@ -6,6 +6,7 @@ import { env } from '../config/env.js';
 import { getRazorpay, isRazorpayConfigured } from '../config/razorpay.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { addressSchema } from './authController.js';
+import { INSTAGRAM_RE, normalizeInstagram } from '../utils/instagram.js';
 import { formatCart, getAnonymousToken, imageForColor, resolveCart } from './cartController.js';
 import { calculateShippingPaise, getSettings } from '../services/store.js';
 import { evaluateCoupon, formatAddress, generateAccessKey, generateOrderNumber, notifyOrder, safeEqual } from '../services/orders.js';
@@ -17,7 +18,14 @@ const createOrderSchema = z.object({
   shippingAddress: addressSchema.omit({ isDefault: true }),
   couponCode: z.string().trim().max(40).optional().or(z.literal('')),
   saveAddress: z.boolean().optional(),
-  paymentMethod: z.enum(['ONLINE', 'COD']).default('ONLINE')
+  paymentMethod: z.enum(['ONLINE', 'COD']).default('ONLINE'),
+  instagram: z
+    .string()
+    .max(200)
+    .optional()
+    .nullable()
+    .transform(normalizeInstagram)
+    .refine((v) => v === null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores.")
 });
 
 export async function validateCoupon(req: Request, res: Response) {
@@ -31,6 +39,10 @@ export async function validateCoupon(req: Request, res: Response) {
 
 /** Saves the checkout address to the signed-in customer's account for faster checkout next time. */
 async function saveCheckoutAddress(req: Request, data: z.infer<typeof createOrderSchema>) {
+  // Remember the customer's Instagram ID on their account (latest one wins).
+  if (req.user && data.instagram) {
+    await prisma.user.update({ where: { id: req.user.id }, data: { instagram: data.instagram } }).catch(() => undefined);
+  }
   if (!req.user || !data.saveAddress) return;
   const existing = await prisma.address.findFirst({
     where: { userId: req.user.id, line1: data.shippingAddress.line1, postalCode: data.shippingAddress.postalCode }
@@ -114,6 +126,7 @@ export async function createOrder(req: Request, res: Response) {
     customerEmail: data.customerEmail,
     customerName: data.customerName,
     customerPhone: data.customerPhone,
+    instagram: data.instagram,
     shippingAddressSnapshot: { ...data.shippingAddress, phone: data.shippingAddress.phone },
     subtotalPaise,
     shippingPaise,

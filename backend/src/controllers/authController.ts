@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { INSTAGRAM_RE, normalizeInstagram } from '../utils/instagram.js';
 
 const phoneSchema = z
   .string()
@@ -37,16 +38,23 @@ export async function getProfile(req: Request, res: Response) {
 
 export async function updateProfile(req: Request, res: Response) {
   if (!req.user) throw new AppError('Please sign in to continue.', 401);
-  const { name, phone } = z
+  const { name, phone, instagram: ig } = z
     .object({
       name: z.string().trim().min(2).max(100).optional(),
-      phone: phoneSchema.optional()
+      phone: phoneSchema.optional(),
+      // '' clears it; omitted leaves it unchanged
+      instagram: z
+        .string()
+        .max(200)
+        .optional()
+        .transform((v) => (v === undefined ? undefined : normalizeInstagram(v)))
+        .refine((v) => v == null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores.")
     })
     .parse(req.body);
 
   const user = await prisma.user.update({
     where: { id: req.user.id },
-    data: { ...(name ? { name } : {}), ...(phone ? { phone } : {}) }
+    data: { ...(name ? { name } : {}), ...(phone ? { phone } : {}), ...(ig !== undefined ? { instagram: ig } : {}) }
   });
   res.json({ user });
 }

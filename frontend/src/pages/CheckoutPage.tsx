@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, ArrowRight, Tag, X, Plus, Minus } from 'lucide-react';
+import { InstagramGlyph } from '../components/InstagramGlyph';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../services/api';
@@ -8,6 +9,15 @@ import { Address } from '../types';
 import { SavedAddress, loadDeviceAddresses, upsertDeviceAddress, removeDeviceAddress, setDeviceDefault } from '../services/deviceAddresses';
 
 const CONTACT_KEY = 'levix_checkout_contact';
+
+/** "@Levix.Wear" or an instagram.com link → "levix.wear". */
+const cleanInstagram = (raw: string) => {
+  let v = raw.trim();
+  const m = v.match(/instagram\.com\/([^/?#\s]+)/i);
+  if (m) v = m[1];
+  return v.replace(/^@+/, '').replace(/\/+$/, '').trim().toLowerCase();
+};
+const IG_RE = /^(?!\.)(?!.*\.\.)(?!.*\.$)[a-z0-9._]{1,30}$/;
 const MAX_ADDRESSES = 10;
 import { useSettingsStore } from '../store/settingsStore';
 
@@ -63,6 +73,7 @@ export const CheckoutPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [instagram, setInstagram] = useState('');
   const [line1, setLine1] = useState('');
   const [line2, setLine2] = useState('');
   const [city, setCity] = useState('');
@@ -116,10 +127,12 @@ export const CheckoutPage: React.FC = () => {
     if (user) {
       setEmail((v) => v || user.email || '');
       setFullName((v) => v || user.displayName || '');
+      if (profile?.instagram) setInstagram((v) => v || profile.instagram || '');
     } else {
       try {
         const c = JSON.parse(localStorage.getItem(CONTACT_KEY) || '{}');
         if (c.email) setEmail((v) => v || c.email);
+        if (c.instagram) setInstagram((v) => v || c.instagram);
       } catch {
         /* ignore */
       }
@@ -332,6 +345,12 @@ export const CheckoutPage: React.FC = () => {
     }
     if (!agreed) return setErrorMsg('Please accept the Terms & Conditions and the Returns policy to continue.');
 
+    const igHandle = cleanInstagram(instagram);
+    if (igHandle && !IG_RE.test(igHandle)) {
+      setErrorMsg("That Instagram ID doesn't look right. Use letters, numbers, dots or underscores, or leave it empty.");
+      document.getElementById('co-ig')?.focus();
+      return;
+    }
     setLoading(true);
     try {
       if (!isCod) {
@@ -344,6 +363,7 @@ export const CheckoutPage: React.FC = () => {
         customerEmail: email.trim(),
         customerName: fullName.trim(),
         customerPhone: cleanPhone,
+        instagram: igHandle || null,
         shippingAddress: {
           fullName: fullName.trim(),
           line1: line1.trim(),
@@ -364,11 +384,12 @@ export const CheckoutPage: React.FC = () => {
       if (user && typed && editingId) {
         apiClient.put(`/auth/addresses/${editingId}`, currentAddress()).catch(() => undefined);
       }
+      if (user && igHandle && igHandle !== profile?.instagram) setTimeout(() => refreshProfile().catch(() => undefined), 300);
       if (user && typed) setTimeout(() => refreshProfile().catch(() => undefined), 300);
       if (!user) {
         if (typed) setDeviceAddrs(upsertDeviceAddress(currentAddress(), editingId).list);
         try {
-          localStorage.setItem(CONTACT_KEY, JSON.stringify({ email: email.trim() }));
+          localStorage.setItem(CONTACT_KEY, JSON.stringify({ email: email.trim(), instagram: igHandle }));
         } catch {
           /* ignore */
         }
@@ -482,6 +503,33 @@ export const CheckoutPage: React.FC = () => {
               <div>
                 <label htmlFor="co-phone" className={labelClass}>Mobile number *</label>
                 <input id="co-phone" type="tel" required inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" className={inputClass} />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="co-ig" className={`${labelClass} flex items-center gap-1.5`}>
+                  <InstagramGlyph className="w-3.5 h-3.5" /> Instagram ID <span className="text-[#8e8e93] font-normal">(optional)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[15px] text-[#8e8e93] pointer-events-none">@</span>
+                  <input
+                    id="co-ig"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    maxLength={120}
+                    value={instagram}
+                    onChange={(e) => setInstagram(e.target.value.replace(/^@+/, ''))}
+                    onBlur={() => setInstagram((v) => cleanInstagram(v))}
+                    placeholder="your.username"
+                    className={`${inputClass} !pl-9`}
+                    aria-describedby="co-ig-help"
+                  />
+                </div>
+                <p id="co-ig-help" className="mt-1.5 pl-1 text-[12px] text-[#8e8e93]">
+                  {storeSettings.instagramHandle ? `Follow @${storeSettings.instagramHandle.replace(/^@/, '')} on Instagram and add your ID so we can recognise our followers.` : 'Add your ID so we can recognise our Instagram followers.'}
+                </p>
               </div>
             </div>
           </div>

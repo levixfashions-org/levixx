@@ -8,6 +8,13 @@ import { productFullInclude, serializeProduct, slugify } from '../utils/serializ
 import { getSettings, saveSettings } from '../services/store.js';
 import { notifyOrderPush, pushToAll, pushToUser } from '../services/push.js';
 import { refundOrder } from '../services/refunds.js';
+
+/** A "real" order: paid online or Cash on Delivery, not cancelled or refunded. */
+const COUNTED_ORDER: Prisma.OrderWhereInput = {
+  status: { in: [OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.PENDING] },
+  paymentStatus: { not: PaymentStatus.REFUNDED },
+  OR: [{ paymentStatus: PaymentStatus.PAID }, { paymentMethod: 'COD' }]
+};
 import { formatAddress } from '../services/orders.js';
 
 /* ----------------------------------------------------------------------------------------------
@@ -86,7 +93,8 @@ export async function getAllOrders(req: Request, res: Response) {
       { orderNumber: { contains: search } },
       { customerName: { contains: search } },
       { customerEmail: { contains: search } },
-      { customerPhone: { contains: search } }
+      { customerPhone: { contains: search } },
+      { instagram: { contains: search.replace(/^@/, '').toLowerCase() } }
     ];
   }
 
@@ -101,9 +109,21 @@ export async function getAllOrders(req: Request, res: Response) {
     })
   ]);
 
+  // How many real orders each Instagram ID on this page has placed in total.
+  const handles = [...new Set(orders.map((o) => o.instagram).filter(Boolean))] as string[];
+  const igCounts = new Map<string, number>();
+  if (handles.length) {
+    const rows = await prisma.order.groupBy({ by: ['instagram'], where: { instagram: { in: handles }, ...COUNTED_ORDER }, _count: { _all: true } });
+    rows.forEach((r) => r.instagram && igCounts.set(r.instagram, r._count._all));
+  }
+
   res.set('Cache-Control', 'no-store');
   res.json({
-    orders: orders.map(({ accessKey, ...o }) => ({ ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) })),
+    orders: orders.map(({ accessKey, ...o }) => ({
+      ...o,
+      instagramOrderCount: o.instagram ? igCounts.get(o.instagram) || 0 : 0,
+      shippingAddress: formatAddress(o.shippingAddressSnapshot)
+    })),
     pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
   });
 }
@@ -862,4 +882,48 @@ export async function refundAdminOrder(req: Request, res: Response) {
   const full = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } } });
   const { accessKey, ...o } = full!;
   res.json({ success: true, alreadyRefunded: result.alreadyRefunded, order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
+}
+
+
+/** Customers who shared their Instagram ID, ranked by orders and spend. */
+export async function getInstagramCustomers(req: Request, res: Response) {
+  const take = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
+  const rows = await prisma.order.groupBy({
+    by: ['instagram'],
+    where: { instagram: { not: null }, ...COUNTED_ORDER },
+    _count: { _all: true },
+    _sum: { totalPaise: true },
+    _max: { createdAt: true },
+    orderBy: [{ _count: { instagram: 'desc' } }],
+    take
+  });
+  const handles = rows.map((r) => r.instagram!).filter(Boolean);
+  // Latest name / email used with each handle.
+  const latest = handles.length
+    ? await prisma.order.findMany({
+        where: { instagram: { in: handles } },
+        orderBy: { createdAt: 'desc' },
+        select: { instagram: true, customerName: true, customerEmail: true, customerPhone: true }
+      })
+    : [];
+  const who = new Map<string, (typeof latest)[number]>();
+  latest.forEach((o) => o.instagram && !who.has(o.instagram) && who.set(o.instagram, o));
+  const totalWithIg = await prisma.order.count({ where: { instagram: { not: null }, ...COUNTED_ORDER } });
+  const totalAll = await prisma.order.count({ where: COUNTED_ORDER });
+
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    customers: rows
+      .map((r) => ({
+        instagram: r.instagram,
+        orders: r._count._all,
+        spentPaise: r._sum.totalPaise || 0,
+        lastOrderAt: r._max.createdAt,
+        name: who.get(r.instagram!)?.customerName || null,
+        email: who.get(r.instagram!)?.customerEmail || null,
+        phone: who.get(r.instagram!)?.customerPhone || null
+      }))
+      .sort((a, b) => b.orders - a.orders || b.spentPaise - a.spentPaise),
+    summary: { handles: rows.length, ordersWithInstagram: totalWithIg, allOrders: totalAll }
+  });
 }

@@ -124,6 +124,8 @@ export interface Order {
   customerEmail: string;
   customerName: string;
   customerPhone: string;
+  instagram?: string | null;
+  instagramOrderCount?: number;
   shippingAddressSnapshot: Address;
   subtotalPaise: number;
   shippingPaise: number;
@@ -154,6 +156,7 @@ export interface UserProfile {
   email: string;
   name?: string | null;
   phone?: string | null;
+  instagram?: string | null;
   role: 'CUSTOMER' | 'ADMIN';
   emailVerified?: boolean;
   addresses: Address[];

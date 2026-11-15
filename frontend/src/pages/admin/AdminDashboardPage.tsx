@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { Shield, TrendingUp, Package, Users, AlertTriangle, ArrowRight, Tag, Sliders, ExternalLink } from 'lucide-react';
+import { InstagramCustomers } from '../../components/admin/InstagramCustomers';
 
 export const AdminDashboardPage: React.FC = () => {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -307,6 +308,8 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
 
       </div>
+
+      <InstagramCustomers />
 
       </div>
 

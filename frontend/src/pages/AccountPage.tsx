@@ -13,6 +13,7 @@ import { useWishlistStore } from '../store/wishlistStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { PushToggle } from '../components/PushToggle';
+import { InstagramGlyph } from '../components/InstagramGlyph';
 import { ShipmentTracker } from '../components/ShipmentTracker';
 import { AddressSheet, AddressInput } from '../components/account/AddressSheet';
 import { StatusPill, isActiveOrder, orderDate, rupees } from '../components/account/orderStatus';
@@ -38,6 +39,7 @@ export const AccountPage: React.FC = () => {
   const [editProfile, setEditProfile] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [igEdit, setIgEdit] = useState('');
   const [profileErr, setProfileErr] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [verifySent, setVerifySent] = useState(false);
@@ -84,6 +86,7 @@ export const AccountPage: React.FC = () => {
   const startEditProfile = () => {
     setName(profile?.name || user.displayName || '');
     setPhone(profile?.phone || '');
+    setIgEdit(profile?.instagram || '');
     setProfileErr(null);
     setEditProfile(true);
   };
@@ -94,10 +97,13 @@ export const AccountPage: React.FC = () => {
     const ph = phone.replace(/[\s-]/g, '');
     if (n.length < 2) return setProfileErr('Please enter your name (at least 2 letters).');
     if (ph && !/^(\+91)?[6-9]\d{9}$/.test(ph)) return setProfileErr('Enter a valid 10-digit mobile number.');
+    const igm = igEdit.trim().match(/instagram\.com\/([^/?#\s]+)/i);
+    const ig = (igm ? igm[1] : igEdit).trim().replace(/^@+/, '').replace(/\/+$/, '').toLowerCase();
+    if (ig && !/^(?!\.)(?!.*\.\.)(?!.*\.$)[a-z0-9._]{1,30}$/.test(ig)) return setProfileErr("That Instagram ID doesn't look right. Use letters, numbers, dots or underscores.");
     setSavingProfile(true);
     setProfileErr(null);
     try {
-      await apiClient.put('/auth/profile', { name: n, ...(ph ? { phone: ph } : {}) });
+      await apiClient.put('/auth/profile', { name: n, ...(ph ? { phone: ph } : {}), instagram: ig });
       if (auth.currentUser && auth.currentUser.displayName !== n) await fbUpdateProfile(auth.currentUser, { displayName: n }).catch(() => undefined);
       await refreshProfile();
       setEditProfile(false);
@@ -413,6 +419,13 @@ export const AccountPage: React.FC = () => {
                     <label htmlFor="pf-phone" className="block text-[12.5px] font-medium text-[#3a3a3f] mb-1.5 pl-1">Mobile number</label>
                     <input id="pf-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="10-digit number" className="lx-field w-full h-11 px-3.5 text-[14.5px]" />
                   </div>
+                  <div>
+                    <label htmlFor="pf-ig" className="block text-[12.5px] font-medium text-[#3a3a3f] mb-1.5 pl-1">Instagram ID <span className="text-[#8e8e93] font-normal">(optional)</span></label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[14.5px] text-[#8e8e93] pointer-events-none">@</span>
+                      <input id="pf-ig" value={igEdit} onChange={(e) => setIgEdit(e.target.value.replace(/^@+/, ''))} autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="your.username" className="lx-field w-full h-11 pl-8 pr-3.5 text-[14.5px]" />
+                    </div>
+                  </div>
                   <div className="grid grid-cols-2 gap-2.5 pt-1">
                     <button type="button" onClick={() => setEditProfile(false)} className="lx-btn-soft h-11 text-[14px] font-semibold">Cancel</button>
                     <button type="submit" disabled={savingProfile} className="lx-btn-primary h-11 text-[14px] font-semibold disabled:opacity-60">{savingProfile ? 'Saving…' : 'Save'}</button>
@@ -424,6 +437,7 @@ export const AccountPage: React.FC = () => {
                     { icon: UserIcon, k: 'Name', v: profile?.name || user.displayName || '—' },
                     { icon: Mail, k: 'Email', v: user.email || '—', ok: !needsVerify },
                     { icon: Phone, k: 'Mobile', v: profile?.phone || 'Not added' },
+                    { icon: InstagramGlyph, k: 'Instagram', v: profile?.instagram ? `@${profile.instagram}` : 'Not added' },
                     ...(memberSince ? [{ icon: Star, k: 'Member since', v: memberSince }] : [])
                   ].map((r) => {
                     const Icon = r.icon;

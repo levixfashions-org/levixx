@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { RotateCcw, AlertTriangle } from 'lucide-react';
+import { InstagramGlyph } from '../../components/InstagramGlyph';
 import { 
   ShoppingBag, 
   Search, 
@@ -183,7 +184,8 @@ export const AdminOrdersPage: React.FC = () => {
     const matchesSearch = 
       o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase());
+      o.customerEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (!!o.instagram && o.instagram.includes(searchTerm.toLowerCase().replace(/^@/, '')));
     const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -311,6 +313,7 @@ export const AdminOrdersPage: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <p className="font-semibold text-black">{ord.customerName}</p>
                       <p className="text-[11px] text-neutral-500">{ord.customerEmail}</p>
+                      {ord.instagram && <IgBadge handle={ord.instagram} count={ord.instagramOrderCount} />}
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="font-mono text-neutral-700">
@@ -422,6 +425,7 @@ export const AdminOrdersPage: React.FC = () => {
                   <p><span className="font-semibold text-black">Name:</span> {selectedOrder.customerName}</p>
                   <p><span className="font-semibold text-black">Email:</span> {selectedOrder.customerEmail}</p>
                   <p><span className="font-semibold text-black">Phone:</span> {selectedOrder.customerPhone || 'N/A'}</p>
+                  <p className="flex items-center gap-1.5 flex-wrap"><span className="font-semibold text-black">Instagram:</span> {selectedOrder.instagram ? <IgBadge handle={selectedOrder.instagram} count={selectedOrder.instagramOrderCount} /> : <span className="text-neutral-400">Not given</span>}</p>
                   <p>
                     <span className="font-semibold text-black">Payment:</span>{' '}
                     <span className={selectedOrder.paymentStatus === 'PAID' ? 'text-green-700 font-bold' : 'text-yellow-700 font-bold'}>
@@ -665,3 +669,18 @@ export const AdminOrdersPage: React.FC = () => {
     </div>
   );
 };
+
+/** "@handle · 3 orders" link to the customer's Instagram profile. */
+const IgBadge: React.FC<{ handle: string; count?: number }> = ({ handle, count }) => (
+  <a
+    href={`https://instagram.com/${encodeURIComponent(handle)}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    onClick={(e) => e.stopPropagation()}
+    className="mt-1 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#feda75]/25 via-[#d62976]/15 to-[#4f5bd5]/20 px-2 py-0.5 text-[11px] font-semibold text-[#9b1d5b] hover:text-[#6d1340]"
+    title="Open Instagram profile"
+  >
+    <InstagramGlyph className="w-3 h-3" />@{handle}
+    {count && count > 1 ? <span className="ml-0.5 rounded-full bg-[#9b1d5b] text-white px-1.5 text-[10px]">{count} orders</span> : null}
+  </a>
+);
