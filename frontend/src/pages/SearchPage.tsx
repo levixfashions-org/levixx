@@ -44,25 +44,22 @@ export const SearchPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-10 space-y-10">
-      
-      <div className="border-b border-black/10 pb-6 space-y-4">
-        <h1 className="font-display font-black text-3xl sm:text-5xl uppercase tracking-tight text-black">
-          Search Atelier
-        </h1>
-        
-        <form onSubmit={handleSearchSubmit} className="max-w-xl flex items-center border-2 border-black bg-white">
+    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 sm:py-10 space-y-6 sm:space-y-8">
+      <div className="space-y-4 px-1">
+        <div>
+          <p className="lx-eyebrow">Find your fit</p>
+          <h1 className="lx-h1 mt-1">Search</h1>
+        </div>
+        <form onSubmit={handleSearchSubmit} role="search" className="max-w-xl flex items-center gap-2">
           <input
-            type="text"
+            type="search"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search overlength tees, waffle full sleeves, acid wash drops..."
-            className="flex-1 p-3.5 text-xs sm:text-sm font-semibold uppercase tracking-wider focus:outline-none"
+            placeholder="Search overlength tees, waffle, acid wash…"
+            aria-label="Search products"
+            className="lx-field flex-1 min-w-0 h-12 px-4 text-[15px]"
           />
-          <button
-            type="submit"
-            className="px-6 py-3.5 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 transition-colors"
-          >
+          <button type="submit" className="lx-btn-primary h-12 px-6 text-[14.5px] font-semibold">
             Search
           </button>
         </form>
@@ -72,13 +69,13 @@ export const SearchPage: React.FC = () => {
         {loading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 py-12">
             {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="aspect-[3/4] bg-neutral-200 animate-pulse" />
+              <div key={n} className="aspect-[3/4] rounded-[18px] bg-black/[0.06] animate-pulse" />
             ))}
           </div>
         ) : q ? (
           <div>
-            <p className="text-xs text-neutral-600 mb-6 uppercase tracking-wider">
-              Displaying {products.length} results for <span className="font-bold text-black">"{q}"</span>
+            <p className="lx-sub mb-5 px-1">
+              {products.length} result{products.length === 1 ? '' : 's'} for <span className="font-semibold text-[#0b0b0f]">“{q}”</span>
             </p>
 
             {products.length > 0 ? (
@@ -88,14 +85,16 @@ export const SearchPage: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="py-20 text-center text-xs text-neutral-500 uppercase tracking-widest">
-                No matching garments found in our archive.
+              <div className="lx-acct-card max-w-[460px] mx-auto px-6 py-10 text-center">
+                <p className="text-[17px] font-semibold text-[#0b0b0f]">No matches</p>
+                <p className="mt-1 lx-sub">Try a different word, like “oversized”, “waffle” or a colour.</p>
               </div>
             )}
           </div>
         ) : (
-          <div className="py-20 text-center text-xs text-neutral-500 uppercase tracking-widest">
-            Enter a search keyword above to inspect products.
+          <div className="lx-acct-card max-w-[460px] mx-auto px-6 py-10 text-center">
+            <p className="text-[17px] font-semibold text-[#0b0b0f]">What are you looking for?</p>
+            <p className="mt-1 lx-sub">Type a product name, style or colour above.</p>
           </div>
         )}
       </div>

@@ -1,0 +1,73 @@
+/* ───────── Storefront glass theme (body.lx-shop) — same language as sign-in / account / checkout ───────── */
+
+body.lx-shop { background-color: #f1f2f6; }
+/* Soft colour wash behind every shop page (fixed, so it never scrolls or repaints). */
+body.lx-shop::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 30% at 8% 8%, rgba(255, 138, 76, 0.22), transparent 70%),
+    radial-gradient(36% 30% at 96% 12%, rgba(126, 146, 255, 0.18), transparent 70%),
+    radial-gradient(40% 34% at 88% 92%, rgba(255, 112, 170, 0.14), transparent 70%),
+    radial-gradient(38% 32% at 6% 90%, rgba(86, 204, 196, 0.14), transparent 70%),
+    linear-gradient(180deg, #f5f6fa, #eceef3);
+}
+/* Pages that already paint their own wallpaper don't need a second one. */
+body.lx-shop .lx-acct { background: transparent; }
+
+/* Shared panels (footer, home sections, cards) become frosted glass. */
+body.lx-shop .lx-panel {
+  background: rgba(255, 255, 255, 0.66);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 0.5px rgba(17, 17, 26, 0.04), 0 14px 40px -26px rgba(17, 17, 26, 0.28);
+}
+
+/* Header: frosted bar instead of flat white / grey. */
+body.lx-shop .lx-head-solid {
+  background: rgba(248, 248, 251, 0.72) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: 0 0.5px 0 rgba(17, 17, 26, 0.08);
+}
+body.lx-shop .lx-head-pill {
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 6px 18px -10px rgba(17, 17, 26, 0.3);
+}
+
+/* Footer pills / inputs */
+body.lx-shop footer .bg-\[\#EFEFEF\] { background: rgba(255, 255, 255, 0.75); border: 1px solid rgba(17, 17, 26, 0.08); }
+
+/* Typography helpers for page headers */
+.lx-h1 { font-size: 28px; line-height: 1.12; font-weight: 600; letter-spacing: -0.035em; color: #0b0b0f; }
+@media (min-width: 640px) { .lx-h1 { font-size: 36px; } }
+.lx-eyebrow { font-size: 12px; font-weight: 500; color: #6e6e73; }
+.lx-sub { font-size: 13.5px; line-height: 1.55; color: #6e6e73; }
+
+/* Product photos: soft rounded corners everywhere in the shop */
+body.lx-shop .lx-pcard-img { border-radius: 18px; }
+
+/* Thin scrollbar that suits the glass look */
+body.lx-shop ::-webkit-scrollbar-track { background: transparent; }
+body.lx-shop ::-webkit-scrollbar-thumb { background: rgba(17, 17, 26, 0.22); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+
+/* Let the colour wash show through the app wrapper. */
+body.lx-shop .lx-app-root { background: transparent; }
+
+/* Full-screen menus / side drawers: frosted sheet */
+body.lx-shop .lx-glass-sheet {
+  background: rgba(244, 245, 249, 0.9) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+}
+
+/* Section titles on home / rails a little larger, Apple-style */
+body.lx-shop .lx-title { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: #0b0b0f; }

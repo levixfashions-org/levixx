@@ -61,17 +61,17 @@ export const CartDrawer: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-[80]">
-      <div className="absolute inset-0 bg-black/45" onClick={closeCart} />
-      <aside className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-[#E9E9E9] lx-drawer-in flex flex-col" role="dialog" aria-label="Your bag">
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <h2 className="text-[15px] font-bold">{items.length ? `Your bag (${cart?.itemCount})` : ''}</h2>
-          <button onClick={closeCart} aria-label="Close bag" className="p-1"><CloseIcon className="w-5 h-5" /></button>
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-[3px]" onClick={closeCart} />
+      <aside className="absolute right-0 top-0 h-full w-full sm:w-[420px] bg-[#E9E9E9] lx-glass-sheet sm:rounded-l-[28px] shadow-[-20px_0_60px_-30px_rgba(0,0,0,0.5)] lx-drawer-in flex flex-col" role="dialog" aria-label="Your bag">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <h2 className="text-[19px] font-semibold tracking-[-0.02em]">{items.length ? `Your bag (${cart?.itemCount})` : ''}</h2>
+          <button onClick={closeCart} aria-label="Close bag" className="lx-btn-soft w-9 h-9 flex items-center justify-center"><CloseIcon className="w-4 h-4" /></button>
         </div>
 
         {items.length === 0 ? (
           <div className="flex-1 overflow-y-auto px-5 pb-8">
-            <h3 className="text-[19px] font-bold">Your bag is empty!</h3>
-            <p className="text-[11px] text-neutral-600">Let's get started</p>
+            <h3 className="text-[22px] font-semibold tracking-[-0.02em]">Your bag is empty</h3>
+            <p className="text-[13px] text-[#6e6e73]">Let's get started</p>
             <Link to="/collections/all-products" className="inline-flex items-center gap-1 mt-16 text-[11px] font-medium hover:opacity-60">
               Shop now <ArrowUpRight />
             </Link>
@@ -81,7 +81,7 @@ export const CartDrawer: React.FC = () => {
                 <p className="text-[11px] font-semibold mb-2">Products you may like</p>
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
                   {suggestions.map((p) => (
-                    <Link key={p.id} to={`/products/${p.slug}`} className="shrink-0 w-[72px] aspect-[4/5] rounded-[6px] overflow-hidden bg-[#ddd]">
+                    <Link key={p.id} to={`/products/${p.slug}`} className="shrink-0 w-[72px] aspect-[4/5] rounded-[12px] overflow-hidden bg-black/5 ring-1 ring-black/5">
                       {p.images[0] && <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />}
                     </Link>
                   ))}
@@ -132,45 +132,45 @@ export const CartDrawer: React.FC = () => {
             <div className="flex-1 overflow-y-auto px-5 space-y-2.5 pb-4">
               {error && <p className="text-[11px] text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
               {items.map((it) => (
-                <div key={it.id} className={`flex gap-3 bg-white rounded-[12px] p-2.5 ${busyId === it.id ? 'opacity-60' : ''}`}>
-                  <Link to={`/products/${it.productSlug}`} className="w-[76px] aspect-[4/5] rounded-[8px] overflow-hidden bg-[#E3E3E3] shrink-0">
+                <div key={it.id} className={`flex gap-3 bg-white/75 border border-white/80 shadow-[0_8px_24px_-18px_rgba(0,0,0,0.4)] rounded-[18px] p-2.5 ${busyId === it.id ? 'opacity-60' : ''}`}>
+                  <Link to={`/products/${it.productSlug}`} className="w-[76px] aspect-[4/5] rounded-[12px] overflow-hidden bg-[#E6E7EB] shrink-0">
                     {it.imageUrl && <img src={it.imageUrl} alt={it.productName} className="w-full h-full object-cover" />}
                   </Link>
                   <div className="flex-1 min-w-0 flex flex-col">
                     <div className="flex justify-between gap-2">
-                      <Link to={`/products/${it.productSlug}`} className="text-[11.5px] font-semibold leading-snug line-clamp-2">{it.productName}</Link>
+                      <Link to={`/products/${it.productSlug}`} className="text-[13px] font-medium leading-snug line-clamp-2">{it.productName}</Link>
                       <button onClick={() => change(it.id, 0)} aria-label="Remove" className="text-neutral-400 hover:text-black shrink-0"><CloseIcon className="w-3.5 h-3.5" /></button>
                     </div>
-                    <p className="text-[10.5px] text-neutral-500 mt-0.5">Size: {it.size}{it.color ? ` · ${it.color}` : ''}</p>
+                    <p className="text-[12px] text-[#8e8e93] mt-0.5">Size {it.size}{it.color ? ` · ${it.color}` : ''}</p>
                     {it.quantity > it.stockQuantity && (
                       <p className="text-[10px] text-red-600">Only {it.stockQuantity} left — please reduce</p>
                     )}
                     <div className="mt-auto flex items-center justify-between">
-                      <div className="flex items-center rounded-full border border-black/15">
-                        <button onClick={() => change(it.id, it.quantity - 1)} disabled={busyId === it.id} className="w-7 h-7 text-[13px]" aria-label="Decrease">−</button>
-                        <span className="w-5 text-center text-[11px]">{it.quantity}</span>
-                        <button onClick={() => change(it.id, it.quantity + 1)} disabled={busyId === it.id || it.quantity >= it.stockQuantity} className="w-7 h-7 text-[13px] disabled:opacity-30" aria-label="Increase">+</button>
+                      <div className="flex items-center rounded-[10px] bg-white/80 ring-1 ring-black/10">
+                        <button onClick={() => change(it.id, it.quantity - 1)} disabled={busyId === it.id} className="w-8 h-8 text-[15px]" aria-label="Decrease">−</button>
+                        <span className="w-6 text-center text-[12.5px] font-semibold">{it.quantity}</span>
+                        <button onClick={() => change(it.id, it.quantity + 1)} disabled={busyId === it.id || it.quantity >= it.stockQuantity} className="w-8 h-8 text-[15px] disabled:opacity-30" aria-label="Increase">+</button>
                       </div>
-                      <span className="text-[11.5px] font-semibold">{formatRs(it.totalPaise)}</span>
+                      <span className="text-[14px] font-semibold">{formatRs(it.totalPaise)}</span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="px-5 pt-3 pb-5 bg-[#E9E9E9] border-t border-black/10 space-y-1.5">
-              <div className="flex justify-between text-[11.5px]"><span>Subtotal</span><span className="font-semibold">{formatRs(cart!.subtotalPaise)}</span></div>
-              <div className="flex justify-between text-[11px] text-neutral-600"><span>Shipping</span><span>{cart!.shippingPaise ? formatRs(cart!.shippingPaise) : 'FREE'}</span></div>
+            <div className="px-5 pt-4 pb-[calc(20px+env(safe-area-inset-bottom))] bg-white/55 backdrop-blur-xl border-t border-black/[0.06] space-y-2">
+              <div className="flex justify-between text-[13.5px]"><span>Subtotal</span><span className="font-semibold">{formatRs(cart!.subtotalPaise)}</span></div>
+              <div className="flex justify-between text-[13px] text-[#6e6e73]"><span>Shipping</span><span className={cart!.shippingPaise ? '' : 'text-green-700 font-medium'}>{cart!.shippingPaise ? formatRs(cart!.shippingPaise) : 'Free'}</span></div>
               <button
                 onClick={() => {
                   closeCart();
                   navigate('/checkout');
                 }}
-                className="w-full mt-2 py-3.5 rounded-full bg-black text-white text-[11px] font-semibold uppercase tracking-wide hover:bg-neutral-800"
+                className="lx-btn-primary w-full mt-2 h-[52px] text-[15px] font-semibold"
               >
                 Checkout • {formatRs(cart!.totalPaise)}
               </button>
-              <p className="text-[9.5px] text-neutral-500 text-center">Taxes included. Discount codes are applied at checkout.</p>
+              <p className="text-[11px] text-[#8e8e93] text-center">Taxes included. Discount codes are applied at checkout.</p>
             </div>
           </>
         )}

@@ -15,7 +15,7 @@ export const Chip: React.FC<{ to: string; children: React.ReactNode; onClick?: (
   <Link
     to={to}
     onClick={onClick}
-    className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-black/10 text-[10.5px] hover:border-black transition-colors whitespace-nowrap"
+    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/75 border border-white/80 text-[11.5px] font-medium hover:bg-white hover:border-black/20 transition-colors whitespace-nowrap"
   >
     {children}
   </Link>
@@ -33,7 +33,7 @@ export const MegaMenu: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const departments = (data?.menu.departments || []).filter((d) => d.count > 0);
 
   return (
-    <div className="lx-drop-in absolute left-0 right-0 top-16 bg-white rounded-b-[22px] shadow-[0_20px_40px_rgba(0,0,0,0.08)] px-[22px] pt-4 pb-8">
+    <div className="lx-drop-in absolute left-0 right-0 top-16 bg-white lx-glass-sheet rounded-b-[28px] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.35)] px-[22px] pt-4 pb-8">
       <div className="grid grid-cols-12 gap-6 text-black">
         <div className="col-span-3 space-y-2.5">
           <Link to="/collections/new-in" onClick={onClose} className="block text-[12px] font-semibold hover:opacity-60">New Arrivals</Link>

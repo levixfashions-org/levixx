@@ -176,32 +176,35 @@ export const ProductDetailPage: React.FC = () => {
 
   const infoPanel = (
     <div className="space-y-2">
-      <div className="lx-panel p-4">
+      <div className="lx-panel p-5">
         <div className="flex items-start justify-between gap-3">
-          <h1 className="text-[13px] font-bold leading-tight">{product.name}</h1>
-          <button onClick={() => toggleSave(product.id)} aria-label={isSaved ? 'Remove from saved' : 'Save'} className={isSaved ? 'text-black' : 'text-black/30 hover:text-black'}>
-            <BookmarkIcon className="w-[14px] h-[17px]" filled />
+          <h1 className="text-[19px] sm:text-[21px] font-semibold tracking-[-0.025em] leading-tight text-[#0b0b0f]">{product.name}</h1>
+          <button
+            onClick={() => toggleSave(product.id)}
+            aria-label={isSaved ? 'Remove from saved' : 'Save'}
+            className={`w-10 h-10 -mt-1 -mr-1 rounded-full flex items-center justify-center flex-shrink-0 bg-white/70 border border-black/[0.06] transition-colors ${isSaved ? 'text-black' : 'text-black/35 hover:text-black'}`}
+          >
+            <BookmarkIcon className="w-[15px] h-[18px]" filled />
           </button>
         </div>
-        <div className="flex items-center justify-between mt-1">
-          <p className="text-[11px] text-neutral-600">
-            {formatRs(product.basePrice + (selected?.priceDelta || 0))}
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <p className="text-[13px] text-[#6e6e73] flex flex-wrap items-baseline gap-x-2">
+            <span className="text-[22px] font-semibold tracking-[-0.03em] text-[#0b0b0f]">{formatRs(product.basePrice + (selected?.priceDelta || 0))}</span>
             {product.comparePrice && product.comparePrice > product.basePrice && (
               <>
-                <span className="ml-2 font-semibold text-[#FF5400]">
-                  {Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF
-                </span>
-                <span className="ml-2 line-through text-neutral-400">MRP {formatRs(product.comparePrice)}</span>
+                <span className="line-through text-neutral-400">MRP {formatRs(product.comparePrice)}</span>
+                <span className="lx-pill bg-orange-100 text-[#c24100]">{Math.round((1 - product.basePrice / product.comparePrice) * 100)}% off</span>
               </>
             )}
           </p>
-          <button onClick={openSizeGuide} className="px-2.5 py-1 rounded bg-[#E9E9E9] text-[9.5px] hover:bg-[#ddd]">Size Guide</button>
+          <button onClick={openSizeGuide} className="lx-btn-soft h-8 px-3 text-[12px] font-semibold whitespace-nowrap">Size guide</button>
         </div>
+        <p className="text-[11.5px] text-[#8e8e93] mt-1">Inclusive of all taxes</p>
 
         {colours.length > 0 && (
           <div className="mt-3">
-            <p className="text-[10.5px] text-neutral-600 mb-1.5">
-              Colour: <span className="font-semibold text-black">{activeColour}</span>
+            <p className="text-[12.5px] text-[#6e6e73] mb-2">
+              Colour: <span className="font-semibold text-[#0b0b0f]">{activeColour}</span>
             </p>
             <div className="flex flex-wrap gap-2">
               {colours.map((c) => (
@@ -221,7 +224,8 @@ export const ProductDetailPage: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-5 gap-1.5 mt-3">
+        <p className="text-[12.5px] text-[#6e6e73] mt-4 mb-2">Size</p>
+        <div className="grid grid-cols-5 gap-2">
           {sizeVariants.map((v) => {
             const out = v.stockQuantity <= 0;
             return (
@@ -232,9 +236,9 @@ export const ProductDetailPage: React.FC = () => {
                   setVariantId(v.id);
                   setMessage(null);
                 }}
-                className={`py-2 rounded-full text-[10px] border transition-colors ${
-                  v.id === variantId ? 'bg-black text-white border-black' : 'bg-white border-black/15 hover:border-black'
-                } ${out ? 'opacity-35 line-through cursor-not-allowed hover:border-black/15' : ''}`}
+                className={`h-11 rounded-[12px] text-[13.5px] font-semibold border transition-all ${
+                  v.id === variantId ? 'bg-[#0b0b0f] text-white border-[#0b0b0f] shadow-[0_8px_18px_-10px_rgba(0,0,0,0.6)]' : 'bg-white/75 text-[#0b0b0f] border-black/10 hover:border-black/40'
+                } ${out ? 'opacity-35 line-through cursor-not-allowed hover:border-black/10' : ''}`}
                 aria-label={`Size ${v.size}${out ? ' sold out' : ''}`}
               >
                 {v.size}
@@ -243,27 +247,27 @@ export const ProductDetailPage: React.FC = () => {
           })}
         </div>
         {selected && selected.stockQuantity > 0 && selected.stockQuantity <= 5 && (
-          <p className="text-[10px] text-[#c2410c] mt-2">Only {selected.stockQuantity} left in {selected.color ? `${selected.color} / ` : ''}size {selected.size}</p>
+          <p className="text-[12px] font-medium text-[#c2410c] mt-2.5">Only {selected.stockQuantity} left in {selected.color ? `${selected.color} / ` : ''}size {selected.size}</p>
         )}
 
-        <div className="grid grid-cols-2 gap-2 mt-3">
+        <div className="grid grid-cols-2 gap-2.5 mt-4">
           <button
             onClick={() => add('add')}
             disabled={allSoldOut || busy !== null}
-            className="py-3 rounded-full bg-white border border-black/15 text-[10px] font-semibold uppercase hover:border-black disabled:opacity-40"
+            className="lx-btn-soft h-12 text-[14.5px] font-semibold disabled:opacity-40"
           >
             {allSoldOut ? 'Sold out' : busy === 'add' ? 'Adding…' : 'Add to bag'}
           </button>
           <button
             onClick={() => add('buy')}
             disabled={allSoldOut || busy !== null}
-            className="py-3 rounded-full bg-black text-white text-[10px] font-semibold uppercase hover:bg-neutral-800 disabled:opacity-40"
+            className="lx-btn-primary h-12 text-[14.5px] font-semibold disabled:opacity-40"
           >
             {busy === 'buy' ? 'Please wait…' : 'Buy now'}
           </button>
         </div>
         {message && (
-          <p className={`text-[11px] mt-2 ${message.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>
+          <p className={`text-[12.5px] mt-2.5 ${message.type === 'ok' ? 'text-green-700' : 'text-red-600'}`}>
             {message.text}
             {message.type === 'ok' && (
               <button onClick={() => useCartStore.getState().openCart()} className="underline ml-2 text-black">View bag</button>
@@ -272,21 +276,21 @@ export const ProductDetailPage: React.FC = () => {
         )}
       </div>
 
-      <div className="lx-panel p-4">
-        <div className="grid grid-cols-3 text-[10.5px] text-center border-b border-black/10">
+      <div className="lx-panel p-4 sm:p-5">
+        <div className="lx-segment grid grid-cols-3 p-[3px] text-[12px] text-center">
           {(
             [
-              ['details', 'Details & Description'],
+              ['details', 'Details'],
               ['care', 'Washcare'],
               ['shipping', 'Shipping']
             ] as [Tab, string][]
           ).map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} className={`pb-2 -mb-px border-b-2 ${tab === key ? 'border-black text-black' : 'border-transparent text-neutral-500'}`}>
+            <button key={key} onClick={() => setTab(key)} aria-pressed={tab === key} className={`lx-seg-item h-8 rounded-[10px] font-medium ${tab === key ? 'is-active' : ''}`}>
               {label}
             </button>
           ))}
         </div>
-        <div className="pt-3 text-[11px] leading-relaxed text-neutral-600 min-h-[64px]">
+        <div className="pt-4 px-1 text-[13px] leading-relaxed text-[#3a3a3f] min-h-[64px]">
           {tab === 'details' && (
             <div className="space-y-2">
               <Lines text={product.description} />
@@ -319,33 +323,33 @@ export const ProductDetailPage: React.FC = () => {
       <div className="md:hidden relative">
         <div ref={sliderRef} onScroll={onSlide} className="flex overflow-x-auto no-scrollbar snap-x-mandatory">
           {images.map((img) => (
-            <div key={img.id} className="snap-start-always shrink-0 w-full aspect-[4/5] bg-[#E3E3E3]">
+            <div key={img.id} className="snap-start-always shrink-0 w-full aspect-[4/5] bg-[#E6E7EB]">
               <img src={img.url} alt={img.altText || product.name} className="w-full h-full object-cover" />
             </div>
           ))}
         </div>
         {images.length > 1 && (
-          <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5">
+          <div className="absolute bottom-8 inset-x-0 flex justify-center gap-1.5">
             {images.map((img, i) => (
               <span key={img.id} className={`h-[5px] rounded-full transition-all ${i === slide ? 'w-3 bg-white' : 'w-[5px] bg-white/60'}`} />
             ))}
           </div>
         )}
-        <div className="px-2 pt-2">{infoPanel}</div>
+        <div className="px-2 -mt-5 relative z-[1]">{infoPanel}</div>
       </div>
 
       {/* Desktop: sticky main image | scrolling gallery | sticky info */}
       <div className="hidden md:grid grid-cols-3 gap-[6px] px-[10px] pt-1">
         <div className="sticky top-[68px] self-start">
           {mainImage && (
-            <div className="aspect-[4/5] max-h-[calc(100vh-80px)] w-full rounded-[12px] overflow-hidden bg-[#E3E3E3]">
+            <div className="aspect-[4/5] max-h-[calc(100vh-80px)] w-full rounded-[20px] overflow-hidden bg-[#E6E7EB] ring-1 ring-black/[0.04]">
               <img src={mainImage.url} alt={mainImage.altText || product.name} className="w-full h-full object-cover" />
             </div>
           )}
         </div>
         <div className="space-y-[6px]">
           {(otherImages.length ? otherImages : images).map((img) => (
-            <div key={img.id} className="aspect-[4/5] rounded-[12px] overflow-hidden bg-[#E3E3E3]">
+            <div key={img.id} className="aspect-[4/5] rounded-[20px] overflow-hidden bg-[#E6E7EB] ring-1 ring-black/[0.04]">
               <img src={img.url} alt={img.altText || product.name} className="w-full h-full object-cover" loading="lazy" />
             </div>
           ))}

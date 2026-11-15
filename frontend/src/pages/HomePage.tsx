@@ -109,7 +109,7 @@ const GridSection: React.FC<{ section: HomeSection }> = ({ section }) => (
   <section className="px-2 md:px-[10px]">
     <div className="flex items-center justify-between px-2 md:px-3 mb-3">
       <h2 className="lx-title">{section.name}</h2>
-      <Link to={`/collections/${section.slug}`} className="px-4 py-[5px] rounded-full bg-white text-[10px] font-medium hover:bg-neutral-100">
+      <Link to={`/collections/${section.slug}`} className="px-4 h-8 inline-flex items-center rounded-full bg-white/75 border border-white/80 text-[12px] font-medium hover:bg-white">
         View all
       </Link>
     </div>
@@ -176,8 +176,8 @@ export const HomePage: React.FC = () => {
           </div>
         ) : empty ? (
           <div className="mx-2 md:mx-[10px] lx-panel py-16 px-6 text-center space-y-3">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">Coming soon</p>
-            <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">New drops are on the way</h2>
+            <p className="lx-eyebrow">Coming soon</p>
+            <h2 className="text-[26px] md:text-[32px] font-semibold tracking-[-0.03em]">New drops are on the way</h2>
             <p className="text-[12px] text-neutral-600 max-w-md mx-auto">
               Follow <span className="font-semibold text-black">@{settings.instagramHandle || 'thelevix.shop'}</span> for early access.
             </p>
@@ -202,17 +202,17 @@ export const HomePage: React.FC = () => {
                 </div>
                 <div className={`grid gap-[6px] ${departments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   {departments.map((d) => (
-                    <Link key={d.key} to={`/collections/${d.key}`} className="group relative block aspect-[4/5] md:aspect-[16/11] rounded-[12px] overflow-hidden bg-[#DADADA]">
+                    <Link key={d.key} to={`/collections/${d.key}`} className="group relative block aspect-[4/5] md:aspect-[16/11] rounded-[22px] overflow-hidden bg-[#DADADA] ring-1 ring-black/5 shadow-[0_18px_40px_-26px_rgba(0,0,0,0.5)]">
                       {d.coverImage && (
                         <FramedImg src={d.coverImage} alt={d.name} loading="lazy" className="absolute inset-0" />
                       )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
                       <div className="absolute left-3 right-3 bottom-3 md:left-5 md:bottom-5 flex items-end justify-between text-white">
                         <div>
-                          <p className="text-[22px] md:text-[34px] font-black uppercase leading-none tracking-tight">{d.name}</p>
-                          <p className="text-[10.5px] mt-1 opacity-90">{d.count} {d.count === 1 ? 'piece' : 'pieces'}</p>
+                          <p className="text-[24px] md:text-[38px] font-semibold leading-none tracking-[-0.03em]">{d.name}</p>
+                          <p className="text-[12px] mt-1 opacity-90">{d.count} {d.count === 1 ? 'piece' : 'pieces'}</p>
                         </div>
-                        <span className="px-3.5 py-1.5 rounded-full bg-white text-black text-[10.5px] font-semibold">Shop {d.name}</span>
+                        <span className="px-3.5 py-2 rounded-full bg-white/25 border border-white/40 backdrop-blur-md text-white text-[12px] font-semibold whitespace-nowrap">Shop {d.name}</span>
                       </div>
                     </Link>
                   ))}
@@ -224,7 +224,7 @@ export const HomePage: React.FC = () => {
               <section key={`cat-${c.id}`} className="lx-panel mx-2 md:mx-[10px] pt-4 md:pt-5 pb-5 md:pb-6">
                 <div className="flex items-center justify-between px-4 md:px-[22px] mb-3 md:mb-4">
                   <h2 className="lx-title">{c.name}</h2>
-                  <Link to={`/collections/${c.slug}`} className="px-4 py-[5px] rounded-full bg-black text-white text-[10px] font-medium hover:bg-neutral-800 transition-colors">
+                  <Link to={`/collections/${c.slug}`} className="px-4 h-8 inline-flex items-center rounded-full bg-[#0b0b0f] text-white text-[12px] font-medium hover:bg-neutral-800 transition-colors">
                     Discover more
                   </Link>
                 </div>

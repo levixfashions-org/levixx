@@ -6,7 +6,7 @@ import { useWishlistStore } from '../store/wishlistStore';
 import { BookmarkIcon, CloseIcon, PlusIcon } from './Icons';
 import { imagesForDept, productHref, type Dept } from '../utils/dept';
 
-export const formatRs = (paise: number) => `RS. ${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;
+export const formatRs = (paise: number) => `₹${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;
 
 interface Props {
   product: Product;
@@ -67,7 +67,7 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
 
   return (
     <div className="group/card relative flex flex-col min-w-0">
-      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[10px] bg-[#E3E3E3]">
+      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[18px] bg-[#E6E7EB] ring-1 ring-black/[0.04] shadow-[0_14px_30px_-22px_rgba(17,17,26,0.45)]">
         <div ref={scroller} onScroll={onScroll} className="absolute inset-0 flex overflow-x-auto no-scrollbar snap-x-mandatory">
           {images.map((img, i) => (
             <Link key={img.id + i} to={href} className="relative shrink-0 w-full h-full snap-start-always" tabIndex={i === 0 ? 0 : -1} aria-label={product.name}>
@@ -104,22 +104,22 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
         )}
 
         {soldOut && (
-          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-white/90 text-[9.5px] text-neutral-500">Sold Out</span>
+          <span className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-white/75 backdrop-blur-md border border-white/80 text-[10.5px] font-medium text-[#3a3a3f]">Sold out</span>
         )}
 
         <button
           onClick={() => toggleSave(product.id)}
           aria-label={saved ? 'Remove from saved' : 'Save'}
-          className={`absolute top-2.5 right-2.5 p-1 transition-colors ${saved ? 'text-black' : 'text-black/35 hover:text-black'}`}
+          className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center bg-white/60 backdrop-blur-md border border-white/70 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.3)] transition-colors ${saved ? 'text-black' : 'text-black/40 hover:text-black'}`}
         >
           <BookmarkIcon className="w-[14px] h-[17px]" filled />
         </button>
 
         {/* Quick add size picker */}
         {quickOpen && (
-          <div className="absolute inset-x-2 bottom-2 rounded-[10px] bg-white/95 backdrop-blur p-2.5 lx-fade-in">
+          <div className="absolute inset-x-2 bottom-2 rounded-[16px] bg-white/80 backdrop-blur-xl border border-white/80 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.35)] p-3 lx-fade-in">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10.5px] font-semibold">{colours.length > 1 ? `Select size · ${pickColour}` : 'Select size'}</span>
+              <span className="text-[11.5px] font-semibold">{colours.length > 1 ? `Select size · ${pickColour}` : 'Select size'}</span>
               <button onClick={() => setQuickOpen(false)} aria-label="Close sizes"><CloseIcon className="w-3 h-3" /></button>
             </div>
             {colours.length > 1 && (
@@ -142,7 +142,7 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
                   key={v.id}
                   disabled={v.stockQuantity <= 0 || Boolean(adding)}
                   onClick={() => quickAdd(v.id)}
-                  className="min-w-[38px] px-2 py-1.5 rounded-full border border-black/15 text-[10.5px] hover:bg-black hover:text-white disabled:opacity-30 disabled:line-through disabled:hover:bg-transparent disabled:hover:text-black transition-colors"
+                  className="min-w-[40px] px-2 py-1.5 rounded-full border border-black/15 bg-white/70 text-[11.5px] font-medium hover:bg-black hover:text-white disabled:opacity-30 disabled:line-through disabled:hover:bg-transparent disabled:hover:text-black transition-colors"
                 >
                   {adding === v.id ? '…' : v.size}
                 </button>
@@ -153,17 +153,17 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
         )}
       </div>
 
-      <div className="flex items-start justify-between gap-2 pt-2 px-1">
+      <div className="flex items-start justify-between gap-2 pt-2.5 px-1">
         <Link to={href} className="min-w-0 flex-1">
-          <h3 className={`text-[11px] leading-snug truncate ${soldOut ? 'text-neutral-400' : 'text-black'}`}>{product.name}</h3>
-          <p className={`text-[11px] leading-snug ${soldOut ? 'text-neutral-400' : 'text-neutral-700'}`}>
+          <h3 className={`text-[12.5px] font-medium leading-snug truncate ${soldOut ? 'text-neutral-400' : 'text-[#0b0b0f]'}`}>{product.name}</h3>
+          <p className={`mt-0.5 text-[12.5px] leading-snug ${soldOut ? 'text-neutral-400' : 'text-[#0b0b0f] font-semibold'}`}>
             {formatRs(product.basePrice)}
             {product.comparePrice && product.comparePrice > product.basePrice && (
               <>
                 {!soldOut && (
-                  <span className="ml-1.5 font-semibold text-[#FF5400]">{Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF</span>
+                  <span className="ml-1.5 font-semibold text-[11.5px] text-[#FF5400]">{Math.round((1 - product.basePrice / product.comparePrice) * 100)}% OFF</span>
                 )}
-                <span className="ml-1.5 line-through text-neutral-400">{formatRs(product.comparePrice)}</span>
+                <span className="ml-1.5 line-through font-normal text-[11.5px] text-neutral-400">{formatRs(product.comparePrice)}</span>
               </>
             )}
           </p>
@@ -177,7 +177,7 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
           )}
         </Link>
         {!soldOut && product.variants.length > 0 && (
-          <button onClick={() => setQuickOpen((v) => !v)} aria-label="Quick add" className="p-1 text-neutral-500 hover:text-black">
+          <button onClick={() => setQuickOpen((v) => !v)} aria-label="Quick add" className="w-8 h-8 -mt-0.5 rounded-full flex items-center justify-center text-[#3a3a3f] bg-white/60 border border-black/[0.06] hover:bg-white hover:text-black transition-colors">
             <PlusIcon />
           </button>
         )}

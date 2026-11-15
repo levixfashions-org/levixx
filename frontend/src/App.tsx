@@ -66,11 +66,13 @@ const AdminTheme: React.FC = () => {
   const isAdmin = useIsAdminRoute();
   useEffect(() => {
     document.body.classList.toggle('lx-admin', isAdmin);
+    document.body.classList.toggle('lx-shop', !isAdmin);
     const meta = document.querySelector('meta[name="theme-color"]');
     const prev = meta?.getAttribute('content');
     if (isAdmin) meta?.setAttribute('content', '#EEF0F5');
     return () => {
       document.body.classList.remove('lx-admin');
+      document.body.classList.remove('lx-shop');
       if (isAdmin && prev) meta?.setAttribute('content', prev);
     };
   }, [isAdmin]);

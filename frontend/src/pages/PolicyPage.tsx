@@ -17,7 +17,7 @@ const TABS: { key: PolicyKey; label: string; path: string }[] = [
 
 const Section: React.FC<{ title: string; id?: string; children: React.ReactNode }> = ({ title, id, children }) => (
   <section id={id} className="space-y-2 scroll-mt-28">
-    <h3 className="font-bold uppercase tracking-wider text-black text-sm">{title}</h3>
+    <h3 className="text-[16px] font-semibold tracking-[-0.015em] text-[#0b0b0f]">{title}</h3>
     <div className="space-y-2">{children}</div>
   </section>
 );
@@ -91,7 +91,7 @@ export const PolicyPage: React.FC = () => {
   );
 
   const BusinessInfo = (
-    <div className="bg-white border border-black/10 p-4 space-y-1">
+    <div className="rounded-[16px] bg-white/70 border border-black/[0.07] p-4 space-y-1">
       <p><span className="font-semibold text-black">Business name:</span> {legal}{legal !== brand ? ` (trading as ${brand})` : ''}</p>
       {address && <p className="whitespace-pre-line"><span className="font-semibold text-black">Registered address:</span> {address}</p>}
       <p><span className="font-semibold text-black">Email:</span> {Mail}</p>
@@ -106,7 +106,7 @@ export const PolicyPage: React.FC = () => {
       <p>
         In line with the Consumer Protection (E-Commerce) Rules, 2020 and the Information Technology Rules, 2021, you can raise any complaint with our Grievance Officer:
       </p>
-      <div className="bg-white border border-black/10 p-4 space-y-1">
+      <div className="rounded-[16px] bg-white/70 border border-black/[0.07] p-4 space-y-1">
         <p><span className="font-semibold text-black">Grievance Officer:</span> {officer || `${legal} customer care`}</p>
         <p><span className="font-semibold text-black">Email:</span> {Mail}</p>
         {phone && <p><span className="font-semibold text-black">Phone:</span> {phone}</p>}
@@ -117,21 +117,20 @@ export const PolicyPage: React.FC = () => {
   );
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12 sm:py-16 space-y-8 text-black">
-      <div className="border-b border-black/10 pb-6 space-y-4">
+    <div className="max-w-3xl mx-auto px-4 py-6 sm:py-10 space-y-5 text-black">
+      <div className="space-y-4 px-1">
         <div>
-          <span className="text-[10px] font-mono text-[#FF5400] font-bold uppercase tracking-widest">LEVIX Policies</span>
-          <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight mt-1">{title}</h1>
-          {key !== 'contact' && <p className="text-[11px] text-neutral-500 mt-2">Last updated: {LAST_UPDATED}</p>}
+          <span className="lx-eyebrow">LEVIX policies</span>
+          <h1 className="lx-h1 mt-1">{title}</h1>
+          {key !== 'contact' && <p className="text-[12px] text-[#8e8e93] mt-1.5">Last updated {LAST_UPDATED}</p>}
         </div>
-        <nav className="flex flex-wrap gap-2">
+        <nav className="lx-segment inline-flex flex-wrap gap-0.5 p-[3px] max-w-full">
           {TABS.map((t) => (
             <Link
               key={t.key}
               to={t.path}
-              className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider border ${
-                t.key === key ? 'bg-black text-white border-black' : 'border-black/20 text-neutral-700 hover:border-black'
-              }`}
+              aria-current={t.key === key ? 'page' : undefined}
+              className={`lx-seg-item px-3 h-8 inline-flex items-center rounded-[10px] text-[12.5px] font-medium whitespace-nowrap ${t.key === key ? 'is-active' : ''}`}
             >
               {t.label}
             </Link>
@@ -139,7 +138,7 @@ export const PolicyPage: React.FC = () => {
         </nav>
       </div>
 
-      <div className="text-xs text-neutral-700 leading-relaxed space-y-6">
+      <div className="lx-acct-card p-5 sm:p-8 text-[13.5px] text-[#3a3a3f] leading-relaxed space-y-6">
         {/* ------------------------------------------------------------------ TERMS */}
         {key === 'terms' && (
           <>
@@ -229,8 +228,8 @@ export const PolicyPage: React.FC = () => {
         {/* ------------------------------------------------------------------ RETURNS / REFUNDS / CANCELLATION */}
         {key === 'refund' && (
           <>
-            <div className="bg-black text-white p-4 space-y-1">
-              <p className="font-bold uppercase tracking-wider text-[11px]">In short</p>
+            <div className="rounded-[16px] bg-[#0b0b0f] text-white p-4 sm:p-5 space-y-1">
+              <p className="font-semibold text-[13px] text-[#ffb27f]">In short</p>
               <p>
                 We accept returns <span className="font-semibold">only if the product you receive is damaged, defective or not what you ordered</span>, and it is reported within{' '}
                 <span className="font-semibold">48 hours of delivery</span> with an unboxing video. We do not accept returns or exchanges for size, fit, or change of mind.

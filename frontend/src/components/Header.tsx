@@ -45,7 +45,7 @@ export const Header: React.FC = () => {
       <header
         style={{ top: offset }}
         className={`hidden md:block fixed inset-x-0 z-50 transition-colors duration-300 ${
-          solid ? 'bg-white' : 'bg-transparent'
+          solid ? 'bg-white lx-head-solid' : 'bg-transparent'
         }`}
       >
         <div className="h-16 px-6 lg:px-[22px] grid grid-cols-3 items-center text-black">
@@ -79,7 +79,7 @@ export const Header: React.FC = () => {
             <button
               onClick={() => setMegaOpen((v) => !v)}
               aria-label={megaOpen ? 'Close menu' : 'Open menu'}
-              className="w-[42px] h-[26px] rounded-full bg-[#E8E8E8] hover:bg-[#dcdcdc] flex items-center justify-center transition-colors"
+              className="w-[42px] h-[26px] rounded-full bg-black/[0.07] hover:bg-black/[0.12] flex items-center justify-center transition-colors"
             >
               {megaOpen ? <CloseIcon className="w-3.5 h-3.5" /> : <MenuIcon className="w-4 h-4" />}
             </button>
@@ -91,8 +91,8 @@ export const Header: React.FC = () => {
 
       {/* ---------------- Mobile ---------------- */}
       <header style={{ top: offset }} className="md:hidden fixed inset-x-0 z-50 pointer-events-none">
-        <div className={`flex items-center justify-between px-3 pt-3 pb-2 transition-colors ${solid ? 'bg-[#EFEFEF]/90 backdrop-blur-md' : ''}`}>
-          <ScrollRing className="pointer-events-auto flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white/55 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
+        <div className={`flex items-center justify-between px-3 pt-3 pb-2 transition-colors ${solid ? 'bg-[#EFEFEF]/90 backdrop-blur-md lx-head-solid' : ''}`}>
+          <ScrollRing className="pointer-events-auto flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white/55 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.06)] lx-head-pill">
             <button onClick={openMobileNav} aria-label="Open menu" className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center">
               <MenuIcon className="w-4 h-4" />
             </button>

@@ -32,10 +32,10 @@ export const ProductRail: React.FC<Props> = ({ title, products, href, variant = 
         <div className="flex items-center gap-2">
           {products.length > 4 && (
             <div className="hidden md:flex gap-1.5">
-              <button onClick={() => scroll(-1)} aria-label="Scroll left" className="w-7 h-7 rounded-full border border-black/10 bg-white flex items-center justify-center hover:border-black">
+              <button onClick={() => scroll(-1)} aria-label="Scroll left" className="w-8 h-8 rounded-full border border-white/80 bg-white/70 backdrop-blur flex items-center justify-center hover:bg-white">
                 <ChevronIcon dir="left" className="w-3.5 h-3.5" />
               </button>
-              <button onClick={() => scroll(1)} aria-label="Scroll right" className="w-7 h-7 rounded-full border border-black/10 bg-white flex items-center justify-center hover:border-black">
+              <button onClick={() => scroll(1)} aria-label="Scroll right" className="w-8 h-8 rounded-full border border-white/80 bg-white/70 backdrop-blur flex items-center justify-center hover:bg-white">
                 <ChevronIcon className="w-3.5 h-3.5" />
               </button>
             </div>

@@ -21,7 +21,7 @@ const Accordion: React.FC<{ title: string; children: React.ReactNode }> = ({ tit
 };
 
 const MChip: React.FC<{ to: string; children: React.ReactNode }> = ({ to, children }) => (
-  <Link to={to} className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-black/10 text-[12px]">
+  <Link to={to} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/75 border border-white/80 shadow-[0_4px_14px_-10px_rgba(0,0,0,0.3)] text-[12.5px] font-medium">
     {children}
   </Link>
 );
@@ -52,9 +52,9 @@ export const MobileNavDrawer: React.FC = () => {
   ];
 
   return (
-    <div className="md:hidden fixed inset-0 z-[60] bg-[#EFEFEF] overflow-y-auto lx-fade-in">
+    <div className="md:hidden fixed inset-0 z-[60] bg-[#EFEFEF] lx-glass-sheet overflow-y-auto lx-fade-in">
       <div className="px-3 pt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full bg-white/70">
+        <div className="flex items-center gap-2 pl-1.5 pr-4 py-1.5 rounded-full lx-head-pill">
           <button onClick={closeMobileNav} aria-label="Close menu" className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center">
             <CloseIcon className="w-3.5 h-3.5" />
           </button>
@@ -65,16 +65,16 @@ export const MobileNavDrawer: React.FC = () => {
       <div className="px-5 pt-8 pb-10">
         <div className="grid grid-cols-2 gap-2 mb-6">
           {(['men', 'women'] as const).map((k) => (
-            <Link key={k} to={`/collections/${k}`} className="py-3 rounded-full bg-black text-white text-center text-[13px] font-semibold uppercase tracking-wide">
+            <Link key={k} to={`/collections/${k}`} className="lx-btn-primary h-12 flex items-center justify-center text-[15px] font-semibold">
               {k === 'men' ? 'Men' : 'Women'}
             </Link>
           ))}
         </div>
         <nav className="space-y-2.5">
-          <Link to="/collections/all-products" className="block text-[15px] font-semibold">All Products</Link>
-          <Link to="/collections/new-in" className="block text-[15px] font-semibold">New Arrivals</Link>
+          <Link to="/collections/all-products" className="block text-[20px] font-semibold tracking-[-0.02em]">All Products</Link>
+          <Link to="/collections/new-in" className="block text-[20px] font-semibold tracking-[-0.02em]">New Arrivals</Link>
           {(data?.menu.collections || []).map((c) => (
-            <Link key={c.id} to={`/collections/${c.slug}`} className="block text-[15px] font-semibold">{c.name}</Link>
+            <Link key={c.id} to={`/collections/${c.slug}`} className="block text-[20px] font-semibold tracking-[-0.02em]">{c.name}</Link>
           ))}
         </nav>
 

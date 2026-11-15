@@ -98,7 +98,7 @@ export const Footer: React.FC = () => {
           {tab && (
             <div className="flex flex-wrap gap-1.5 mt-3 lx-fade-in">
               {tabLinks[tab].map((l) => (
-                <Link key={l.to + l.label} to={l.to} className="px-3 py-1 rounded-full bg-[#EFEFEF] text-[10.5px] hover:bg-black hover:text-white">
+                <Link key={l.to + l.label} to={l.to} className="px-3 py-1 rounded-full bg-white/70 border border-black/[0.06] text-[10.5px] hover:bg-black hover:text-white">
                   {l.label}
                 </Link>
               ))}
@@ -166,7 +166,7 @@ export const Footer: React.FC = () => {
                     aria-label="Email for drop alerts"
                     className="flex-1 bg-transparent text-[11px] focus:outline-none"
                   />
-                  <button className="px-4 py-1.5 rounded-full bg-black text-white text-[10px] font-semibold">Join</button>
+                  <button className="px-4 py-1.5 rounded-full bg-[#0b0b0f] text-white text-[11px] font-semibold">Join</button>
                 </div>
               )}
               {subState === 'error' && <p className="text-[10px] text-red-600 mt-1">{subMsg}</p>}

@@ -10,24 +10,24 @@ export const SizeGuideModal: React.FC = () => {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/40 backdrop-blur-[6px] transition-opacity"
         onClick={closeSizeGuide}
       />
 
-      <div className="relative bg-[#EFEFEF] w-full max-w-lg shadow-2xl border border-black/15 p-6 z-10 space-y-6">
-        <div className="flex items-center justify-between border-b border-black/10 pb-4">
+      <div className="lx-sheet relative w-full max-w-lg rounded-[28px] p-6 z-10 space-y-5">
+        <div className="flex items-center justify-between border-b border-black/[0.07] pb-4">
           <div>
-            <h3 className="font-display font-black text-2xl uppercase tracking-tight text-black">
+            <h3 className="text-[21px] font-semibold tracking-[-0.025em] text-[#0b0b0f]">
               Oversized Fit Guide
             </h3>
             <p className="text-xs text-neutral-600">All garment measurements are recorded in inches.</p>
           </div>
           <button
             onClick={closeSizeGuide}
-            className="p-1 text-black hover:opacity-60 transition-opacity"
+            className="lx-btn-soft w-9 h-9 flex items-center justify-center"
             aria-label="Close size guide"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -35,14 +35,14 @@ export const SizeGuideModal: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left text-black border-collapse">
             <thead>
-              <tr className="border-b-2 border-black uppercase tracking-wider text-[11px] font-bold">
+              <tr className="border-b border-black/15 text-[12px] font-semibold text-[#6e6e73]">
                 <th className="py-2.5 px-3">Size</th>
                 <th className="py-2.5 px-3">Chest</th>
                 <th className="py-2.5 px-3">Length</th>
                 <th className="py-2.5 px-3">Shoulder</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-black/10 font-mono">
+            <tbody className="divide-y divide-black/[0.06] text-[13px]">
               <tr>
                 <td className="py-2.5 px-3 font-bold">S</td>
                 <td className="py-2.5 px-3">44"</td>
@@ -77,8 +77,8 @@ export const SizeGuideModal: React.FC = () => {
           </table>
         </div>
 
-        <div className="bg-white/70 p-4 border border-black/10 text-xs text-neutral-700 space-y-1">
-          <p className="font-bold text-black uppercase">Tailoring Notes:</p>
+        <div className="bg-white/70 p-4 rounded-[16px] border border-black/[0.07] text-[13px] text-[#3a3a3f] space-y-1">
+          <p className="font-semibold text-[#0b0b0f]">Fit note</p>
           <p>
             Levix garments feature a signature dropped shoulder and relaxed oversized silhouette. If you prefer a regular tailored fit, we recommend selecting one size smaller than your usual size.
           </p>
@@ -86,9 +86,9 @@ export const SizeGuideModal: React.FC = () => {
 
         <button
           onClick={closeSizeGuide}
-          className="w-full bg-black text-white py-3 text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 transition-colors"
+          className="lx-btn-primary w-full h-12 text-[15px] font-semibold"
         >
-          Got It
+          Got it
         </button>
       </div>
     </div>

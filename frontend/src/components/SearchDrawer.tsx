@@ -59,8 +59,8 @@ export const SearchDrawer: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-[80]">
-      <div className="absolute inset-0 bg-black/40" onClick={closeSearch} />
-      <div className="relative bg-white rounded-b-[22px] lx-drop-in max-h-[85vh] overflow-y-auto">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[3px]" onClick={closeSearch} />
+      <div className="relative bg-white lx-glass-sheet rounded-b-[28px] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.45)] lx-drop-in max-h-[85vh] overflow-y-auto">
         <form onSubmit={submit} className="flex items-center gap-3 px-4 md:px-[22px] h-16 border-b border-black/5">
           <SearchIcon className="w-[18px] h-[18px] text-neutral-500" />
           <input
@@ -71,7 +71,7 @@ export const SearchDrawer: React.FC = () => {
             className="flex-1 text-[15px] md:text-[13px] focus:outline-none bg-transparent"
             aria-label="Search products"
           />
-          <button type="button" onClick={closeSearch} aria-label="Close search" className="w-[42px] h-[26px] rounded-full bg-[#E8E8E8] flex items-center justify-center">
+          <button type="button" onClick={closeSearch} aria-label="Close search" className="lx-btn-soft w-9 h-9 flex items-center justify-center">
             <CloseIcon className="w-3.5 h-3.5" />
           </button>
         </form>
@@ -79,11 +79,11 @@ export const SearchDrawer: React.FC = () => {
         <div className="px-4 md:px-[22px] py-5">
           {query.trim().length < 2 ? (
             <>
-              <p className="text-[11px] font-semibold mb-2.5">Popular</p>
+              <p className="text-[13px] font-semibold text-[#3a3a3f] mb-2.5">Popular</p>
               <div className="flex flex-wrap gap-1.5">
-                <Link to="/collections/new-in" className="px-3.5 py-1.5 rounded-full bg-[#EFEFEF] text-[11px] hover:bg-black hover:text-white">New Arrivals</Link>
+                <Link to="/collections/new-in" className="px-3.5 py-2 rounded-full bg-white/75 border border-white/80 text-[12.5px] font-medium hover:bg-black hover:text-white">New Arrivals</Link>
                 {chips.map((c) => (
-                  <Link key={c.id} to={`/collections/${c.slug}`} className="px-3.5 py-1.5 rounded-full bg-[#EFEFEF] text-[11px] hover:bg-black hover:text-white">{c.name}</Link>
+                  <Link key={c.id} to={`/collections/${c.slug}`} className="px-3.5 py-2 rounded-full bg-white/75 border border-white/80 text-[12.5px] font-medium hover:bg-black hover:text-white">{c.name}</Link>
                 ))}
               </div>
             </>
@@ -96,10 +96,10 @@ export const SearchDrawer: React.FC = () => {
               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
                 {results.map((p) => (
                   <Link key={p.id} to={`/products/${p.slug}`} className="group">
-                    <div className="aspect-[4/5] rounded-[8px] overflow-hidden bg-[#E3E3E3]">
+                    <div className="aspect-[4/5] rounded-[14px] overflow-hidden bg-[#E6E7EB] ring-1 ring-black/[0.04]">
                       {p.images[0] && <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" />}
                     </div>
-                    <p className="text-[10.5px] mt-1.5 truncate">{p.name}</p>
+                    <p className="text-[12px] font-medium mt-1.5 truncate">{p.name}</p>
                     <p className="text-[10.5px] text-neutral-600">{formatRs(p.basePrice)}</p>
                   </Link>
                 ))}

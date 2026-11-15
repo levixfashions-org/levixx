@@ -131,25 +131,25 @@ export const CollectionDetailPage: React.FC = () => {
   return (
     <div className="pb-10">
       <div className="min-h-[70vh]">
-        <div className="px-3 md:px-[22px] pt-5">
-          <div className="flex items-end justify-between gap-4">
+        <div className="px-3 md:px-[22px] pt-6 sm:pt-8">
+          <div className="flex items-end justify-between gap-4 px-1">
             <div>
-              <h1 className="text-[12px] font-semibold">{title || (loading ? '' : 'Collection')}</h1>
-              {description && <p className="text-[11px] text-neutral-600 mt-1 max-w-xl">{description}</p>}
+              <h1 className="lx-h1">{title || (loading ? '\u00a0' : 'Collection')}</h1>
+              {description && <p className="lx-sub mt-1.5 max-w-xl">{description}</p>}
             </div>
           </div>
 
           {/* Men / Women switch */}
-          <div className="flex gap-1.5 mt-3">
+          <div className="lx-segment inline-flex gap-0.5 p-[3px] mt-4">
             {isDept ? (
               (['men', 'women'] as const).map((k) => (
-                <Link key={k} to={`/collections/${k}`} className={`px-5 py-1.5 rounded-full text-[10.5px] font-semibold border ${handle === k ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}>
+                <Link key={k} to={`/collections/${k}`} className={`lx-seg-item px-5 h-8 inline-flex items-center rounded-[10px] text-[13px] font-medium ${handle === k ? 'is-active' : ''}`}>
                   {k === 'men' ? 'Men' : 'Women'}
                 </Link>
               ))
             ) : (
               ([null, 'men', 'women'] as const).map((k) => (
-                <button key={k || 'all'} onClick={() => setGender(k)} className={`px-5 py-1.5 rounded-full text-[10.5px] font-semibold border ${gender === k ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}>
+                <button key={k || 'all'} onClick={() => setGender(k)} className={`lx-seg-item px-4 h-8 inline-flex items-center rounded-[10px] text-[13px] font-medium ${gender === k ? 'is-active' : ''}`}>
                   {k === 'men' ? 'Men' : k === 'women' ? 'Women' : 'Everyone'}
                 </button>
               ))
@@ -157,11 +157,11 @@ export const CollectionDetailPage: React.FC = () => {
           </div>
 
           {/* Category chips + filters (sticky) */}
-          <div className="sticky top-[60px] md:top-16 z-30 -mx-3 md:-mx-[22px] px-3 md:px-[22px] py-3 bg-[#EFEFEF]/95 backdrop-blur flex items-center gap-3">
+          <div className="sticky top-[60px] md:top-16 z-30 -mx-3 md:-mx-[22px] px-3 md:px-[22px] py-3 bg-[#EFEFEF]/95 backdrop-blur lx-head-solid flex items-center gap-3">
             <div className="flex-1 flex gap-1.5 overflow-x-auto no-scrollbar">
               <Link
                 to={isDept ? `/collections/${handle}` : withGender('/collections/all-products')}
-                className={`shrink-0 px-5 py-1.5 rounded-full text-[10.5px] border ${handle === 'all-products' || isDept ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}
+                className={`shrink-0 px-4 h-9 inline-flex items-center rounded-full text-[12.5px] font-medium border transition-colors ${handle === 'all-products' || isDept ? 'bg-[#0b0b0f] text-white border-[#0b0b0f]' : 'bg-white/70 border-white/80 hover:bg-white'}`}
               >
                 View all
               </Link>
@@ -169,7 +169,7 @@ export const CollectionDetailPage: React.FC = () => {
                 <Link
                   key={c.id}
                   to={gender ? `/collections/${c.slug}?gender=${gender}` : `/collections/${c.slug}`}
-                  className={`shrink-0 px-4 py-1.5 rounded-full text-[10.5px] border ${handle === c.slug ? 'bg-black text-white border-black' : 'bg-white border-white hover:border-black/30'}`}
+                  className={`shrink-0 px-4 h-9 inline-flex items-center rounded-full text-[12.5px] font-medium border transition-colors ${handle === c.slug ? 'bg-[#0b0b0f] text-white border-[#0b0b0f]' : 'bg-white/70 border-white/80 hover:bg-white'}`}
                 >
                   {c.name}
                 </Link>
@@ -177,10 +177,10 @@ export const CollectionDetailPage: React.FC = () => {
             </div>
             <button
               onClick={() => setFiltersOpen(true)}
-              className="shrink-0 flex items-center gap-2 pl-3 pr-4 py-1.5 rounded-full bg-white text-[10.5px] hover:bg-neutral-50"
+              className="shrink-0 flex items-center gap-2 pl-3 pr-4 h-9 rounded-full bg-white/80 border border-white/80 shadow-[0_4px_14px_-10px_rgba(0,0,0,0.35)] text-[12.5px] font-medium hover:bg-white"
             >
               <FilterIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">Advance Filters</span>
+              <span className="hidden sm:inline">Filters</span>
               {activeCount > 0 && <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] flex items-center justify-center">{activeCount}</span>}
             </button>
           </div>
@@ -190,15 +190,15 @@ export const CollectionDetailPage: React.FC = () => {
           {loading ? (
             <ProductGridSkeleton />
           ) : notFound ? (
-            <div className="py-24 text-center space-y-3">
-              <p className="text-[13px] font-semibold">This collection doesn't exist.</p>
-              <Link to="/collections/all-products" className="inline-block px-5 py-2 rounded-full bg-black text-white text-[11px]">Shop all products</Link>
+            <div className="lx-acct-card max-w-[460px] mx-auto my-10 px-6 py-10 text-center space-y-4">
+              <p className="text-[17px] font-semibold text-[#0b0b0f]">This collection doesn't exist</p>
+              <Link to="/collections/all-products" className="lx-btn-primary inline-flex h-11 px-6 items-center text-[14px] font-semibold">Shop all products</Link>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-24 text-center space-y-3">
-              <p className="text-[13px] font-semibold">{products.length ? 'No products match these filters.' : 'No products here yet.'}</p>
+            <div className="lx-acct-card max-w-[460px] mx-auto my-10 px-6 py-10 text-center space-y-4">
+              <p className="text-[17px] font-semibold text-[#0b0b0f]">{products.length ? 'No products match these filters.' : 'No products here yet.'}</p>
               {activeCount > 0 && (
-                <button onClick={() => setParams(sort !== 'featured' ? { sort } : {}, { replace: true })} className="px-5 py-2 rounded-full bg-black text-white text-[11px]">
+                <button onClick={() => setParams(sort !== 'featured' ? { sort } : {}, { replace: true })} className="lx-btn-primary inline-flex h-11 px-6 items-center text-[14px] font-semibold">
                   Clear filters
                 </button>
               )}
@@ -212,18 +212,18 @@ export const CollectionDetailPage: React.FC = () => {
       {/* Filter drawer */}
       {filtersOpen && (
         <div className="fixed inset-0 z-[70]">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setFiltersOpen(false)} />
-          <aside className="absolute right-0 top-0 h-full w-full max-w-[380px] bg-[#EFEFEF] lx-drawer-in flex flex-col">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-[3px]" onClick={() => setFiltersOpen(false)} />
+          <aside className="absolute right-0 top-0 h-full w-full max-w-[380px] bg-[#EFEFEF] lx-glass-sheet lx-drawer-in flex flex-col">
             <div className="flex items-center justify-between px-5 py-4">
-              <h2 className="text-[14px] font-semibold">Filters</h2>
-              <button onClick={() => setFiltersOpen(false)} aria-label="Close filters"><CloseIcon className="w-5 h-5" /></button>
+              <h2 className="text-[19px] font-semibold tracking-[-0.02em]">Filters</h2>
+              <button onClick={() => setFiltersOpen(false)} aria-label="Close filters" className="lx-btn-soft w-9 h-9 flex items-center justify-center"><CloseIcon className="w-4 h-4" /></button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 space-y-6 pb-6">
               <div>
-                <p className="text-[11px] font-semibold mb-2">Sort by</p>
+                <p className="text-[13px] font-semibold text-[#3a3a3f] mb-2">Sort by</p>
                 <div className="flex flex-wrap gap-1.5">
                   {SORTS.map((s) => (
-                    <button key={s.value} onClick={() => update('sort', s.value === 'featured' ? null : s.value)} className={`px-3.5 py-1.5 rounded-full text-[11px] border ${sort === s.value ? 'bg-black text-white border-black' : 'bg-white border-white'}`}>
+                    <button key={s.value} onClick={() => update('sort', s.value === 'featured' ? null : s.value)} className={`px-3.5 py-1.5 rounded-full text-[12.5px] font-medium border ${sort === s.value ? 'bg-[#0b0b0f] text-white border-[#0b0b0f]' : 'bg-white/75 border-white/80'}`}>
                       {s.label}
                     </button>
                   ))}
@@ -231,10 +231,10 @@ export const CollectionDetailPage: React.FC = () => {
               </div>
               {availableSizes.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold mb-2">Size</p>
+                  <p className="text-[13px] font-semibold text-[#3a3a3f] mb-2">Size</p>
                   <div className="flex flex-wrap gap-1.5">
                     {availableSizes.map((s) => (
-                      <button key={s} onClick={() => toggleList('size', sizes, s)} className={`min-w-[44px] px-3 py-1.5 rounded-full text-[11px] border ${sizes.includes(s) ? 'bg-black text-white border-black' : 'bg-white border-white'}`}>
+                      <button key={s} onClick={() => toggleList('size', sizes, s)} className={`min-w-[44px] px-3 py-1.5 rounded-full text-[12.5px] font-medium border ${sizes.includes(s) ? 'bg-[#0b0b0f] text-white border-[#0b0b0f]' : 'bg-white/75 border-white/80'}`}>
                         {s}
                       </button>
                     ))}
@@ -243,10 +243,10 @@ export const CollectionDetailPage: React.FC = () => {
               )}
               {availableColors.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold mb-2">Colour</p>
+                  <p className="text-[13px] font-semibold text-[#3a3a3f] mb-2">Colour</p>
                   <div className="flex flex-wrap gap-1.5">
                     {availableColors.map((c) => (
-                      <button key={c} onClick={() => toggleList('color', colors, c)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] border ${colors.includes(c) ? 'border-black bg-white' : 'bg-white border-white'}`}>
+                      <button key={c} onClick={() => toggleList('color', colors, c)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[12.5px] font-medium border ${colors.includes(c) ? 'border-[#0b0b0f] bg-white' : 'bg-white/75 border-white/80'}`}>
                         {c}
                         <span className="w-6 h-2 rounded-full" style={{ background: COLOR_SWATCHES[c] || '#ccc' }} />
                       </button>
@@ -255,23 +255,23 @@ export const CollectionDetailPage: React.FC = () => {
                 </div>
               )}
               <div>
-                <p className="text-[11px] font-semibold mb-2">Price (₹)</p>
+                <p className="text-[13px] font-semibold text-[#3a3a3f] mb-2">Price (₹)</p>
                 <div className="flex items-center gap-2">
-                  <input type="number" min="0" inputMode="numeric" placeholder="Min" defaultValue={minPrice || ''} onBlur={(e) => update('min', e.target.value || null)} className="w-full rounded-full bg-white px-4 py-2 text-[12px] focus:outline-none" />
+                  <input type="number" min="0" inputMode="numeric" placeholder="Min" defaultValue={minPrice || ''} onBlur={(e) => update('min', e.target.value || null)} className="lx-field w-full h-11 px-4 text-[14px]" />
                   <span className="text-neutral-400">–</span>
-                  <input type="number" min="0" inputMode="numeric" placeholder="Max" defaultValue={maxPrice || ''} onBlur={(e) => update('max', e.target.value || null)} className="w-full rounded-full bg-white px-4 py-2 text-[12px] focus:outline-none" />
+                  <input type="number" min="0" inputMode="numeric" placeholder="Max" defaultValue={maxPrice || ''} onBlur={(e) => update('max', e.target.value || null)} className="lx-field w-full h-11 px-4 text-[14px]" />
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-[12px] cursor-pointer">
-                <input type="checkbox" checked={inStock} onChange={(e) => update('instock', e.target.checked ? '1' : null)} className="accent-black w-4 h-4" />
+              <label className="flex items-center gap-2.5 text-[13.5px] cursor-pointer">
+                <input type="checkbox" checked={inStock} onChange={(e) => update('instock', e.target.checked ? '1' : null)} className="accent-[#FF5400] w-[18px] h-[18px]" />
                 In stock only
               </label>
             </div>
-            <div className="p-4 flex gap-2 border-t border-black/5">
-              <button onClick={() => setParams(sort !== 'featured' && sort !== 'newest' ? { sort } : {}, { replace: true })} className="flex-1 py-3 rounded-full bg-white text-[11px] font-semibold">
+            <div className="p-4 pb-[calc(16px+env(safe-area-inset-bottom))] flex gap-2 border-t border-black/[0.06]">
+              <button onClick={() => setParams(sort !== 'featured' && sort !== 'newest' ? { sort } : {}, { replace: true })} className="lx-btn-soft flex-1 h-12 text-[14px] font-semibold">
                 Clear all
               </button>
-              <button onClick={() => setFiltersOpen(false)} className="flex-1 py-3 rounded-full bg-black text-white text-[11px] font-semibold">
+              <button onClick={() => setFiltersOpen(false)} className="lx-btn-primary flex-1 h-12 text-[14px] font-semibold">
                 Show {filtered.length} products
               </button>
             </div>
