@@ -65,7 +65,10 @@ export const TabBar: React.FC = () => {
   }, [hideOn]);
 
   useEffect(() => {
-    setHidden(false);
+    // On the homepage the full-screen campaign video/photo comes first — keep the bar out of the way
+    // until the visitor scrolls past it, so "Shop now" and the sound button stay visible.
+    const overHero = () => pathname === '/' && window.scrollY < window.innerHeight * 0.75;
+    setHidden(overHero());
     last.current = window.scrollY;
     let ticking = false;
     const onScroll = () => {
@@ -74,7 +77,8 @@ export const TabBar: React.FC = () => {
       requestAnimationFrame(() => {
         const y = window.scrollY;
         const nearBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 80;
-        if (y < 80 || nearBottom) setHidden(false);
+        if (overHero()) setHidden(true);
+        else if (y < 80 || nearBottom) setHidden(false);
         else if (y > last.current + 8) setHidden(true);
         else if (y < last.current - 8) setHidden(false);
         last.current = y;
