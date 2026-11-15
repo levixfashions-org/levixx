@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { apiClient } from '../services/api';
 import { useCartStore } from '../store/cartStore';
@@ -10,6 +10,7 @@ import { ProductRail } from '../components/ProductRail';
 import { BookmarkIcon } from '../components/Icons';
 import { formatRs } from '../components/ProductCard';
 import { setSeo } from '../utils/seo';
+import { asDept, imagesForDept } from '../utils/dept';
 
 type Tab = 'details' | 'care' | 'shipping';
 
@@ -24,6 +25,8 @@ const Lines: React.FC<{ text?: string | null }> = ({ text }) =>
 
 export const ProductDetailPage: React.FC = () => {
   const { handle } = useParams<{ handle: string }>();
+  const [searchParams] = useSearchParams();
+  const dept = asDept(searchParams.get('g'));
   const navigate = useNavigate();
   const settings = useSettingsStore((s) => s.settings);
   const { addToCart, openSizeGuide } = useCartStore();
@@ -127,9 +130,11 @@ export const ProductDetailPage: React.FC = () => {
   const activeColour = colours.length ? color || colours[0].name : null;
   const sizeVariants = activeColour ? product.variants.filter((v) => v.color === activeColour) : product.variants;
   const allSoldOut = sizeVariants.every((v) => v.stockQuantity <= 0);
-  const colourImages = activeColour ? product.images.filter((im) => im.color === activeColour) : [];
-  const sharedImages = product.images.filter((im) => !im.color);
-  const images = activeColour && colourImages.length ? [...colourImages, ...sharedImages] : product.images.length ? product.images : [];
+  // Came from the Men / Women page → only that department's photos (tees sold to both are tagged per photo).
+  const deptImages = imagesForDept(product, dept);
+  const colourImages = activeColour ? deptImages.filter((im) => im.color === activeColour) : [];
+  const sharedImages = deptImages.filter((im) => !im.color);
+  const images = activeColour && colourImages.length ? [...colourImages, ...sharedImages] : deptImages.length ? deptImages : [];
   const [mainImage, ...otherImages] = images;
 
   const chooseColour = (name: string) => {
@@ -350,7 +355,7 @@ export const ProductDetailPage: React.FC = () => {
 
       {related.length > 0 && (
         <div className="mt-6">
-          <ProductRail title="You may also like" products={related} href="/collections/all-products" />
+          <ProductRail title="You may also like" products={related} href={dept ? `/collections/${dept}` : "/collections/all-products"} dept={dept} />
         </div>
       )}
     </div>

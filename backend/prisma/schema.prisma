@@ -156,6 +156,7 @@ model ProductImage {
   url       String   @db.Text
   altText   String?
   color     String?  // which colour this photo shows (null = all colours)
+  gender    String?  @db.VarChar(6) // who is wearing it: MEN | WOMEN (null = not tagged) — for products sold to both
   sortOrder Int      @default(0)
   isCover   Boolean  @default(false)
   createdAt DateTime @default(now())

@@ -4,11 +4,14 @@ import { Product } from '../types';
 import { useCartStore } from '../store/cartStore';
 import { useWishlistStore } from '../store/wishlistStore';
 import { BookmarkIcon, CloseIcon, PlusIcon } from './Icons';
+import { imagesForDept, productHref, type Dept } from '../utils/dept';
 
 export const formatRs = (paise: number) => `RS. ${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;
 
 interface Props {
   product: Product;
+  /** Men / Women page: show only that department's photos. */
+  dept?: Dept;
   /** Bigger text for wide grids. */
   size?: 'normal' | 'large';
 }
@@ -17,8 +20,9 @@ interface Props {
  * Product card: swipeable image gallery with dots, save (bookmark) button, "Sold out" badge,
  * name + price, and a "+" quick-add that opens a size picker over the image.
  */
-export const ProductCard: React.FC<Props> = ({ product }) => {
-  const images = product.images.length ? product.images.slice(0, 6) : [{ id: 'none', url: '', sortOrder: 0, isCover: true }];
+export const ProductCard: React.FC<Props> = ({ product, dept }) => {
+  const deptImages = imagesForDept(product, dept);
+  const images = deptImages.length ? deptImages.slice(0, 6) : [{ id: 'none', url: '', sortOrder: 0, isCover: true }];
   const [active, setActive] = useState(0);
   const [quickOpen, setQuickOpen] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
@@ -29,7 +33,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const toggleSave = useWishlistStore((s) => s.toggle);
 
   const soldOut = product.variants.length > 0 && product.variants.every((v) => v.stockQuantity <= 0);
-  const href = `/products/${product.slug}`;
+  const href = productHref(product.slug, dept);
   const colours = product.variants
     .filter((v, i, arr) => v.color && arr.findIndex((x) => x.color === v.color) === i)
     .map((v) => ({ name: v.color as string, hex: v.colorHex || '#cccccc' }));

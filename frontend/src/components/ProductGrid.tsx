@@ -1,11 +1,12 @@
+import { showsInDept, type Dept } from '../utils/dept';
 import React from 'react';
 import { Product } from '../types';
 import { ProductCard } from './ProductCard';
 
-export const ProductGrid: React.FC<{ products: Product[]; className?: string }> = ({ products, className = '' }) => (
+export const ProductGrid: React.FC<{ products: Product[]; className?: string; dept?: Dept }> = ({ products, className = '', dept }) => (
   <div className={`grid grid-cols-2 md:grid-cols-4 gap-x-[6px] gap-y-5 ${className}`}>
-    {products.map((p) => (
-      <ProductCard key={p.id} product={p} />
+    {products.filter((p) => showsInDept(p, dept)).map((p) => (
+      <ProductCard key={p.id} product={p} dept={dept} />
     ))}
   </div>
 );

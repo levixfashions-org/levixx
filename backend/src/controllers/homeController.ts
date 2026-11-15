@@ -55,7 +55,7 @@ export async function getHome(_req: Request, res: Response) {
         gender: true,
         categoryId: true,
         collections: { select: { collectionId: true } },
-        images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } }
+        images: { orderBy: { sortOrder: 'asc' }, take: 8, select: { url: true, gender: true } }
       },
       orderBy: [{ position: 'asc' }, { isFeatured: 'desc' }, { createdAt: 'desc' }],
       take: 2000
@@ -79,6 +79,8 @@ export async function getHome(_req: Request, res: Response) {
       coverImage:
         (key === 'men' ? settings.menCoverImage : settings.womenCoverImage) ||
         rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url ||
+        // A tee sold to both: use a photo tagged for this department.
+        rows.flatMap((r) => r.images).find((im) => im.gender === want)?.url ||
         rows.find((r) => r.images[0])?.images[0]?.url ||
         null,
       categories: categories

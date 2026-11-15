@@ -32,12 +32,10 @@ interface ColourRow {
   stock: Record<string, string>;
 }
 
-const GENDERS: { value: Gender; label: string; hint: string }[] = [
-  { value: 'MEN', label: 'Men', hint: 'Shows in the Men section' },
-  { value: 'WOMEN', label: 'Women', hint: 'Shows in the Women section' },
-  { value: 'UNISEX', label: 'Unisex', hint: 'Shows in both Men & Women' }
-];
-const genderLabel = (g?: string | null) => (g === 'MEN' ? 'Men' : g === 'WOMEN' ? 'Women' : 'Unisex');
+// A product is for Men, Women or both (stored as UNISEX, but never shown as "Unisex").
+const genderLabel = (g?: string | null) => (g === 'MEN' ? 'Men' : g === 'WOMEN' ? 'Women' : 'Men & Women');
+const forMen = (g?: string | null) => g !== 'WOMEN';
+const forWomen = (g?: string | null) => g !== 'MEN';
 const asGender = (v: string | null): Gender | null => (v === 'MEN' || v === 'WOMEN' || v === 'UNISEX' ? v : null);
 
 const newKey = () => Math.random().toString(36).slice(2);
@@ -97,6 +95,8 @@ export const AdminProductsPage: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [genderFilter, setGenderFilter] = useState<'ALL' | Gender>(asGender((params.get('gender') || '').toUpperCase()) || 'ALL');
   const [gender, setGender] = useState<Gender>('UNISEX');
+  // Who is wearing each photo (url → MEN / WOMEN) — used when a tee is sold to both.
+  const [imageGender, setImageGender] = useState<Record<string, 'MEN' | 'WOMEN' | ''>>({});
   const [collectionFilter, setCollectionFilter] = useState(params.get('collection') || 'ALL');
   const [legacyProducts, setLegacyProducts] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -221,6 +221,7 @@ export const AdminProductsPage: React.FC = () => {
   };
 
   const resetForm = (cats: Category[] = categories) => {
+    setImageGender({});
     const defaultSizes = ['S', 'M', 'L', 'XL', 'XXL'];
     setEditingProduct(null);
     setName('');
@@ -266,6 +267,7 @@ export const AdminProductsPage: React.FC = () => {
     setIsActive(asCopy ? true : p.isActive);
     setColorGroup(p.colorGroup || '');
     setGender(asGender(p.gender || null) || 'UNISEX');
+    setImageGender(Object.fromEntries((p.images || []).map((im: any) => [im.url, im.gender === 'MEN' || im.gender === 'WOMEN' ? im.gender : ''])));
     setCollectionIds(p.collectionIds || []);
     setFormError(null);
     setShowModal(true);
@@ -318,7 +320,13 @@ export const AdminProductsPage: React.FC = () => {
     if (!basePaise || basePaise <= 0) return setFormError('Enter a valid price.');
     const comparePaise = comparePriceINR ? Math.round(parseFloat(comparePriceINR) * 100) : null;
 
-    const images = colours.flatMap((c) => c.images.map((url) => ({ url, color: multiColour || c.name.trim() ? c.name.trim() || null : null })));
+    const images = colours.flatMap((c) =>
+      c.images.map((url) => ({
+        url,
+        color: multiColour || c.name.trim() ? c.name.trim() || null : null,
+        gender: gender === 'UNISEX' ? imageGender[url] || null : null
+      }))
+    );
     const variants = colours.flatMap((c) =>
       sizes.map((size) => ({
         size,
@@ -411,7 +419,7 @@ export const AdminProductsPage: React.FC = () => {
       const matchesQ = !q || p.name.toLowerCase().includes(q) || p.slug.includes(q);
       const matchesCat = categoryFilter === 'ALL' || p.category?.id === categoryFilter;
       const matchesCol = collectionFilter === 'ALL' || (p.collectionIds || []).includes(collectionFilter);
-      const matchesGender = genderFilter === 'ALL' || (p.gender || 'UNISEX') === genderFilter;
+      const matchesGender = genderFilter === 'ALL' || (genderFilter === 'MEN' ? forMen(p.gender) : genderFilter === 'WOMEN' ? forWomen(p.gender) : true);
       return matchesQ && matchesCat && matchesCol && matchesGender;
     });
   }, [products, searchTerm, categoryFilter, collectionFilter, genderFilter]);
@@ -440,7 +448,7 @@ export const AdminProductsPage: React.FC = () => {
     }
   };
 
-  const genderCount = (g: Gender) => products.filter((p) => (p.gender || 'UNISEX') === g).length;
+  const genderCount = (g: Gender) => products.filter((p) => (g === 'MEN' ? forMen(p.gender) : g === 'WOMEN' ? forWomen(p.gender) : false)).length;
 
   const colourNamesOf = (p: Product) => [...new Set(p.variants.map((v) => v.color).filter(Boolean))] as string[];
 
@@ -489,7 +497,7 @@ export const AdminProductsPage: React.FC = () => {
         </p>
 
         <div className="flex flex-wrap gap-1.5">
-          {(['ALL', 'MEN', 'WOMEN', 'UNISEX'] as const).map((g) => (
+          {(['ALL', 'MEN', 'WOMEN'] as const).map((g) => (
             <button
               key={g}
               onClick={() => setGenderFilter(g)}
@@ -677,19 +685,33 @@ export const AdminProductsPage: React.FC = () => {
                 <p className={sectionTitle}>2. Where it appears</p>
                 <div>
                   <label className={labelClass}>Who is it for?</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {GENDERS.map((g) => (
-                      <button
-                        key={g.value}
-                        type="button"
-                        onClick={() => setGender(g.value)}
-                        className={`py-3 px-2 border text-center transition-colors ${gender === g.value ? 'border-black bg-black text-white' : 'border-black/15 bg-white hover:border-black'}`}
-                      >
-                        <span className="block text-sm font-bold uppercase tracking-wider">{g.label}</span>
-                        <span className={`block text-[10px] mt-0.5 ${gender === g.value ? 'text-white/70' : 'text-neutral-500'}`}>{g.hint}</span>
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['MEN', 'WOMEN'] as const).map((g) => {
+                      const on = g === 'MEN' ? forMen(gender) : forWomen(gender);
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => {
+                            const men = g === 'MEN' ? !on : forMen(gender);
+                            const women = g === 'WOMEN' ? !on : forWomen(gender);
+                            if (!men && !women) return; // at least one
+                            setGender(men && women ? 'UNISEX' : men ? 'MEN' : 'WOMEN');
+                          }}
+                          className={`py-3 px-2 border text-center transition-colors flex items-center justify-center gap-2 ${on ? 'border-black bg-black text-white' : 'border-black/15 bg-white hover:border-black'}`}
+                        >
+                          <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${on ? 'bg-[#FF5400] border-[#FF5400]' : 'border-black/30'}`}>{on ? '✓' : ''}</span>
+                          <span className="text-sm font-bold">{g === 'MEN' ? 'Men' : 'Women'}</span>
+                        </button>
+                      );
+                    })}
                   </div>
+                  <p className="text-[10.5px] text-neutral-500 mt-1">
+                    {gender === 'UNISEX'
+                      ? 'Sold to both — shows in Men and in Women. Tag each photo below so each section shows the right model.'
+                      : `Shows only in the ${gender === 'MEN' ? 'Men' : 'Women'} section.`}
+                  </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -780,6 +802,40 @@ export const AdminProductsPage: React.FC = () => {
                       label={multiColour ? `Photos of ${c.name || 'this colour'} *` : 'Product photos *'}
                       compact={multiColour}
                     />
+
+                    {gender === 'UNISEX' && c.images.length > 0 && (
+                      <div className="border border-black/10 bg-neutral-50 p-3">
+                        <p className="text-[11px] font-bold text-neutral-700">Who's wearing it? <span className="font-normal text-neutral-500">— Men page shows only "M" photos, Women page only "W" photos.</span></p>
+                        <div className="mt-2 flex flex-wrap gap-2.5">
+                          {c.images.map((url) => {
+                            const tag = imageGender[url] || '';
+                            return (
+                              <div key={url} className="w-[78px]">
+                                <div className="w-[78px] h-[96px] rounded-[10px] overflow-hidden bg-neutral-200">
+                                  <img src={url.split('#')[0]} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="mt-1 grid grid-cols-2 gap-1">
+                                  {(['MEN', 'WOMEN'] as const).map((g) => (
+                                    <button
+                                      key={g}
+                                      type="button"
+                                      onClick={() => setImageGender((m) => ({ ...m, [url]: m[url] === g ? '' : g }))}
+                                      title={g === 'MEN' ? 'A man is wearing it' : 'A woman is wearing it'}
+                                      className={`h-6 rounded-[7px] text-[11px] font-bold transition-colors ${tag === g ? (g === 'MEN' ? 'bg-blue-600 text-white' : 'bg-pink-600 text-white') : 'bg-white text-neutral-500 ring-1 ring-black/10 hover:text-black'}`}
+                                    >
+                                      {g === 'MEN' ? 'M' : 'W'}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {c.images.some((u) => !imageGender[u]) && (
+                          <p className="mt-2 text-[10.5px] text-amber-700">Untagged photos show in both sections until you tag them.</p>
+                        )}
+                      </div>
+                    )}
 
                     <div>
                       <p className="block text-[11px] font-bold uppercase tracking-wider text-neutral-600 mb-1">Stock per size{multiColour && c.name ? ` — ${c.name}` : ''}</p>

@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types';
 import { ProductCard } from './ProductCard';
+import type { Dept } from '../utils/dept';
 import { ChevronIcon } from './Icons';
 
 interface Props {
@@ -11,10 +12,12 @@ interface Props {
   /** "panel" = inside a white rounded panel (like category rails); "plain" = straight on the page background. */
   variant?: 'panel' | 'plain';
   ctaLabel?: string;
+  /** Men / Women context: cards show only that department's photos. */
+  dept?: Dept;
 }
 
 /** Horizontal product carousel: 4 cards per view on desktop, 2 on mobile, swipeable. */
-export const ProductRail: React.FC<Props> = ({ title, products, href, variant = 'panel', ctaLabel = 'Discover more' }) => {
+export const ProductRail: React.FC<Props> = ({ title, products, href, variant = 'panel', ctaLabel = 'Discover more', dept }) => {
   const ref = useRef<HTMLDivElement>(null);
   if (!products.length) return null;
   const scroll = (dir: number) => {
@@ -52,7 +55,7 @@ export const ProductRail: React.FC<Props> = ({ title, products, href, variant = 
       <div ref={ref} className="flex gap-[6px] overflow-x-auto no-scrollbar snap-x-mandatory px-2 md:px-[22px] scroll-px-2 md:scroll-px-[22px]">
         {products.map((p) => (
           <div key={p.id} className="snap-start shrink-0 w-[calc((100%-6px)/2)] md:w-[calc((100%-18px)/4)]">
-            <ProductCard product={p} />
+            <ProductCard product={p} dept={dept} />
           </div>
         ))}
       </div>

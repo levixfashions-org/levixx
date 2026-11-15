@@ -5,6 +5,7 @@ import { apiClient, COLOR_SWATCHES } from '../services/api';
 import { useHomeStore } from '../store/homeStore';
 import { Product } from '../types';
 import { ProductGrid, ProductGridSkeleton } from '../components/ProductGrid';
+import { asDept } from '../utils/dept';
 import { CloseIcon, FilterIcon } from '../components/Icons';
 import { setSeo } from '../utils/seo';
 
@@ -203,7 +204,7 @@ export const CollectionDetailPage: React.FC = () => {
               )}
             </div>
           ) : (
-            <ProductGrid products={filtered} />
+            <ProductGrid products={filtered} dept={asDept(gender)} />
           )}
         </div>
       </div>
