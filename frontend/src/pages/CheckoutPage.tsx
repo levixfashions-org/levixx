@@ -437,62 +437,65 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  const inputClass = 'w-full bg-white border border-black/20 p-3 text-sm focus:border-black focus:outline-none';
-  const labelClass = 'block text-[11px] font-bold uppercase tracking-wider text-neutral-600 mb-1';
+  const inputClass = 'lx-field w-full h-12 px-4 text-[15px]';
+  const labelClass = 'block text-[12.5px] font-medium text-[#3a3a3f] mb-1.5 pl-1';
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-10">
-      <div className="border-b border-black/10 pb-6 mb-8">
-        <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-black">Secure Checkout</h1>
-        <p className="text-xs text-neutral-600 mt-1">
+    <div className="lx-acct px-4 sm:px-6 py-6 sm:py-10">
+      <div className="lx-login-wallpaper" aria-hidden="true" />
+      <div className="relative z-[1] max-w-[1180px] mx-auto">
+      <div className="mb-5 sm:mb-7 px-1">
+        <p className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#6e6e73]"><Lock className="w-3.5 h-3.5" /> Secure checkout</p>
+        <h1 className="mt-1 text-[28px] sm:text-[36px] leading-tight font-semibold tracking-[-0.035em] text-[#0b0b0f]">Checkout</h1>
+        <p className="text-[13.5px] text-[#6e6e73] mt-1 max-w-[640px] leading-relaxed">
           {storeSettings.codEnabled
             ? 'Pay online with UPI, cards, net banking or wallets via Razorpay — or choose Cash on Delivery.'
             : 'Pay safely with UPI, cards, net banking or wallets via Razorpay. Prepaid orders only — Cash on Delivery is not available.'}
           {!user && (
             <>
               {' '}
-              <Link to="/login" state={{ from: '/checkout' }} className="underline font-semibold text-black">Sign in</Link> to save your address and track orders.
+              <Link to="/login" state={{ from: '/checkout' }} className="font-semibold text-[#ff5400] hover:text-[#d94800]">Sign in</Link> to save your address and track orders.
             </>
           )}
         </p>
       </div>
 
       {errorMsg && (
-        <div role="alert" className="p-4 mb-6 bg-red-100 border border-red-300 text-red-800 text-xs font-semibold">{errorMsg}</div>
+        <div role="alert" className="px-4 py-3 mb-5 rounded-[16px] bg-red-50/95 border border-red-200 text-red-700 text-[13px] font-medium">{errorMsg}</div>
       )}
       {stockProblem && (
-        <div className="p-4 mb-6 bg-yellow-50 border border-yellow-300 text-yellow-900 text-xs font-semibold">
+        <div className="px-4 py-3 mb-5 rounded-[16px] bg-amber-50/95 border border-amber-200 text-amber-900 text-[13px] font-medium">
           {stockProblem.productName} ({stockProblem.size}) has only {stockProblem.stockQuantity} left. Please update your{' '}
           <Link to="/cart" className="underline">bag</Link>.
         </div>
       )}
 
-      <form onSubmit={handleCheckoutSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-7 space-y-8">
-          <div className="space-y-4">
-            <h3 className="font-bold uppercase tracking-wider text-sm text-black">1. Contact Information</h3>
+      <form onSubmit={handleCheckoutSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+        <div className="lg:col-span-7 space-y-4 sm:space-y-5">
+          <div className="lx-acct-card p-5 sm:p-7 space-y-4">
+            <h3 className="text-[17px] font-semibold tracking-[-0.02em] text-[#0b0b0f] flex items-center gap-2.5"><span className="w-6 h-6 rounded-full bg-[#0b0b0f] text-white text-[12px] font-semibold flex items-center justify-center">1</span> Contact details</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="co-email" className={labelClass}>Email Address *</label>
-                <input id="co-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" className={inputClass} />
+                <label htmlFor="co-email" className={labelClass}>Email *</label>
+                <input id="co-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email" className={inputClass} />
               </div>
               <div>
-                <label htmlFor="co-phone" className={labelClass}>Mobile Number (for delivery updates) *</label>
-                <input id="co-phone" type="tel" required inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" className={`${inputClass} font-mono`} />
+                <label htmlFor="co-phone" className={labelClass}>Mobile number *</label>
+                <input id="co-phone" type="tel" required inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" className={inputClass} />
               </div>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="lx-acct-card p-5 sm:p-7 space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-bold uppercase tracking-wider text-sm text-black">2. Delivery Address</h3>
+              <h3 className="text-[17px] font-semibold tracking-[-0.02em] text-[#0b0b0f] flex items-center gap-2.5"><span className="w-6 h-6 rounded-full bg-[#0b0b0f] text-white text-[12px] font-semibold flex items-center justify-center">2</span> Delivery address</h3>
               {addrMode === 'list' && savedList.length < MAX_ADDRESSES && (
-                <button type="button" onClick={startAdd} className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-black hover:underline">
+                <button type="button" onClick={startAdd} className="lx-btn-soft h-9 px-3 inline-flex items-center gap-1 text-[13px] font-semibold">
                   <Plus className="w-4 h-4" /> Add new
                 </button>
               )}
             </div>
-            {addrError && <p role="alert" className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-3 py-2">{addrError}</p>}
+            {addrError && <p role="alert" className="text-[12.5px] text-red-700 bg-red-50 border border-red-200 rounded-[12px] px-3 py-2">{addrError}</p>}
 
             {addrMode === 'list' ? (
               <div role="radiogroup" aria-label="Saved delivery addresses" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -511,22 +514,22 @@ export const CheckoutPage: React.FC = () => {
                           chooseAddress(a);
                         }
                       }}
-                      className={`p-4 bg-white border cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-black ${on ? 'border-black ring-1 ring-black' : 'border-black/20 hover:border-black/50'}`}
+                      className={`lx-acct-row p-4 cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff5400]/40 ${on ? '!border-[#ff5400]/60 ring-2 ring-[#ff5400]/25 bg-white' : 'hover:bg-white'}`}
                     >
                       <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${on ? 'border-black bg-black shadow-[inset_0_0_0_3px_#fff]' : 'border-black/30'}`} />
+                        <span className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 ${on ? 'border-[#ff5400] bg-[#ff5400] shadow-[inset_0_0_0_3px_#fff]' : 'border-black/25'}`} />
                         <div className="min-w-0 flex-1 text-xs text-neutral-700 space-y-0.5 break-words">
                           <p className="font-bold text-black text-[13px] flex flex-wrap items-center gap-2">
                             {a.fullName}
-                            {a.isDefault && <span className="text-[9px] uppercase tracking-wider bg-black text-white px-1.5 py-0.5">Default</span>}
+                            {a.isDefault && <span className="lx-pill bg-orange-100 text-[#c24100]">Default</span>}
                           </p>
                           <p>{a.line1}{a.line2 ? `, ${a.line2}` : ''}</p>
                           <p>{a.city}, {a.state} – {a.postalCode}</p>
-                          <p className="font-mono">{a.phone}</p>
+                          <p>{a.phone}</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 pl-7 text-[11px] font-semibold">
-                        <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(a); }} className="underline text-black">Edit</button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); startEdit(a); }} className="underline text-[#0b0b0f]">Edit</button>
                         {!a.isDefault && (
                           <button type="button" onClick={(e) => { e.stopPropagation(); makeDefault(a); }} className="underline text-neutral-600 hover:text-black">Set as default</button>
                         )}
@@ -539,7 +542,7 @@ export const CheckoutPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={startAdd}
-                    className="flex flex-col items-center justify-center gap-1.5 p-4 min-h-[132px] border-2 border-dashed border-black/25 hover:border-black bg-white/60 text-[11px] font-bold uppercase tracking-wider text-neutral-600 hover:text-black transition-colors"
+                    className="flex flex-col items-center justify-center gap-1.5 p-4 min-h-[132px] rounded-[18px] border-2 border-dashed border-black/15 hover:border-[#ff5400]/50 bg-white/40 text-[13px] font-medium text-[#6e6e73] hover:text-[#0b0b0f] transition-colors"
                   >
                     <Plus className="w-7 h-7" strokeWidth={1.5} />
                     Add new address
@@ -549,19 +552,19 @@ export const CheckoutPage: React.FC = () => {
             ) : (
             <div className="space-y-4">
               {savedList.length > 0 && (
-                <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-600">{editingId ? 'Edit address' : 'New address'}</p>
+                <p className="text-[13px] font-semibold text-[#3a3a3f]">{editingId ? 'Edit address' : 'New address'}</p>
               )}
               <div>
-                <label htmlFor="co-name" className={labelClass}>Full Recipient Name *</label>
-                <input id="co-name" type="text" required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" className={inputClass} />
+                <label htmlFor="co-name" className={labelClass}>Full name *</label>
+                <input id="co-name" type="text" required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Who receives the parcel" className={inputClass} />
               </div>
               <div>
-                <label htmlFor="co-l1" className={labelClass}>Address Line 1 (House, Street, Area) *</label>
-                <input id="co-l1" type="text" required autoComplete="address-line1" value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="House / Flat No., Street, Area" className={inputClass} />
+                <label htmlFor="co-l1" className={labelClass}>House / flat, street, area *</label>
+                <input id="co-l1" type="text" required autoComplete="address-line1" value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="Flat 12, Green Residency, MG Road" className={inputClass} />
               </div>
               <div>
-                <label htmlFor="co-l2" className={labelClass}>Address Line 2 (Landmark, Optional)</label>
-                <input id="co-l2" type="text" autoComplete="address-line2" value={line2} onChange={(e) => setLine2(e.target.value)} placeholder="Apartment, landmark (optional)" className={inputClass} />
+                <label htmlFor="co-l2" className={labelClass}>Landmark (optional)</label>
+                <input id="co-l2" type="text" autoComplete="address-line2" value={line2} onChange={(e) => setLine2(e.target.value)} placeholder="Near City Mall" className={inputClass} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -578,29 +581,29 @@ export const CheckoutPage: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="co-pin" className={labelClass}>PIN Code *</label>
-                  <input id="co-pin" type="text" required inputMode="numeric" maxLength={6} autoComplete="postal-code" value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))} placeholder="110001" className={`${inputClass} font-mono`} />
+                  <label htmlFor="co-pin" className={labelClass}>PIN code *</label>
+                  <input id="co-pin" type="text" required inputMode="numeric" maxLength={6} autoComplete="postal-code" value={postalCode} onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))} placeholder="500001" className={inputClass} />
                 </div>
               </div>
-              <label className="flex items-center space-x-2 text-xs text-neutral-700 cursor-pointer">
-                <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} className="accent-black" />
+              <label className="flex items-center gap-2.5 text-[13.5px] text-[#3a3a3f] cursor-pointer select-none pl-1">
+                <input type="checkbox" checked={saveAddress} onChange={(e) => setSaveAddress(e.target.checked)} className="w-[18px] h-[18px] accent-[#FF5400]" />
                 <span>{user ? 'Save this address to my account for next time' : 'Remember this address on this device for next time'}</span>
               </label>
               {(savedList.length > 0 || editingId) && (
                 <div className="flex flex-wrap gap-3">
-                  <button type="button" disabled={addrBusy} onClick={saveAddressNow} className="px-5 py-2.5 bg-black text-white text-[11px] font-bold uppercase tracking-wider disabled:opacity-50">
+                  <button type="button" disabled={addrBusy} onClick={saveAddressNow} className="lx-btn-primary h-11 px-5 text-[14px] font-semibold disabled:opacity-50">
                     {addrBusy ? 'Saving…' : editingId ? 'Save changes' : 'Save address'}
                   </button>
                   {savedList.length > 0 && (
-                    <button type="button" onClick={cancelForm} className="px-5 py-2.5 border border-black/30 text-[11px] font-bold uppercase tracking-wider text-black hover:border-black">
+                    <button type="button" onClick={cancelForm} className="lx-btn-soft h-11 px-5 text-[14px] font-semibold">
                       Cancel
                     </button>
                   )}
                 </div>
               )}
               {!user && (
-                <p className="text-[10.5px] text-neutral-500">
-                  <Link to="/login" state={{ from: '/checkout' }} className="underline">Sign in</Link> to keep your addresses on every device.
+                <p className="text-[12.5px] text-[#8e8e93] pl-1">
+                  <Link to="/login" state={{ from: '/checkout' }} className="font-semibold text-[#ff5400]">Sign in</Link> to keep your addresses on every device.
                 </p>
               )}
             </div>
@@ -608,24 +611,24 @@ export const CheckoutPage: React.FC = () => {
           </div>
 
           {storeSettings.codEnabled && (
-            <div className="space-y-3">
-              <h3 className="font-bold uppercase tracking-wider text-sm text-black">3. Payment Method</h3>
+            <div className="lx-acct-card p-5 sm:p-7 space-y-4">
+              <h3 className="text-[17px] font-semibold tracking-[-0.02em] text-[#0b0b0f] flex items-center gap-2.5"><span className="w-6 h-6 rounded-full bg-[#0b0b0f] text-white text-[12px] font-semibold flex items-center justify-center">3</span> Payment</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className={`flex items-start gap-3 p-4 border cursor-pointer bg-white ${payMethod === 'ONLINE' || !codAvailable ? 'border-black ring-1 ring-black' : 'border-black/20 hover:border-black/50'}`}>
-                  <input id="pay-online" type="radio" name="payMethod" checked={payMethod === 'ONLINE' || !codAvailable} onChange={() => setPayMethod('ONLINE')} className="accent-black mt-0.5" />
+                <label className={`lx-acct-row flex items-start gap-3 p-4 cursor-pointer transition-all ${payMethod === 'ONLINE' || !codAvailable ? '!border-[#ff5400]/60 ring-2 ring-[#ff5400]/25 bg-white' : 'hover:bg-white'}`}>
+                  <input id="pay-online" type="radio" name="payMethod" checked={payMethod === 'ONLINE' || !codAvailable} onChange={() => setPayMethod('ONLINE')} className="w-[18px] h-[18px] accent-[#FF5400] mt-0.5" />
                   <span>
-                    <span className="block text-xs font-bold uppercase tracking-wider text-black">Pay online</span>
-                    <span className="block text-[11px] text-neutral-600 mt-0.5">UPI, cards, net banking or wallets via Razorpay</span>
+                    <span className="block text-[14px] font-semibold text-[#0b0b0f]">Pay online</span>
+                    <span className="block text-[12.5px] text-[#6e6e73] mt-0.5">UPI, cards, net banking or wallets via Razorpay</span>
                   </span>
                 </label>
-                <label className={`flex items-start gap-3 p-4 border bg-white ${!codAvailable ? 'opacity-50 cursor-not-allowed border-black/10' : payMethod === 'COD' ? 'border-black ring-1 ring-black cursor-pointer' : 'border-black/20 hover:border-black/50 cursor-pointer'}`}>
-                  <input id="pay-cod" type="radio" name="payMethod" disabled={!codAvailable} checked={isCod} onChange={() => setPayMethod('COD')} className="accent-black mt-0.5" />
+                <label className={`lx-acct-row flex items-start gap-3 p-4 transition-all ${!codAvailable ? 'opacity-50 cursor-not-allowed' : payMethod === 'COD' ? '!border-[#ff5400]/60 ring-2 ring-[#ff5400]/25 bg-white cursor-pointer' : 'hover:bg-white cursor-pointer'}`}>
+                  <input id="pay-cod" type="radio" name="payMethod" disabled={!codAvailable} checked={isCod} onChange={() => setPayMethod('COD')} className="w-[18px] h-[18px] accent-[#FF5400] mt-0.5" />
                   <span>
-                    <span className="block text-xs font-bold uppercase tracking-wider text-black">Cash on Delivery</span>
-                    <span className="block text-[11px] text-neutral-600 mt-0.5">
+                    <span className="block text-[14px] font-semibold text-[#0b0b0f]">Cash on Delivery</span>
+                    <span className="block text-[12.5px] text-[#6e6e73] mt-0.5">
                       {codAvailable
-                        ? `Pay in cash or UPI when your order arrives${codFeePaise > 0 ? ` · +RS. ${inr(codFeePaise)} COD fee` : ''}`
-                        : `Available for orders up to RS. ${inr(codLimitPaise)}`}
+                        ? `Pay in cash or UPI when your order arrives${codFeePaise > 0 ? ` · +₹${inr(codFeePaise)} COD fee` : ''}`
+                        : `Available for orders up to ₹${inr(codLimitPaise)}`}
                     </span>
                   </span>
                 </label>
@@ -633,8 +636,8 @@ export const CheckoutPage: React.FC = () => {
             </div>
           )}
 
-          <div className="p-4 bg-white/70 border border-black/10 flex items-center space-x-3 text-xs text-neutral-700">
-            <Lock className="w-5 h-5 text-black flex-shrink-0" />
+          <div className="lx-acct-card px-5 py-4 flex items-center gap-3 text-[13px] text-[#3a3a3f]">
+            <span className="w-9 h-9 rounded-full bg-green-100 text-green-700 flex items-center justify-center flex-shrink-0"><Lock className="w-4 h-4" /></span>
             <span>
               {isCod
                 ? 'Your order is confirmed right away. Please keep the exact amount ready — you can pay the courier in cash or by UPI.'
@@ -643,25 +646,25 @@ export const CheckoutPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="lg:col-span-5 bg-white p-6 border border-black/10 shadow-sm space-y-6 self-start lg:sticky lg:top-24">
-          <h3 className="font-display font-black text-xl uppercase tracking-tight text-black border-b border-black/10 pb-3">
+        <div className="lg:col-span-5 lx-acct-card p-5 sm:p-7 space-y-5 self-start lg:sticky lg:top-24">
+          <h3 className="text-[19px] font-semibold tracking-[-0.02em] text-[#0b0b0f] border-b border-black/[0.07] pb-3">
             Order Summary ({cart.itemCount})
           </h3>
 
           <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
             {cart.items.map((item) => (
               <div key={item.id} className={`flex items-center space-x-3 text-xs transition-opacity ${itemBusy === item.id ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="w-14 h-16 bg-neutral-200 overflow-hidden flex-shrink-0">
+                <div className="w-14 h-[68px] rounded-[12px] bg-black/5 ring-1 ring-black/5 overflow-hidden flex-shrink-0">
                   {item.imageUrl && <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover" loading="lazy" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-black truncate">{item.productName}</p>
-                  <p className="text-[11px] text-neutral-500 font-mono">Size: {item.size}{item.color ? ` • ${item.color}` : ''}</p>
-                  <div className="mt-1.5 inline-flex items-center border border-black/15">
+                  <p className="text-[13.5px] font-medium text-[#0b0b0f] truncate">{item.productName}</p>
+                  <p className="text-[12px] text-[#8e8e93]">Size {item.size}{item.color ? ` • ${item.color}` : ''}</p>
+                  <div className="mt-1.5 inline-flex items-center rounded-[10px] bg-white/80 ring-1 ring-black/10 overflow-hidden">
                     <button type="button" onClick={() => changeItem(item.id, item.quantity - 1)} aria-label={`Decrease quantity of ${item.productName}`} className="w-7 h-7 flex items-center justify-center hover:bg-neutral-100">
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-7 text-center font-mono font-bold text-[11px]">{item.quantity}</span>
+                    <span className="w-7 text-center font-semibold text-[12.5px]">{item.quantity}</span>
                     <button type="button" onClick={() => changeItem(item.id, item.quantity + 1)} disabled={item.quantity >= item.stockQuantity} aria-label={`Increase quantity of ${item.productName}`} className="w-7 h-7 flex items-center justify-center hover:bg-neutral-100 disabled:opacity-30">
                       <Plus className="w-3 h-3" />
                     </button>
@@ -671,7 +674,7 @@ export const CheckoutPage: React.FC = () => {
                   <button type="button" onClick={() => changeItem(item.id, 0)} aria-label={`Remove ${item.productName}`} title="Remove" className="w-7 h-7 -mr-1 flex items-center justify-center rounded-full text-neutral-400 hover:text-red-600 hover:bg-red-50">
                     <X className="w-4 h-4" />
                   </button>
-                  <span className="font-bold font-mono text-black whitespace-nowrap">RS. {inr(item.totalPaise)}</span>
+                  <span className="text-[14px] font-semibold text-[#0b0b0f] whitespace-nowrap">₹{inr(item.totalPaise)}</span>
                 </div>
               </div>
             ))}
@@ -679,9 +682,9 @@ export const CheckoutPage: React.FC = () => {
 
           {itemError && <p className="text-[11px] text-red-600 -mt-3">{itemError}</p>}
 
-          <div className="pt-2 border-t border-black/10">
+          <div className="pt-1">
             {appliedCoupon ? (
-              <div className="flex items-center justify-between bg-green-50 border border-green-200 px-3 py-2 text-[11px] text-green-800 font-semibold">
+              <div className="flex items-center justify-between rounded-[12px] bg-green-50 border border-green-200 px-3 py-2.5 text-[12.5px] text-green-800 font-medium">
                 <span className="flex items-center gap-1">
                   <Tag className="w-3 h-3" /> {appliedCoupon.code} applied — {appliedCoupon.description}
                 </span>
@@ -701,15 +704,15 @@ export const CheckoutPage: React.FC = () => {
                       handleApplyCoupon();
                     }
                   }}
-                  placeholder="PROMO CODE"
+                  placeholder="Promo code"
                   aria-label="Promo code"
-                  className="flex-1 border border-black/20 px-3 py-2 text-xs uppercase font-mono focus:outline-none focus:border-black"
+                  className="lx-field flex-1 min-w-0 h-11 px-3.5 text-[14px] uppercase placeholder:normal-case"
                 />
                 <button
                   type="button"
                   onClick={handleApplyCoupon}
                   disabled={couponLoading || !couponCode.trim()}
-                  className="px-4 py-2 bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-black disabled:opacity-50"
+                  className="lx-btn-primary h-11 px-5 text-[14px] font-semibold disabled:opacity-40"
                 >
                   {couponLoading ? '...' : 'Apply'}
                 </button>
@@ -718,62 +721,63 @@ export const CheckoutPage: React.FC = () => {
             {couponError && <p className="text-[11px] text-red-700 font-semibold mt-1.5">{couponError}</p>}
           </div>
 
-          <div className="space-y-2 border-t border-black/10 pt-4 text-xs">
-            <div className="flex justify-between text-neutral-600">
+          <div className="space-y-2.5 border-t border-black/[0.07] pt-4 text-[13.5px]">
+            <div className="flex justify-between text-[#6e6e73]">
               <span>Subtotal</span>
-              <span className="font-mono text-black font-semibold">RS. {inr(cart.subtotalPaise)}</span>
+              <span className="text-[#0b0b0f] font-medium">₹{inr(cart.subtotalPaise)}</span>
             </div>
             {discountPaise > 0 && (
               <div className="flex justify-between text-green-700 font-semibold">
                 <span>Coupon Discount</span>
-                <span className="font-mono">- RS. {inr(discountPaise)}</span>
+                <span>− ₹{inr(discountPaise)}</span>
               </div>
             )}
-            <div className="flex justify-between text-neutral-600">
+            <div className="flex justify-between text-[#6e6e73]">
               <span>Shipping</span>
-              <span className="font-mono text-black font-semibold">{cart.shippingPaise === 0 ? 'FREE' : `RS. ${inr(cart.shippingPaise)}`}</span>
+              <span className="text-[#0b0b0f] font-medium">{cart.shippingPaise === 0 ? <span className="text-green-700">Free</span> : `₹${inr(cart.shippingPaise)}`}</span>
             </div>
             {isCod && codFeePaise > 0 && (
-              <div className="flex justify-between text-neutral-600">
+              <div className="flex justify-between text-[#6e6e73]">
                 <span>Cash on Delivery fee</span>
-                <span className="font-mono text-black font-semibold">RS. {inr(codFeePaise)}</span>
+                <span className="text-[#0b0b0f] font-medium">₹{inr(codFeePaise)}</span>
               </div>
             )}
             {cart.remainingForFreeShippingPaise > 0 && cart.shippingPaise > 0 && (
-              <p className="text-[11px] text-neutral-500">Add RS. {inr(cart.remainingForFreeShippingPaise)} more for free shipping.</p>
+              <p className="text-[12px] text-[#c24100] bg-orange-50 rounded-[10px] px-3 py-2">Add ₹{inr(cart.remainingForFreeShippingPaise)} more for free shipping.</p>
             )}
-            <div className="flex justify-between text-base font-bold text-black border-t border-black/10 pt-3">
-              <span className="uppercase tracking-wider">{isCod ? 'Pay on delivery' : 'Total'}</span>
-              <span className="font-mono text-lg">RS. {inr(totalPaise)}</span>
+            <div className="flex justify-between items-baseline text-[#0b0b0f] border-t border-black/[0.07] pt-3">
+              <span className="text-[15px] font-semibold">{isCod ? 'Pay on delivery' : 'Total'}</span>
+              <span className="text-[24px] font-semibold tracking-[-0.03em]">₹{inr(totalPaise)}</span>
             </div>
           </div>
 
-          <label className="flex items-start gap-2 text-[11px] text-neutral-700 leading-relaxed cursor-pointer">
+          <label className="flex items-start gap-2.5 text-[12px] text-[#6e6e73] leading-relaxed cursor-pointer">
             <input
               id="checkout-agree"
               type="checkbox"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="accent-black w-4 h-4 mt-0.5 shrink-0"
+              className="accent-[#FF5400] w-[18px] h-[18px] mt-0.5 shrink-0"
             />
             <span>
               I agree to the{' '}
-              <Link to="/policies/terms-of-service" target="_blank" className="underline text-black">Terms & Conditions</Link>,{' '}
-              <Link to="/policies/privacy-policy" target="_blank" className="underline text-black">Privacy policy</Link> and{' '}
-              <Link to="/policies/refund-policy" target="_blank" className="underline text-black">Returns policy</Link>. I understand returns are accepted only for damaged, defective or wrong items reported within 48 hours, and there are no size exchanges.
+              <Link to="/policies/terms-of-service" target="_blank" className="underline text-[#0b0b0f]">Terms & Conditions</Link>,{' '}
+              <Link to="/policies/privacy-policy" target="_blank" className="underline text-[#0b0b0f]">Privacy policy</Link> and{' '}
+              <Link to="/policies/refund-policy" target="_blank" className="underline text-[#0b0b0f]">Returns policy</Link>. I understand returns are accepted only for damaged, defective or wrong items reported within 48 hours, and there are no size exchanges.
             </span>
           </label>
 
           <button
             type="submit"
             disabled={loading || Boolean(stockProblem)}
-            className="w-full bg-black text-white py-4 text-xs font-bold uppercase tracking-widest hover:bg-neutral-800 transition-colors flex items-center justify-center space-x-2 shadow-lg disabled:opacity-50"
+            className="lx-btn-primary w-full h-14 text-[15.5px] font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            <span>{loading ? (isCod ? 'Placing your order...' : 'Opening secure payment...') : isCod ? `Place order · Pay RS. ${inr(totalPaise)} on delivery` : `Pay RS. ${inr(totalPaise)}`}</span>
+            <span>{loading ? (isCod ? 'Placing your order...' : 'Opening secure payment...') : isCod ? `Place order · Pay ₹${inr(totalPaise)} on delivery` : `Pay ₹${inr(totalPaise)} securely`}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 };
