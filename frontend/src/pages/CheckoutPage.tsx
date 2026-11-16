@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowRight, Tag, X, Plus, Minus } from 'lucide-react';
+import { Lock, ArrowRight, Tag, X, Plus, Minus, LocateFixed, Loader2, CheckCircle2 } from 'lucide-react';
+import { locateAddress } from '../services/locateAddress';
 import { InstagramGlyph } from '../components/InstagramGlyph';
 import { useCartStore } from '../store/cartStore';
 import { useAuth } from '../context/AuthContext';
@@ -80,6 +81,10 @@ export const CheckoutPage: React.FC = () => {
   const [state, setState] = useState('');
   const [postalCode, setPostalCode] = useState('');
   const [saveAddress, setSaveAddress] = useState(true);
+  // "Use my current location"
+  const [locating, setLocating] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+  const [geo, setGeo] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [prefilled, setPrefilled] = useState(false);
 
   // Saved addresses: account addresses when signed in, otherwise addresses remembered on this device.
@@ -171,13 +176,46 @@ export const CheckoutPage: React.FC = () => {
     return null;
   };
 
+  const useMyLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    setLocError(null);
+    try {
+      const a = await locateAddress(INDIAN_STATES);
+      const street = [a.line1, a.line2].filter(Boolean).join(', ');
+      if (street) setLine1(street);
+      if (a.city) setCity(a.city);
+      if (a.state) setState(a.state);
+      if (a.postalCode) setPostalCode(a.postalCode);
+      setGeo({ lat: a.lat, lng: a.lng, accuracy: a.accuracy });
+      // Next step for the customer: their house / flat number goes at the start of line 1.
+      setTimeout(() => {
+        const el = document.getElementById('co-l1') as HTMLInputElement | null;
+        if (!el) return;
+        el.focus({ preventScroll: false });
+        try {
+          el.setSelectionRange(0, 0);
+        } catch {
+          /* ignore */
+        }
+      }, 60);
+    } catch (err: any) {
+      setLocError(err?.message || 'Couldn’t get your location. Please type your address.');
+    } finally {
+      setLocating(false);
+    }
+  };
+
   const chooseAddress = (a: SavedAddress) => {
+    setGeo(null);
     setSelectedAddrId(a.id);
     fillFrom(a);
     setAddrError(null);
   };
 
   const startAdd = () => {
+    setGeo(null);
+    setLocError(null);
     setEditingId(null);
     setSelectedAddrId(null);
     setLine1('');
@@ -364,6 +402,7 @@ export const CheckoutPage: React.FC = () => {
         customerName: fullName.trim(),
         customerPhone: cleanPhone,
         instagram: igHandle || null,
+        deliveryLocation: addrMode === 'form' && geo ? geo : null,
         shippingAddress: {
           fullName: fullName.trim(),
           line1: line1.trim(),
@@ -602,6 +641,28 @@ export const CheckoutPage: React.FC = () => {
               {savedList.length > 0 && (
                 <p className="text-[13px] font-semibold text-[#3a3a3f]">{editingId ? 'Edit address' : 'New address'}</p>
               )}
+              <div>
+                <button
+                  type="button"
+                  onClick={useMyLocation}
+                  disabled={locating}
+                  className={`w-full h-12 rounded-[16px] inline-flex items-center justify-center gap-2 text-[14.5px] font-semibold transition-all disabled:opacity-80 ${
+                    geo ? 'bg-green-50 border border-green-200 text-green-800' : 'lx-btn-soft text-[#c24100] border border-[#ff5400]/25'
+                  }`}
+                >
+                  {locating ? (
+                    <><Loader2 className="w-[18px] h-[18px] animate-spin" /> Finding your location…</>
+                  ) : geo ? (
+                    <><CheckCircle2 className="w-[18px] h-[18px]" /> Location added · tap to refresh</>
+                  ) : (
+                    <><LocateFixed className="w-[18px] h-[18px]" /> Use my current location</>
+                  )}
+                </button>
+                {geo && !locError && (
+                  <p className="mt-1.5 pl-1 text-[12px] text-[#6e6e73]">Please add your <b className="text-[#0b0b0f]">house / flat number</b> and check the details below.</p>
+                )}
+                {locError && <p role="alert" className="mt-1.5 pl-1 text-[12px] text-red-600">{locError}</p>}
+              </div>
               <div>
                 <label htmlFor="co-name" className={labelClass}>Full name *</label>
                 <input id="co-name" type="text" required autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Who receives the parcel" className={inputClass} />

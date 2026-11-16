@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, LocateFixed, Loader2, CheckCircle2 } from 'lucide-react';
+import { locateAddress } from '../../services/locateAddress';
 import { Address } from '../../types';
 
 export const INDIAN_STATES = [
@@ -39,12 +40,17 @@ export const AddressSheet: React.FC<Props> = ({ open, initial, defaultName, onCl
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [located, setLocated] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setA(initial ? { ...EMPTY, ...initial, line2: initial.line2 || '' } : { ...EMPTY, fullName: defaultName || '' });
     setTouched(false);
     setError(null);
+    setLocated(false);
+    setLocError(null);
   }, [open, initial, defaultName]);
 
   useEffect(() => {
@@ -64,6 +70,37 @@ export const AddressSheet: React.FC<Props> = ({ open, initial, defaultName, onCl
   const errs = validate(a);
   const show = (k: keyof AddressInput) => (touched ? errs[k] : undefined);
   const set = (k: keyof AddressInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setA((p) => ({ ...p, [k]: e.target.value }));
+
+  const useMyLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    setLocError(null);
+    try {
+      const g = await locateAddress(INDIAN_STATES);
+      setA((p) => ({
+        ...p,
+        line1: g.line1 || p.line1,
+        line2: g.line2 || p.line2,
+        city: g.city || p.city,
+        state: g.state || p.state,
+        postalCode: g.postalCode || p.postalCode
+      }));
+      setLocated(true);
+      setTimeout(() => {
+        const el = document.getElementById('addr-line1') as HTMLInputElement | null;
+        el?.focus();
+        try {
+          el?.setSelectionRange(0, 0);
+        } catch {
+          /* ignore */
+        }
+      }, 60);
+    } catch (err: any) {
+      setLocError(err?.message || 'Couldn’t get your location. Please type your address.');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +141,26 @@ export const AddressSheet: React.FC<Props> = ({ open, initial, defaultName, onCl
         {error && <div role="alert" className="mb-4 px-3.5 py-3 rounded-[14px] bg-red-50/90 border border-red-200 text-red-700 text-[12.5px] font-medium">{error}</div>}
 
         <div className="space-y-3.5">
+          <div>
+            <button
+              type="button"
+              onClick={useMyLocation}
+              disabled={locating}
+              className={`w-full h-11 rounded-[14px] inline-flex items-center justify-center gap-2 text-[14px] font-semibold disabled:opacity-80 ${
+                located ? 'bg-green-50 border border-green-200 text-green-800' : 'lx-btn-soft text-[#c24100] border border-[#ff5400]/25'
+              }`}
+            >
+              {locating ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Finding your location…</>
+              ) : located ? (
+                <><CheckCircle2 className="w-4 h-4" /> Location added · tap to refresh</>
+              ) : (
+                <><LocateFixed className="w-4 h-4" /> Use my current location</>
+              )}
+            </button>
+            {located && !locError && <p className="mt-1.5 pl-1 text-[11.5px] text-[#6e6e73]">Add your <b className="text-[#0b0b0f]">house / flat number</b> and check the details.</p>}
+            {locError && <p role="alert" className="mt-1.5 pl-1 text-[11.5px] text-red-600">{locError}</p>}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {field('fullName', 'Full name', { autoComplete: 'name', placeholder: 'Who receives the parcel' })}
             {field('phone', 'Mobile number', { type: 'tel', inputMode: 'tel', autoComplete: 'tel', placeholder: '10-digit number' })}

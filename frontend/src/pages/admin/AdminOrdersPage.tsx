@@ -492,6 +492,17 @@ export const AdminOrdersPage: React.FC = () => {
                   <p className="text-neutral-700 font-sans mt-0.5">
                     {selectedOrder.shippingAddress || '—'}
                   </p>
+                  {selectedOrder.shippingAddressSnapshot?.geo && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${selectedOrder.shippingAddressSnapshot.geo.lat},${selectedOrder.shippingAddressSnapshot.geo.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#FF5400] text-white text-[11px] font-semibold hover:bg-[#e04a00]"
+                    >
+                      <MapPin className="w-3.5 h-3.5" /> Open exact location in Google Maps
+                      {selectedOrder.shippingAddressSnapshot.geo.accuracy ? <span className="opacity-80 font-normal">(±{selectedOrder.shippingAddressSnapshot.geo.accuracy} m)</span> : null}
+                    </a>
+                  )}
                 </div>
               </div>
 

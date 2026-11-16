@@ -126,7 +126,7 @@ export interface Order {
   customerPhone: string;
   instagram?: string | null;
   instagramOrderCount?: number;
-  shippingAddressSnapshot: Address;
+  shippingAddressSnapshot: Address & { geo?: { lat: number; lng: number; accuracy?: number } };
   subtotalPaise: number;
   shippingPaise: number;
   discountPaise: number;
