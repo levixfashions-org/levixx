@@ -25,6 +25,7 @@ import { serveMedia } from './controllers/mediaController.js';
 import { asyncHandler } from './middleware/errorHandler.js';
 import wishlistRoutes from './routes/wishlistRoutes.js';
 import pushRoutes from './routes/pushRoutes.js';
+import { geoRateLimiter, reverseGeocode } from './controllers/geoController.js';
 const app = express();
 // Hostinger (LiteSpeed / nginx) sits in front of Node — trust it so req.ip is the real visitor.
 app.set('trust proxy', 1);
@@ -172,6 +173,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/push', pushRoutes);
+app.get('/api/geo/reverse', geoRateLimiter, asyncHandler(reverseGeocode));
 app.use('/api/admin', adminRoutes);
 app.use('/api', notFoundApi);
 // Uploaded images (stored in MySQL)

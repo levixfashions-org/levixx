@@ -23,7 +23,17 @@ const createOrderSchema = z.object({
         .optional()
         .nullable()
         .transform(normalizeInstagram)
-        .refine((v) => v === null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores.")
+        .refine((v) => v === null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores."),
+    // Map pin from "Use my current location" (optional) — helps the courier find the door.
+    deliveryLocation: z
+        .object({
+        lat: z.number().min(6).max(37.6),
+        lng: z.number().min(68).max(97.5),
+        accuracy: z.number().min(0).max(100000).optional()
+    })
+        .optional()
+        .nullable()
+        .catch(null)
 });
 export async function validateCoupon(req, res) {
     const { code } = z.object({ code: z.string().trim().min(1).max(40) }).parse(req.body);
@@ -120,7 +130,13 @@ export async function createOrder(req, res) {
         customerName: data.customerName,
         customerPhone: data.customerPhone,
         instagram: data.instagram,
-        shippingAddressSnapshot: { ...data.shippingAddress, phone: data.shippingAddress.phone },
+        shippingAddressSnapshot: {
+            ...data.shippingAddress,
+            phone: data.shippingAddress.phone,
+            ...(data.deliveryLocation
+                ? { geo: { lat: +data.deliveryLocation.lat.toFixed(6), lng: +data.deliveryLocation.lng.toFixed(6), accuracy: data.deliveryLocation.accuracy ? Math.round(data.deliveryLocation.accuracy) : undefined } }
+                : {})
+        },
         subtotalPaise,
         shippingPaise,
         discountPaise,
