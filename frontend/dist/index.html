@@ -19,6 +19,17 @@
 
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0A0A0A" />
+    <script>
+      // Dark mode before the first paint (no white flash): saved choice, else follow the phone.
+      (function () {
+        try {
+          if (location.pathname.indexOf('/admin') === 0) return;
+          var m = localStorage.getItem('lx_theme') || 'auto';
+          var dark = m === 'dark' || (m !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('lx-dark');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -31,10 +42,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="preload" as="image" href="/hero_desktop.jpg" media="(min-width: 951px)" />
     <link rel="preload" as="image" href="/hero_mobile.jpg" media="(max-width: 950px)" />
-    <script type="module" crossorigin src="/assets/index-BRxigqbz.js"></script>
+    <script type="module" crossorigin src="/assets/index-DewYnWSm.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/react-BEDKma9L.js">
     <link rel="modulepreload" crossorigin href="/assets/firebase-Dzhtz4Cf.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-DyOMYbV1.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-fePG-ITN.css">
   </head>
   <body class="bg-[#EFEFEF] text-black font-sans antialiased selection:bg-black selection:text-white min-h-screen">
     <!-- Launch screen: every fresh launch of the installed app (browsers get the door intro) -->
