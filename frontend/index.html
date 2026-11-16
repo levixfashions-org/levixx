@@ -42,13 +42,15 @@
       #lx-splash .lx-glow{position:absolute;width:78vmin;height:78vmin;border-radius:50%;background:radial-gradient(circle,rgba(255,84,0,.30) 0%,rgba(255,84,0,.12) 30%,rgba(255,84,0,.04) 52%,transparent 70%);will-change:transform,opacity;animation:lxsPulse 3.2s ease-in-out infinite}
       #lx-splash .lx-ring{position:absolute;width:46vmin;height:46vmin;max-width:260px;max-height:260px;border-radius:50%;border:1px solid rgba(255,255,255,.08);animation:lxsRing 3s cubic-bezier(.2,.8,.2,1) infinite}
       #lx-splash .lx-logo{position:relative;width:34vmin;height:34vmin;max-width:180px;max-height:180px;border-radius:23%;}
-      #lx-splash .lx-anim{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:23%;box-shadow:0 24px 60px -18px rgba(255,84,0,.65),0 0 0 1px rgba(255,255,255,.08);opacity:0;transform:scale(.86) translateY(6px);will-change:opacity,transform;animation:lxsMark 1s cubic-bezier(.2,.8,.2,1) .2s forwards}
-      #lx-splash .lx-anim .lx-l{opacity:0;transform:translateY(28px);animation:lxsIn .8s cubic-bezier(.2,.8,.2,1) .75s forwards}
-      #lx-splash .lx-anim .lx-x{opacity:0;transform:translateX(34px) rotate(10deg);transform-origin:200px 150px;animation:lxsIn .85s cubic-bezier(.2,.8,.2,1) 1.05s forwards}
-      #lx-splash .lx-anim .lx-arc{stroke-dasharray:400;stroke-dashoffset:400;animation:lxsDraw 1s cubic-bezier(.65,0,.35,1) 2s forwards}
-      #lx-splash .lx-anim .lx-arc2{animation-delay:2.2s}
-      #lx-splash .lx-anim .lx-star{transform-box:fill-box;transform-origin:center;transform:scale(0) rotate(-120deg);animation:lxsStar .7s cubic-bezier(.3,1.6,.5,1) 2.35s forwards,lxsTw 2.6s ease-in-out 3.3s infinite}
-      #lx-splash .lx-anim .lx-sheen{transform:skewX(-18deg);animation:lxsSheen 1.3s ease 2.9s forwards}
+      #lx-splash .lx-anim{position:absolute;top:0;left:0;width:100%;height:100%;border-radius:23%;overflow:hidden;-webkit-mask-image:-webkit-radial-gradient(white,black);background:linear-gradient(135deg,#FF9445 0%,#FF5A0A 60%,#C73600 100%);box-shadow:0 24px 60px -18px rgba(255,84,0,.65),0 0 0 1px rgba(255,255,255,.08);opacity:0;-webkit-transform:scale(.86) translateY(6px);transform:scale(.86) translateY(6px);animation:lxsMark 1s cubic-bezier(.2,.8,.2,1) .2s both}
+      #lx-splash .lx-p{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+      #lx-splash .lx-l{opacity:0;-webkit-transform:translateY(9%);transform:translateY(9%);animation:lxsIn .8s cubic-bezier(.2,.8,.2,1) .75s both}
+      #lx-splash .lx-x{opacity:0;-webkit-transform-origin:66.7% 50%;transform-origin:66.7% 50%;-webkit-transform:translateX(11%) rotate(10deg);transform:translateX(11%) rotate(10deg);animation:lxsIn .85s cubic-bezier(.2,.8,.2,1) 1.05s both}
+      #lx-splash .lx-sw{-webkit-clip-path:inset(0 100% 0 0);clip-path:inset(0 100% 0 0);animation:lxsSweep .9s cubic-bezier(.65,0,.25,1) 1.65s both}
+      #lx-splash .lx-arc{stroke-dasharray:400;stroke-dashoffset:400;animation:lxsDraw 1s cubic-bezier(.65,0,.35,1) 2s both}
+      #lx-splash .lx-arc2{animation-delay:2.2s}
+      #lx-splash .lx-star{opacity:0;-webkit-transform-origin:46.7% 26%;transform-origin:46.7% 26%;-webkit-transform:scale(.01) rotate(-120deg);transform:scale(.01) rotate(-120deg);animation:lxsStar .7s cubic-bezier(.3,1.6,.5,1) 2.35s both,lxsTw 2.6s ease-in-out 3.3s infinite}
+      #lx-splash .lx-sheen{position:absolute;top:-20%;bottom:-20%;left:0;width:26%;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.5),rgba(255,255,255,0));opacity:0;-webkit-transform:translateX(-160%) skewX(-18deg);transform:translateX(-160%) skewX(-18deg);animation:lxsSheen 1.3s ease 2.9s both}
       #lx-splash .lx-halo{position:absolute;left:50%;top:50%;width:210%;height:210%;margin:-105% 0 0 -105%;border-radius:50%;background:radial-gradient(circle,rgba(255,96,20,.55) 0%,rgba(255,84,0,.22) 26%,rgba(255,84,0,.07) 46%,transparent 66%);opacity:0;will-change:opacity;animation:lxsHalo 1s ease 1.5s forwards}
       #lx-splash .lx-outline path{fill:none;stroke:#FF7A2E;stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:lxsDraw 1.4s cubic-bezier(.65,0,.35,1) forwards}
       #lx-splash .lx-outline path:nth-child(2){animation-delay:.2s}
@@ -65,7 +67,7 @@
       #lx-splash .lx-bar i{position:absolute;top:0;bottom:0;left:0;width:40%;border-radius:2px;background:linear-gradient(90deg,transparent,#FF5400,transparent);animation:lxsBar 1.6s ease-in-out infinite}
       @keyframes lxsDraw{to{stroke-dashoffset:0}}
       @keyframes lxsLine{to{transform:scaleX(1)}}
-      @keyframes lxsSolid{to{opacity:1;transform:none}}@keyframes lxsMark{to{opacity:1;transform:none}}@keyframes lxsIn{to{opacity:1;transform:none}}@keyframes lxsSweep{to{transform:scaleX(1)}}@keyframes lxsStar{to{transform:none}}@keyframes lxsTw{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.75;transform:scale(.82) rotate(20deg)}}@keyframes lxsSheen{0%{opacity:0;transform:translateX(0) skewX(-18deg)}15%{opacity:.35}100%{opacity:0;transform:translateX(560px) skewX(-18deg)}}@keyframes lxsShine{0%{left:-60%;opacity:1}100%{left:130%;opacity:1}}
+      @keyframes lxsSolid{to{opacity:1;transform:none}}@keyframes lxsMark{to{opacity:1;transform:none}}@keyframes lxsIn{to{opacity:1;transform:none}}@keyframes lxsSweep{from{-webkit-clip-path:inset(0 100% 0 0);clip-path:inset(0 100% 0 0)}to{-webkit-clip-path:inset(0 0% 0 0);clip-path:inset(0 0% 0 0)}}@keyframes lxsStar{to{opacity:1;-webkit-transform:none;transform:none}}@keyframes lxsTw{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.75;transform:scale(.82) rotate(20deg)}}@keyframes lxsSheen{0%{opacity:0;transform:translateX(-160%) skewX(-18deg)}15%{opacity:1}100%{opacity:0;transform:translateX(520%) skewX(-18deg)}}@keyframes lxsShine{0%{left:-60%;opacity:1}100%{left:130%;opacity:1}}
       @keyframes lxsFade{to{opacity:0}}
       @keyframes lxsHalo{to{opacity:1}}
       @keyframes lxsWord{from{opacity:0;letter-spacing:1.6em;filter:blur(6px)}to{opacity:1;letter-spacing:.9em;filter:blur(0)}}
@@ -110,27 +112,14 @@
       <div class="lx-ring"></div>
       <div class="lx-logo">
         <div class="lx-halo"></div>
-        <svg class="lx-anim" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <defs>
-            <linearGradient id="lxT" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF9445"/><stop offset=".6" stop-color="#FF5A0A"/><stop offset="1" stop-color="#C73600"/></linearGradient>
-            <linearGradient id="lxG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFF0DE"/><stop offset=".7" stop-color="#FFD2A8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>
-            <clipPath id="lxTile"><rect width="300" height="300" rx="69"/></clipPath>
-            <clipPath id="lxSw"><rect class="lx-swc" x="40" y="60" width="0" height="200"><animate id="lxSwA" attributeName="width" from="0" to="250" begin="indefinite" dur="0.9s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines="0.65 0 0.25 1"/></rect></clipPath>
-          </defs>
-          <g clip-path="url(#lxTile)">
-            <rect width="300" height="300" fill="url(#lxT)"/>
-            <g class="lx-l"><path transform="translate(7e+01 190) scale(0.132 -0.132)" d="M643 274H596C588 205 571 47 392 47H289V639H424V686C380 683 271 683 222 683C178 683 77 683 39 686V639H147V47H39V0H612Z" fill="url(#lxG)"/></g>
-            <g class="lx-x"><path transform="translate(1e+02 190) scale(0.132 -0.132)" d="M835 0V47H737L484 397L652 618C663 632 664 633 699 636C723 639 729 639 757 639H786V686C744 683 695 683 652 683C613 683 536 683 500 686V639C518 639 557 639 592 628C591 626 586 620 584 617L452 442L309 639H392V686C351 683 256 683 211 683C171 683 84 683 49 686V639H147L369 332L167 67C158 55 156 53 124 50C104 48 83 47 63 47H34V0C76 3 125 3 168 3C207 3 284 3 320 0V47C302 47 263 47 228 58C229 60 234 66 236 69L401 288L575 47H492V0C533 3 628 3 673 3C713 3 800 3 835 0Z" fill="url(#lxG)"/></g>
-            <g clip-path="url(#lxSw)">
-              <path d="M58 214 C130 202 206 156 280 110" fill="none" stroke="#F35A0C" stroke-width="11" stroke-linecap="round"/>
-              <path d="M58 214 C130 202 206 156 280 110 C210 162 136 198 58 214Z" fill="url(#lxG)" stroke="url(#lxG)" stroke-width="2.4" stroke-linejoin="round"/>
-            </g>
-            <path class="lx-arc lx-arc1" d="M182 54 A104 104 0 0 1 262 116" fill="none" stroke="url(#lxG)" stroke-width="3.5" stroke-linecap="round"/>
-            <path class="lx-arc lx-arc2" d="M62 230 A104 104 0 0 0 212 232" fill="none" stroke="url(#lxG)" stroke-width="3.5" stroke-linecap="round"/>
-            <path class="lx-star" d="M140 56 l5 17 l17 5 l-17 5 l-5 17 l-5 -17 l-17 -5 l17 -5 z" fill="url(#lxG)"/>
-            <rect class="lx-sheen" x="-120" y="-40" width="70" height="380" fill="#fff" opacity="0"/>
-          </g>
-        </svg>
+        <div class="lx-anim">
+          <svg class="lx-p lx-l" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lxGl" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFF0DE"/><stop offset=".7" stop-color="#FFD2A8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs><path transform="translate(7e+01 190) scale(0.132 -0.132)" d="M643 274H596C588 205 571 47 392 47H289V639H424V686C380 683 271 683 222 683C178 683 77 683 39 686V639H147V47H39V0H612Z" fill="url(#lxGl)"/></svg>
+          <svg class="lx-p lx-x" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lxGx" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFF0DE"/><stop offset=".7" stop-color="#FFD2A8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs><path transform="translate(1e+02 190) scale(0.132 -0.132)" d="M835 0V47H737L484 397L652 618C663 632 664 633 699 636C723 639 729 639 757 639H786V686C744 683 695 683 652 683C613 683 536 683 500 686V639C518 639 557 639 592 628C591 626 586 620 584 617L452 442L309 639H392V686C351 683 256 683 211 683C171 683 84 683 49 686V639H147L369 332L167 67C158 55 156 53 124 50C104 48 83 47 63 47H34V0C76 3 125 3 168 3C207 3 284 3 320 0V47C302 47 263 47 228 58C229 60 234 66 236 69L401 288L575 47H492V0C533 3 628 3 673 3C713 3 800 3 835 0Z" fill="url(#lxGx)"/></svg>
+          <div class="lx-p lx-sw"><svg class="lx-p " viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lxGs" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFF0DE"/><stop offset=".7" stop-color="#FFD2A8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs><path d="M58 214 C130 202 206 156 280 110" fill="none" stroke="#F35A0C" stroke-width="11" stroke-linecap="round"/><path d="M58 214 C130 202 206 156 280 110 C210 162 136 198 58 214Z" fill="url(#lxGs)" stroke="url(#lxGs)" stroke-width="2.4" stroke-linejoin="round"/></svg></div>
+          <svg class="lx-p lx-arcs" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lxGa" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFF0DE"/><stop offset=".7" stop-color="#FFD2A8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs><path class="lx-arc lx-arc1" d="M182 54 A104 104 0 0 1 262 116" fill="none" stroke="url(#lxGa)" stroke-width="3.5" stroke-linecap="round"/><path class="lx-arc lx-arc2" d="M62 230 A104 104 0 0 0 212 232" fill="none" stroke="url(#lxGa)" stroke-width="3.5" stroke-linecap="round"/></svg>
+          <svg class="lx-p lx-star" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="lxGt" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#FFF0DE"/><stop offset=".7" stop-color="#FFD2A8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient></defs><path d="M140 56 l5 17 l17 5 l-17 5 l-5 17 l-5 -17 l-17 -5 l17 -5 z" fill="url(#lxGt)"/></svg>
+          <i class="lx-sheen"></i>
+        </div>
       </div>
       <div class="lx-word">LEVIX</div>
       <div class="lx-line"></div>
@@ -155,9 +144,6 @@
           for (var i = 0; i < arcs.length; i++) {
             try { var L = Math.ceil(arcs[i].getTotalLength()) + 2; arcs[i].style.strokeDasharray = L; arcs[i].style.strokeDashoffset = still ? 0 : L; } catch (e) {}
           }
-          var sw = document.querySelector('#lx-splash .lx-swc'), a = document.getElementById('lxSwA');
-          if (still || !a || !a.beginElementAt) { if (sw) sw.setAttribute('width', '250'); }
-          else { try { a.beginElementAt(1.65); } catch (e) { sw.setAttribute('width', '250'); } }
         }
         if (el) el.addEventListener('click', function () { if (window.__lxHideSplash) window.__lxHideSplash(); });
       })();
