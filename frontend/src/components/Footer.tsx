@@ -148,7 +148,7 @@ export const Footer: React.FC = () => {
               <span className="font-[cursive] italic text-[34px] md:text-[42px] leading-none text-neutral-700 select-none" aria-hidden="true">
                 Levix
               </span>
-              <div className="relative w-[78px] h-[96px] rounded-[3px] bg-gradient-to-br from-white to-neutral-200 shadow-[6px_10px_18px_rgba(0,0,0,0.12)] flex items-center justify-center" aria-hidden="true">
+              <div className="relative w-[78px] h-[96px] rounded-[3px] bg-gradient-to-br from-white to-neutral-200 shadow-[6px_10px_18px_rgba(0,0,0,0.12)] flex items-center justify-center lx-ink-dark" aria-hidden="true">
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-6 border-2 border-neutral-300 rounded-t-full border-b-0" />
                 <Logo className="text-[11px]" />
               </div>

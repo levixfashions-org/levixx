@@ -25,7 +25,7 @@ export const UserIcon: React.FC<P> = ({ className = 'w-4 h-4' }) => (
 export const BagIcon: React.FC<P & { count?: number }> = ({ className = 'w-[18px] h-[22px]', count = 0 }) => (
   <span className="relative inline-flex">
     <svg viewBox="0 0 20 24" className={className} aria-hidden="true">
-      <rect x="1" y="4.5" width="18" height="18.5" rx="1.5" fill="#fff" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="1" y="4.5" width="18" height="18.5" rx="1.5" style={{ fill: 'var(--lx-bag-fill, #fff)' }} stroke="currentColor" strokeWidth="1.2" />
       <path d="M6.5 7V4.5a3.5 3.5 0 0 1 7 0V7" fill="none" stroke="currentColor" strokeWidth="1.2" />
       <text x="10" y="15.5" textAnchor="middle" fontSize="3.4" fontWeight="900" fill="currentColor" fontFamily="Archivo Black, sans-serif">LEVIX</text>
     </svg>

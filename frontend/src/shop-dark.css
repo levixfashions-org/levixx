@@ -216,3 +216,9 @@ html.lx-dark body.lx-shop .lx-head-pill.lx-head-pill { background-color: rgba(24
 /* Home hero: the "Shop now" link sits on the picture, keep its picture-matching colour */
 html.lx-dark body.lx-shop .lx-hero-cta[class~="text-black"] { color: #0b0b0f !important; }
 @media (min-width: 768px) { html.lx-dark body.lx-shop .lx-hero-cta[class~="md:text-white"] { color: #fff !important; } }
+/* Header bag icon: dark body so the white outline + LEVIX letters show */
+html.lx-dark body.lx-shop { --lx-bag-fill: #141418; --lx-bag-print: #0a0a0d; }
+/* White shopping bag in the footer keeps its dark LEVIX print */
+html.lx-dark body.lx-shop .lx-ink-dark, html.lx-dark body.lx-shop .lx-ink-dark * { color: #0b0b0f !important; }
+/* Inputs that sit inside a pill (footer "drop alerts") stay see-through */
+html.lx-dark body.lx-shop input[class~="bg-transparent"]:not([type=checkbox]):not([type=radio]):not([type=range]) { background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; }
