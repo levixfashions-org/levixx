@@ -8,7 +8,7 @@ export const AnnouncementBar: React.FC = () => {
   if (!enabled || !text) return null;
   const displayText = text.replace(/[•\s]+$/, '') + ' • ';
   return (
-    <div className="fixed top-0 inset-x-0 z-[55] h-8 bg-black text-white text-[10.5px] uppercase tracking-widest overflow-hidden flex items-center select-none">
+    <div className="fixed top-0 inset-x-0 z-[55] h-8 bg-black lx-keep text-white text-[10.5px] uppercase tracking-widest overflow-hidden flex items-center select-none">
       <div className="animate-marquee whitespace-nowrap flex items-center">
         <span>{displayText}</span>
         <span>{displayText}</span>

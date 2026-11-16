@@ -46,7 +46,7 @@ export const CollectionsPage: React.FC = () => {
             <Link
               key={col.id}
               to={`/collections/${col.slug}`}
-              className="group relative aspect-[4/3] overflow-hidden bg-neutral-900 block rounded-[24px] shadow-[0_20px_50px_-28px_rgba(0,0,0,0.55)] ring-1 ring-black/5"
+              className="group relative aspect-[4/3] overflow-hidden bg-neutral-900 lx-keep block rounded-[24px] shadow-[0_20px_50px_-28px_rgba(0,0,0,0.55)] ring-1 ring-black/5"
             >
               <FramedImg
                 src={col.bannerImageUrl || 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=800&q=80'}

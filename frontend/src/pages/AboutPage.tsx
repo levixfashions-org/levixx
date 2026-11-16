@@ -15,7 +15,7 @@ export const AboutPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="aspect-[16/9] w-full overflow-hidden bg-neutral-900 rounded-[28px] shadow-[0_30px_70px_-34px_rgba(0,0,0,0.6)] ring-1 ring-black/5">
+      <div className="aspect-[16/9] w-full overflow-hidden bg-neutral-900 lx-keep rounded-[28px] shadow-[0_30px_70px_-34px_rgba(0,0,0,0.6)] ring-1 ring-black/5">
         <img
           src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80"
           alt="Levix Design Studio"

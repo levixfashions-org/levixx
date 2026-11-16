@@ -116,7 +116,7 @@ const Hero: React.FC = () => {
       <div className="absolute bottom-[7%] inset-x-0 flex justify-center pointer-events-none">
         <Link
           to={s.heroLink || '/collections/all-products'}
-          className={`pointer-events-auto text-[12px] font-medium border-b border-current pb-0.5 hover:opacity-70 transition-opacity ${video && playing ? 'text-white' : 'text-black md:text-white'}`}
+          className={`lx-hero-cta pointer-events-auto text-[12px] font-medium border-b border-current pb-0.5 hover:opacity-70 transition-opacity ${video && playing ? 'text-white' : 'text-black md:text-white'}`}
         >
           {s.heroCtaText || 'Shop now'}
         </Link>

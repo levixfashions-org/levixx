@@ -1,0 +1,218 @@
+/* ───────── LEVIX dark mode (storefront only) ─────────
+   Turned on by html.lx-dark (set in index.html from the saved choice or the phone setting).
+   Admin pages are not affected (they never have body.lx-shop). */
+html.lx-dark:has(body.lx-shop) { color-scheme: dark; background: #0a0a0d; }
+html.lx-dark body.lx-shop { color-scheme: dark; }
+/* Smooth fade only while the switch is pressed */
+html.lx-theme-switching body, html.lx-theme-switching body *:not(video):not(img) {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease, fill .35s ease !important;
+}
+html.lx-dark body.lx-shop { background-color: #0a0a0d; color: #f2f2f5; }
+html.lx-dark body.lx-shop::before {
+  background:
+    radial-gradient(40% 30% at 8% 8%, rgba(255, 110, 40, 0.18), transparent 70%),
+    radial-gradient(36% 30% at 96% 12%, rgba(110, 120, 255, 0.13), transparent 70%),
+    radial-gradient(40% 34% at 88% 92%, rgba(255, 80, 150, 0.09), transparent 70%),
+    radial-gradient(38% 32% at 6% 90%, rgba(60, 190, 180, 0.09), transparent 70%),
+    linear-gradient(180deg, #0d0d11, #08080a);
+}
+/* Glass surfaces */
+html.lx-dark body.lx-shop .lx-panel, html.lx-dark body.lx-shop .lx-acct-card {
+  background: rgba(28, 28, 34, 0.62) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 50px -28px rgba(0, 0, 0, 0.85) !important;
+}
+html.lx-dark body.lx-shop .lx-acct-tile:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 22px 50px -24px rgba(0,0,0,.9) !important; }
+html.lx-dark body.lx-shop .lx-head-solid { background: rgba(12, 12, 16, 0.74) !important; box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.08); }
+html.lx-dark body.lx-shop .lx-head-pill { background: rgba(24, 24, 30, 0.7) !important; border-color: rgba(255, 255, 255, 0.1); box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.7); }
+html.lx-dark body.lx-shop .lx-glass-sheet, html.lx-dark body.lx-shop .lx-sheet { background: rgba(18, 18, 22, 0.94) !important; border-color: rgba(255, 255, 255, 0.08) !important; }
+html.lx-dark body.lx-shop .lx-sheet-backdrop { background: rgba(0, 0, 0, 0.55); }
+html.lx-dark body.lx-shop .lx-acct-row { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); }
+html.lx-dark body.lx-shop .lx-login-wallpaper { filter: brightness(0.2) saturate(1.3); }
+html.lx-dark body.lx-shop footer .bg-\[\#EFEFEF\] { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
+html.lx-dark body.lx-shop .lx-pcard-img { background-color: #18181c; }
+html.lx-dark body.lx-shop ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); }
+
+/* Text helpers */
+html.lx-dark .lx-h1, html.lx-dark body.lx-shop .lx-title { color: #fff; }
+html.lx-dark .lx-eyebrow, html.lx-dark .lx-sub { color: #9a9aa3; }
+
+/* Controls */
+html.lx-dark body.lx-shop .lx-field, html.lx-dark body.lx-shop input:not([type=checkbox]):not([type=radio]):not([type=range]), html.lx-dark body.lx-shop select, html.lx-dark body.lx-shop textarea {
+  background-color: rgba(255, 255, 255, 0.06) !important; border-color: rgba(255, 255, 255, 0.13) !important; color: #f5f5f7 !important;
+}
+html.lx-dark body.lx-shop .lx-field:focus, html.lx-dark body.lx-shop input:focus, html.lx-dark body.lx-shop select:focus, html.lx-dark body.lx-shop textarea:focus { background-color: rgba(255, 255, 255, 0.09) !important; border-color: rgba(255, 122, 46, 0.7) !important; }
+html.lx-dark body.lx-shop input::placeholder, html.lx-dark body.lx-shop textarea::placeholder, html.lx-dark body.lx-shop .lx-field::placeholder { color: rgba(235, 235, 245, 0.38) !important; }
+html.lx-dark body.lx-shop select option { background: #1c1c21; color: #f5f5f7; }
+html.lx-dark body.lx-shop input:-webkit-autofill { -webkit-text-fill-color: #f5f5f7; -webkit-box-shadow: 0 0 0 40px #1c1c21 inset !important; caret-color: #f5f5f7; }
+html.lx-dark body.lx-shop .lx-btn-soft { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.13); color: #f2f2f5; }
+html.lx-dark body.lx-shop .lx-btn-soft:hover { background: rgba(255, 255, 255, 0.14); }
+/* The main action becomes LEVIX orange on dark */
+html.lx-dark body.lx-shop .lx-btn-primary { background: linear-gradient(180deg, #ff7a2e 0%, #ff5400 100%) !important; color: #fff !important; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 12px 26px -10px rgba(255, 84, 0, 0.6) !important; }
+html.lx-dark body.lx-shop .lx-btn-primary * { color: #fff !important; }
+html.lx-dark body.lx-shop .lx-segment { background: rgba(255, 255, 255, 0.07) !important; border-color: rgba(255,255,255,.06) !important; }
+html.lx-dark body.lx-shop .lx-seg-item { color: #a1a1aa; }
+html.lx-dark body.lx-shop .lx-seg-item:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+html.lx-dark body.lx-shop .lx-seg-item.is-active { background: rgba(255, 255, 255, 0.14) !important; color: #fff !important; box-shadow: none !important; }
+
+/* Tailwind colours used across the shop */
+html.lx-dark body.lx-shop [class~="text-black"],
+html.lx-dark body.lx-shop [class~="text-[#0b0b0f]"],
+html.lx-dark body.lx-shop [class~="text-[#111]"],
+html.lx-dark body.lx-shop [class~="text-neutral-900"],
+html.lx-dark body.lx-shop [class~="text-neutral-800"],
+html.lx-dark body.lx-shop [class~="text-[#1d1d1f]"],
+html.lx-dark body.lx-shop [class~="hover:text-black"],
+html.lx-dark body.lx-shop [class~="hover:text-[#0b0b0f]"],
+html.lx-dark body.lx-shop [class~="group-hover:text-black"] { color: #f5f5f7 !important; }
+html.lx-dark body.lx-shop [class~="text-neutral-700"],
+html.lx-dark body.lx-shop [class~="text-[#3a3a3f]"],
+html.lx-dark body.lx-shop [class~="text-[#333]"] { color: #d4d4d8 !important; }
+html.lx-dark body.lx-shop [class~="text-neutral-500"],
+html.lx-dark body.lx-shop [class~="text-neutral-600"],
+html.lx-dark body.lx-shop [class~="text-[#6e6e73]"],
+html.lx-dark body.lx-shop [class~="text-[#8e8e93]"] { color: #9d9da6 !important; }
+html.lx-dark body.lx-shop [class~="text-neutral-400"],
+html.lx-dark body.lx-shop [class~="text-[#c7c7cc]"],
+html.lx-dark body.lx-shop [class~="text-black/40"],
+html.lx-dark body.lx-shop [class~="text-black/35"] { color: #71717a !important; }
+html.lx-dark body.lx-shop [class~="text-black/25"],
+html.lx-dark body.lx-shop [class~="text-black/20"],
+html.lx-dark body.lx-shop [class~="text-black/10"] { color: rgba(255,255,255,.25) !important; }
+html.lx-dark body.lx-shop [class~="bg-white"],
+html.lx-dark body.lx-shop [class~="bg-[#FAFAFA]"],
+html.lx-dark body.lx-shop [class~="bg-white/90"],
+html.lx-dark body.lx-shop [class~="bg-white/80"],
+html.lx-dark body.lx-shop [class~="bg-white/75"],
+html.lx-dark body.lx-shop [class~="bg-white/70"] { background-color: rgba(30, 30, 36, 0.78) !important; }
+html.lx-dark body.lx-shop [class~="bg-white/60"],
+html.lx-dark body.lx-shop [class~="bg-white/55"],
+html.lx-dark body.lx-shop [class~="bg-white/40"] { background-color: rgba(255, 255, 255, 0.07) !important; }
+html.lx-dark body.lx-shop [class~="bg-neutral-50"],
+html.lx-dark body.lx-shop [class~="bg-neutral-100"],
+html.lx-dark body.lx-shop [class~="bg-[#EFEFEF]"],
+html.lx-dark body.lx-shop [class~="bg-[#efefef]"],
+html.lx-dark body.lx-shop [class~="bg-[#E6E7EB]"],
+html.lx-dark body.lx-shop [class~="bg-[#E0E0E0]"],
+html.lx-dark body.lx-shop [class~="bg-neutral-50/50"],
+html.lx-dark body.lx-shop [class~="bg-black/5"] { background-color: rgba(255, 255, 255, 0.06) !important; }
+html.lx-dark body.lx-shop [class~="bg-neutral-200"],
+html.lx-dark body.lx-shop [class~="bg-neutral-300"],
+html.lx-dark body.lx-shop [class~="bg-black/10"] { background-color: rgba(255, 255, 255, 0.11) !important; }
+html.lx-dark body.lx-shop [class~="hover:bg-white"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-50"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-100"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-50/50"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-50/60"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-white/60"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-black/[0.04]"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-200"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-300"]:hover { background-color: rgba(255, 255, 255, 0.12) !important; }
+html.lx-dark body.lx-shop [class~="border-black/5"],
+html.lx-dark body.lx-shop [class~="border-black/10"],
+html.lx-dark body.lx-shop [class~="border-black/15"],
+html.lx-dark body.lx-shop [class~="border-black/20"],
+html.lx-dark body.lx-shop [class~="border-[#EFEFEF]"],
+html.lx-dark body.lx-shop [class~="border-white/80"],
+html.lx-dark body.lx-shop [class~="border-white/70"],
+html.lx-dark body.lx-shop [class~="border-neutral-200"],
+html.lx-dark body.lx-shop [class~="divide-black/5"] { border-color: rgba(255, 255, 255, 0.1) !important; }
+html.lx-dark body.lx-shop [class~="border-black/30"],
+html.lx-dark body.lx-shop [class~="border-black/40"],
+html.lx-dark body.lx-shop [class~="border-black/50"] { border-color: rgba(255, 255, 255, 0.28) !important; }
+html.lx-dark body.lx-shop [class~="border-black"],
+html.lx-dark body.lx-shop [class~="border-[#0b0b0f]"] { border-color: rgba(255, 255, 255, 0.85) !important; }
+html.lx-dark body.lx-shop [class~="hover:border-black"]:hover,
+html.lx-dark body.lx-shop [class~="hover:border-black/50"]:hover,
+html.lx-dark body.lx-shop [class~="hover:border-black/40"]:hover,
+html.lx-dark body.lx-shop [class~="hover:border-black/30"]:hover,
+html.lx-dark body.lx-shop [class~="hover:border-black/20"]:hover { border-color: rgba(255, 255, 255, 0.7) !important; }
+html.lx-dark body.lx-shop [class~="focus:border-black"]:focus,
+html.lx-dark body.lx-shop [class~="focus:border-black/40"]:focus { border-color: rgba(255, 122, 46, 0.75) !important; }
+html.lx-dark body.lx-shop [class~="ring-black/5"],
+html.lx-dark body.lx-shop [class~="ring-black/10"] { --tw-ring-color: rgba(255, 255, 255, 0.1) !important; }
+html.lx-dark body.lx-shop [class~="ring-black"] { --tw-ring-color: rgba(255, 255, 255, 0.85) !important; }
+html.lx-dark body.lx-shop [class~="divide-black/5"] > * + * { border-color: rgba(255, 255, 255, 0.08) !important; }
+/* Solid black chips / buttons flip to white with dark text (Apple-style contrast on dark) */
+html.lx-dark body.lx-shop [class~="bg-black"],
+html.lx-dark body.lx-shop [class~="bg-[#0b0b0f]"],
+html.lx-dark body.lx-shop [class~="bg-neutral-900"],
+html.lx-dark body.lx-shop [class~="hover:bg-black"] { background-color: #f5f5f7 !important; color: #0b0b0f !important; }
+html.lx-dark body.lx-shop [class~="bg-black"] *,
+html.lx-dark body.lx-shop [class~="bg-[#0b0b0f]"] *,
+html.lx-dark body.lx-shop [class~="bg-neutral-900"] * { color: #0b0b0f !important; }
+html.lx-dark body.lx-shop [class~="hover:bg-black"]:hover,
+html.lx-dark body.lx-shop [class~="hover:bg-neutral-800"]:hover { background-color: #ffffff !important; color: #0b0b0f !important; }
+html.lx-dark body.lx-shop [class~="bg-neutral-800"] { background-color: #e4e4e7 !important; color: #0b0b0f !important; }
+/* …but keep photo overlays, video controls and badges as they are */
+html.lx-dark body.lx-shop .lx-keep { background-color: #0b0b0f !important; color: #fff !important; }
+html.lx-dark body.lx-shop .lx-keep * { color: #fff !important; }
+/* Warm accents readable on dark */
+html.lx-dark body.lx-shop [class~="text-[#c24100]"],
+html.lx-dark body.lx-shop [class~="text-[#d94800]"],
+html.lx-dark body.lx-shop [class~="text-[#c2410c]"],
+html.lx-dark body.lx-shop [class~="text-orange-900"] { color: #ff9a5c !important; }
+html.lx-dark body.lx-shop [class~="bg-orange-100"],
+html.lx-dark body.lx-shop [class~="bg-orange-50"] { background-color: rgba(255, 106, 32, 0.16) !important; }
+html.lx-dark body.lx-shop [class~="bg-green-100"],
+html.lx-dark body.lx-shop [class~="bg-green-50"] { background-color: rgba(52, 199, 89, 0.15) !important; }
+html.lx-dark body.lx-shop [class~="text-green-800"],
+html.lx-dark body.lx-shop [class~="text-green-700"],
+html.lx-dark body.lx-shop [class~="text-green-600"],
+html.lx-dark body.lx-shop [class~="text-green-700/90"] { color: #5ee08a !important; }
+html.lx-dark body.lx-shop [class~="bg-red-100"],
+html.lx-dark body.lx-shop [class~="bg-red-50"],
+html.lx-dark body.lx-shop [class~="bg-red-50/90"],
+html.lx-dark body.lx-shop [class~="bg-red-50/95"],
+html.lx-dark body.lx-shop [class~="hover:bg-red-50"] { background-color: rgba(255, 69, 58, 0.14) !important; }
+html.lx-dark body.lx-shop [class~="text-red-800"],
+html.lx-dark body.lx-shop [class~="text-red-700"],
+html.lx-dark body.lx-shop [class~="text-red-600"] { color: #ff7b72 !important; }
+html.lx-dark body.lx-shop [class~="border-red-200"],
+html.lx-dark body.lx-shop [class~="border-red-100"],
+html.lx-dark body.lx-shop [class~="border-green-200"],
+html.lx-dark body.lx-shop [class~="border-amber-200"],
+html.lx-dark body.lx-shop [class~="border-yellow-200"],
+html.lx-dark body.lx-shop [class~="border-orange-200"] { border-color: rgba(255, 255, 255, 0.12) !important; }
+html.lx-dark body.lx-shop [class~="bg-blue-100"] { background-color: rgba(10, 132, 255, 0.16) !important; }
+html.lx-dark body.lx-shop [class~="text-blue-800"] { color: #7cb8ff !important; }
+html.lx-dark body.lx-shop [class~="bg-violet-100"],
+html.lx-dark body.lx-shop [class~="bg-pink-100"] { background-color: rgba(191, 90, 242, 0.16) !important; }
+html.lx-dark body.lx-shop [class~="text-violet-800"],
+html.lx-dark body.lx-shop [class~="text-pink-800"] { color: #d5a6ff !important; }
+html.lx-dark body.lx-shop [class~="bg-amber-100"],
+html.lx-dark body.lx-shop [class~="bg-amber-50"],
+html.lx-dark body.lx-shop [class~="bg-yellow-100"],
+html.lx-dark body.lx-shop [class~="bg-yellow-50"] { background-color: rgba(255, 204, 0, 0.13) !important; }
+html.lx-dark body.lx-shop [class~="text-amber-900"],
+html.lx-dark body.lx-shop [class~="text-amber-800"],
+html.lx-dark body.lx-shop [class~="text-amber-800/90"],
+html.lx-dark body.lx-shop [class~="text-amber-700"],
+html.lx-dark body.lx-shop [class~="text-yellow-900"],
+html.lx-dark body.lx-shop [class~="text-yellow-800"],
+html.lx-dark body.lx-shop [class~="text-yellow-700"] { color: #ffd45e !important; }
+/* Tab bar badges ring */
+html.lx-dark body.lx-shop [class*="shadow-[0_0_0_2px_rgba(255,255,255"] { box-shadow: 0 0 0 2px #16161b !important; }
+html.lx-dark body.lx-shop [class~="bg-black/[0.04]"], html.lx-dark body.lx-shop [class~="bg-black/[0.06]"], html.lx-dark body.lx-shop [class~="bg-black/[0.07]"], html.lx-dark body.lx-shop [class~="bg-black/[0.08]"] { background-color: rgba(255, 255, 255, 0.08) !important; }
+html.lx-dark body.lx-shop [class~="bg-black/15"], html.lx-dark body.lx-shop [class~="hover:bg-black/[0.12]"]:hover { background-color: rgba(255, 255, 255, 0.16) !important; }
+html.lx-dark body.lx-shop [class~="border-black/[0.06]"], html.lx-dark body.lx-shop [class~="border-black/[0.08]"] { border-color: rgba(255, 255, 255, 0.1) !important; }
+/* Header over the home video: keep icons readable on any picture */
+html.lx-dark body.lx-shop div:not(.lx-head-solid) > .lx-head-icons {
+  padding: 8px 14px; margin-right: 2px; border-radius: 999px; background: rgba(24, 24, 30, 0.7);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1);
+}
+html.lx-dark body.lx-shop header.bg-transparent { background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0)) !important; }
+/* Sign in / register / forgot password card */
+html.lx-dark body.lx-shop .lx-login-card {
+  background: rgba(24, 24, 30, 0.72) !important; border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 30px 80px -30px rgba(0, 0, 0, 0.9) !important;
+}
+html.lx-dark body.lx-shop .lx-login-card label { color: #c7c7cc; }
+/* Full-screen menu / drawers win over the generic background rules above */
+html.lx-dark body.lx-shop .lx-glass-sheet.lx-glass-sheet, html.lx-dark body.lx-shop .lx-sheet.lx-sheet { background-color: rgba(16, 16, 20, 0.96) !important; }
+html.lx-dark body.lx-shop .lx-panel.lx-panel, html.lx-dark body.lx-shop .lx-acct-card.lx-acct-card { background-color: rgba(28, 28, 34, 0.62) !important; }
+html.lx-dark body.lx-shop .lx-head-solid.lx-head-solid { background-color: rgba(12, 12, 16, 0.78) !important; }
+html.lx-dark body.lx-shop .lx-head-pill.lx-head-pill { background-color: rgba(24, 24, 30, 0.72) !important; }
+/* Home hero: the "Shop now" link sits on the picture, keep its picture-matching colour */
+html.lx-dark body.lx-shop .lx-hero-cta[class~="text-black"] { color: #0b0b0f !important; }
+@media (min-width: 768px) { html.lx-dark body.lx-shop .lx-hero-cta[class~="md:text-white"] { color: #fff !important; } }

@@ -5,6 +5,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useHomeStore } from '../store/homeStore';
 import { apiClient } from '../services/api';
 import { Logo } from './Logo';
+import { ThemeToggle } from './ThemeToggle';
 
 type SeoTab = 'popular' | 'category' | 'style' | 'colour';
 
@@ -199,6 +200,7 @@ export const Footer: React.FC = () => {
               <path d="M7 17 17 7M9 7h8v8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </a>
+          <ThemeToggle compact className="md:order-none" />
           <p className="text-[9px] text-neutral-400 uppercase tracking-wide md:text-right">
             © {new Date().getFullYear()} {settings.legalName && settings.legalName !== 'LEVIX' ? `${settings.legalName} (LEVIX)` : 'LEVIX'}. All rights reserved.{settings.gstin ? ` · GSTIN ${settings.gstin}` : ''}
           </p>

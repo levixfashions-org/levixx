@@ -172,7 +172,7 @@ export const GlassyPwaNotification: React.FC = () => {
         <div className="relative z-10 flex items-start gap-3.5 sm:gap-4">
           
           {/* App Icon with Glossy Ring */}
-          <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-black border border-white/25 flex items-center justify-center shadow-lg overflow-hidden group">
+          <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-black lx-keep border border-white/25 flex items-center justify-center shadow-lg overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-tr from-black via-neutral-900 to-neutral-700" />
             <span className="relative font-display font-black text-sm sm:text-base tracking-widest text-white">
               LVX

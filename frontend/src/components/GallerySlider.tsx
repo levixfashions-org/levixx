@@ -23,7 +23,7 @@ export const GallerySlider: React.FC<{ slides: Slide[] }> = ({ slides }) => {
   if (!slides.length) return null;
 
   return (
-    <section className="relative w-full h-[78vh] md:h-[90vh] max-h-[860px] overflow-hidden bg-neutral-900">
+    <section className="relative w-full h-[78vh] md:h-[90vh] max-h-[860px] overflow-hidden bg-neutral-900 lx-keep">
       {slides.map((s, i) => (
         <Link
           key={s.id}

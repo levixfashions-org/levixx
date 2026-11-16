@@ -6,6 +6,7 @@ import { useHomeStore } from '../store/homeStore';
 import { COLOR_SWATCHES } from '../services/api';
 import { Logo } from './Logo';
 import { CloseIcon, PlusIcon } from './Icons';
+import { ThemeToggle } from './ThemeToggle';
 
 const Accordion: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
   const [open, setOpen] = useState(false);
@@ -114,7 +115,12 @@ export const MobileNavDrawer: React.FC = () => {
           </Accordion>
         </div>
 
-        <nav className="mt-12 space-y-2.5 text-[14px]">
+        <div className="mt-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500 mb-2">Appearance</p>
+          <ThemeToggle compact />
+        </div>
+
+        <nav className="mt-10 space-y-2.5 text-[14px]">
           <Link to={user ? '/account' : '/login'} className="block">{user ? 'Account' : 'Sign in'}</Link>
           <Link to="/wishlist" className="block">Saved items</Link>
           {user && <Link to="/account/orders" className="block">My orders</Link>}

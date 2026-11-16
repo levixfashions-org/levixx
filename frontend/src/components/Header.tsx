@@ -108,7 +108,7 @@ export const Header: React.FC = () => {
               <Logo className="text-[20px]" />
             </Link>
           </ScrollRing>
-          <div className="pointer-events-auto flex items-center gap-4 pr-1">
+          <div className="pointer-events-auto flex items-center gap-4 pr-1 lx-head-icons">
             <button onClick={openSearch} aria-label="Search"><SearchIcon className="w-[19px] h-[19px]" /></button>
             <Link to="/wishlist" aria-label="Saved items"><BookmarkIcon className="w-[16px] h-[19px]" filled /></Link>
             <button onClick={openCart} aria-label="Open bag"><BagIcon count={itemCount} className="w-[19px] h-[23px]" /></button>

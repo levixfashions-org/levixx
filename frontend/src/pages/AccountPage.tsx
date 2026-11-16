@@ -13,6 +13,7 @@ import { useWishlistStore } from '../store/wishlistStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
 import { PushToggle } from '../components/PushToggle';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { InstagramGlyph } from '../components/InstagramGlyph';
 import { ShipmentTracker } from '../components/ShipmentTracker';
 import { AddressSheet, AddressInput } from '../components/account/AddressSheet';
@@ -458,6 +459,13 @@ export const AccountPage: React.FC = () => {
 
             {/* Notifications */}
             <PushToggle className={`${card} p-5 sm:p-6 space-y-3`} />
+
+            {/* Appearance */}
+            <section className={`${card} p-5 sm:p-6`}>
+              <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-[#0b0b0f]">Appearance</h2>
+              <p className="mt-0.5 mb-3.5 text-[12.5px] text-[#6e6e73]">Auto follows your phone’s light / dark setting.</p>
+              <ThemeToggle />
+            </section>
 
             {/* Help */}
             <section className={`${card} p-2`}>

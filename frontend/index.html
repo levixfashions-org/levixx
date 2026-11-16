@@ -19,6 +19,17 @@
 
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0A0A0A" />
+    <script>
+      // Dark mode before the first paint (no white flash): saved choice, else follow the phone.
+      (function () {
+        try {
+          if (location.pathname.indexOf('/admin') === 0) return;
+          var m = localStorage.getItem('lx_theme') || 'auto';
+          var dark = m === 'dark' || (m !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('lx-dark');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="format-detection" content="telephone=no" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

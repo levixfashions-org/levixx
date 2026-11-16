@@ -4,6 +4,10 @@ import { App } from './App';
 import './index.css';
 import './admin-glass.css';
 import './shop-glass.css';
+import './shop-dark.css';
+import { startThemeWatcher } from './utils/theme';
+
+startThemeWatcher();
 
 // PWA service worker (production only, so local development never serves stale files).
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
