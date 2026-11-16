@@ -2,7 +2,7 @@
 // - Pages (HTML): network-first, so customers always get the latest deployment.
 // - Hashed JS/CSS in /assets: cache-first (file names change on every build).
 // - API calls and payments are never cached.
-const CACHE_NAME = 'levix-pwa-v6';
+const CACHE_NAME = 'levix-pwa-v7';
 const PRECACHE = ['/manifest.json', '/favicon.svg', '/icons/icon-192.png?v=3', '/icons/icon-512.png?v=3', '/icons/icon-maskable-512.png?v=3', '/icons/apple-touch-icon.png?v=3', '/icons/splash-mark.png?v=3'];
 
 self.addEventListener('install', (event) => {
@@ -23,6 +23,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/__/')) return;
+  // Videos and audio go straight to the server: iPhone Safari only plays them when it gets the
+  // server's own partial (Range) responses, which a service worker breaks.
+  if (url.pathname.startsWith('/media/') || request.headers.has('range') || request.destination === 'video' || request.destination === 'audio' || /\.(mp4|mov|webm|m4v)$/i.test(url.pathname)) return;
 
   // HTML navigations: network first, fall back to the last cached shell when offline.
   if (request.mode === 'navigate') {

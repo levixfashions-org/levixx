@@ -43,7 +43,25 @@ const Hero: React.FC = () => {
     v.setAttribute('muted', '');
     setMuted(true);
     setPlaying(false);
-    v.play().catch(() => undefined);
+    const tryPlay = () => v.play().catch(() => undefined);
+    tryPlay();
+    // iPhone can block autoplay (Low Power Mode, data saver): start it on the first touch or scroll.
+    const kick = () => {
+      if (v.paused) tryPlay();
+    };
+    const opts: AddEventListenerOptions = { passive: true, once: true };
+    window.addEventListener('touchstart', kick, opts);
+    window.addEventListener('scroll', kick, opts);
+    v.addEventListener('canplay', kick, { once: true });
+    // Coming back to the tab/app on iOS pauses the video; resume it.
+    const onVis = () => document.visibilityState === 'visible' && kick();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('touchstart', kick);
+      window.removeEventListener('scroll', kick);
+      v.removeEventListener('canplay', kick);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [video]);
 
   const toggleSound = (e: React.MouseEvent) => {
@@ -74,6 +92,8 @@ const Hero: React.FC = () => {
             loop
             playsInline
             preload="auto"
+            disablePictureInPicture
+            disableRemotePlayback
             onPlaying={() => setPlaying(true)}
             className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 ${playing ? 'opacity-100' : 'opacity-0'}`}
           />
