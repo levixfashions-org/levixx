@@ -9,7 +9,6 @@ type Phase = 'closed' | 'open' | 'reveal' | 'leave' | 'done';
 function shouldShow(pathname: string): boolean {
   if (typeof window === 'undefined') return false;
   if (/^\/(admin|login|register|forgot-password|checkout|order-success)/.test(pathname)) return false;
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false;
   // Opened as the installed app: the launch screen (index.html) already played — don't show a second intro.
   if (document.documentElement.classList.contains('lx-app')) return false;
   // Installed app: never show the website's door intro (also not after a refresh) — the app has its own opening screen.

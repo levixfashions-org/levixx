@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>LEVIX phone check</title>
+<style>body{font:15px/1.5 -apple-system,system-ui,sans-serif;margin:0;padding:16px;background:#f4f4f6;color:#111}h1{font-size:20px;margin:0 0 12px}
+.r{background:#fff;border-radius:12px;padding:10px 12px;margin:8px 0;display:flex;justify-content:space-between;gap:12px}.r b{font-weight:600}.ok{color:#0a7d2c}.bad{color:#c00}
+video{width:100%;border-radius:12px;background:#000;margin-top:8px}</style></head>
+<body><h1>LEVIX phone check</h1><p>Please take a screenshot of this whole page and send it.</p><div id="out"></div><video id="v" muted playsinline autoplay loop controls></video>
+<script>
+(function(){
+var out=document.getElementById('out');
+function row(k,v,good){var d=document.createElement('div');d.className='r';d.innerHTML='<b>'+k+'</b><span class="'+(good===true?'ok':good===false?'bad':'')+'">'+v+'</span>';out.appendChild(d);}
+var mm=function(q){return !!(window.matchMedia&&matchMedia(q).matches)};
+var ios=(navigator.userAgent.match(/OS (\d+)_(\d+)/)||[]).slice(1).join('.');
+row('iOS version',ios||'not iPhone');
+row('Opened as app',mm('(display-mode: standalone)')||navigator.standalone===true?'yes':'no (browser)');
+row('Reduce Motion',mm('(prefers-reduced-motion: reduce)')?'ON':'off');
+row('Page version','v8');
+if(navigator.serviceWorker&&navigator.serviceWorker.controller){caches.keys().then(function(k){row('App cache',k.join(', ')||'none',k.indexOf('levix-pwa-v7')>=0||k.length===0)})}else row('Service worker','not active yet');
+fetch('/api/store/settings',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){
+ var s=j.settings||j.data||j;var url=s.heroMobileVideo||s.heroDesktopVideo;
+ if(!url){row('Home video','none set in admin',false);return;}
+ row('Video file',url.split('/').pop());
+ fetch(url,{headers:{Range:'bytes=0-1'},cache:'no-store'}).then(function(r){
+  row('Server range reply',r.status+' '+(r.headers.get('content-range')||''),r.status===206);
+  var t=(r.headers.get('content-type')||'?');row('Video type',t+' → iPhone says: '+(document.createElement('video').canPlayType(t)||'no'));
+ }).catch(function(e){row('Server range reply','failed '+e,false)});
+ var v=document.getElementById('v');var t0=Date.now();
+ v.addEventListener('playing',function(){row('Video plays','yes ('+((Date.now()-t0)/1000).toFixed(1)+'s)',true)});
+ v.addEventListener('error',function(){row('Video error','code '+(v.error&&v.error.code)+' '+((v.error&&v.error.message)||''),false)});
+ v.src=url;var p=v.play();if(p&&p.catch)p.catch(function(e){row('Autoplay','blocked: '+e.name+' (Low Power Mode?) — tap play',false)});
+}).catch(function(e){row('Settings','failed '+e,false)});
+})();
+</script></body></html>

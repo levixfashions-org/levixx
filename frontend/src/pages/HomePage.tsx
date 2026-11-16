@@ -27,10 +27,10 @@ const useMedia = (query: string) => {
 const Hero: React.FC = () => {
   const s = useSettingsStore((st) => st.settings);
   const isMobile = useMedia('(max-width: 767px)');
-  const reduceMotion = useMedia('(prefers-reduced-motion: reduce)');
   const desktop = s.heroDesktopImage || '/hero_desktop.jpg';
   const mobile = s.heroMobileImage || (s.heroDesktopImage ? s.heroDesktopImage : '/hero_mobile.jpg');
-  const video = reduceMotion ? '' : isMobile ? s.heroMobileVideo || s.heroDesktopVideo : s.heroDesktopVideo;
+  // Plays for everyone (also with iPhone 'Reduce Motion' on): it's a muted, gentle brand video.
+  const video = isMobile ? s.heroMobileVideo || s.heroDesktopVideo : s.heroDesktopVideo;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -95,7 +95,7 @@ const Hero: React.FC = () => {
             disablePictureInPicture
             disableRemotePlayback
             onPlaying={() => setPlaying(true)}
-            className={`absolute inset-0 w-full h-full object-cover object-center transition-opacity duration-700 ${playing ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute top-0 left-0 inset-0 w-full h-full object-cover object-center transition-opacity duration-700 ${playing ? 'opacity-100' : 'opacity-0'}`}
           />
         )}
       </Link>

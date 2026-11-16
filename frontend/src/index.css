@@ -169,14 +169,14 @@
  * Opening intro — liquid-glass doors that swing open and reveal the LEVIX wordmark
  * ----------------------------------------------------------------------------------------*/
 .lx-intro {
-  position: fixed; inset: 0; z-index: 200; overflow: hidden; cursor: pointer;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 200; overflow: hidden; cursor: pointer;
   background: radial-gradient(120% 90% at 50% 40%, #17171b 0%, #070708 60%, #030303 100%);
   perspective: 2200px; perspective-origin: 50% 50%;
   transition: opacity .6s cubic-bezier(.4,0,.2,1);
 }
 .lx-intro.is-leaving { opacity: 0; pointer-events: none; }
 
-.lx-intro-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transition: transform .6s cubic-bezier(.4,0,.2,1), filter .6s; }
+.lx-intro-stage { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; transition: transform .6s cubic-bezier(.4,0,.2,1), filter .6s; }
 .lx-intro.is-leaving .lx-intro-stage { transform: scale(1.08); filter: blur(6px); }
 
 .lx-orb { position: absolute; border-radius: 9999px; filter: blur(70px); opacity: .55; will-change: transform; }
@@ -281,6 +281,6 @@
 }
 .lx-intro-skip:hover { background: rgba(255,255,255,.18); }
 
-@media (prefers-reduced-motion: reduce) { .lx-intro { display: none; } }
+
 
 @keyframes wiggle { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-14deg); } 40% { transform: rotate(12deg); } 60% { transform: rotate(-8deg); } 80% { transform: rotate(5deg); } }
