@@ -7,6 +7,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { Logo } from './Logo';
 import { MegaMenu } from './MegaMenu';
 import { ScrollRing } from './ScrollRing';
+import { ThemeButton } from './ThemeButton';
 import { BagIcon, BookmarkIcon, ChevronIcon, CloseIcon, MenuIcon, SearchIcon, UserIcon } from './Icons';
 
 /**
@@ -65,6 +66,7 @@ export const Header: React.FC = () => {
           </Link>
 
           <div className="justify-self-end flex items-center gap-5">
+            <ThemeButton size={17} className="hover:opacity-60 transition-opacity" />
             <button onClick={openSearch} aria-label="Search" className="hover:opacity-60 transition-opacity">
               <SearchIcon className="w-[17px] h-[17px]" />
             </button>
@@ -109,6 +111,7 @@ export const Header: React.FC = () => {
             </Link>
           </ScrollRing>
           <div className="pointer-events-auto flex items-center gap-4 pr-1 lx-head-icons">
+            <ThemeButton size={19} />
             <button onClick={openSearch} aria-label="Search"><SearchIcon className="w-[19px] h-[19px]" /></button>
             <Link to="/wishlist" aria-label="Saved items"><BookmarkIcon className="w-[16px] h-[19px]" filled /></Link>
             <button onClick={openCart} aria-label="Open bag"><BagIcon count={itemCount} className="w-[19px] h-[23px]" /></button>
