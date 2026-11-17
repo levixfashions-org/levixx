@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { prisma } from '../config/db.js';
 import { AppError } from '../middleware/errorHandler.js';
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 64 * 1024 * 1024;
 /** Detects the real image type from the file's first bytes (never trust the browser's label). */
 function sniff(buf) {
     if (buf.length < 12)
@@ -26,7 +26,7 @@ export async function uploadMedia(req, res) {
     if (!Buffer.isBuffer(body) || body.length === 0)
         throw new AppError('No image received', 400);
     if (body.length > MAX_BYTES)
-        throw new AppError('Image is too large (max 8 MB)', 413);
+        throw new AppError('Image is too large (max 64 MB)', 413);
     const kind = sniff(body);
     if (!kind)
         throw new AppError('Only JPG, PNG, WEBP, GIF or AVIF images can be uploaded', 415);

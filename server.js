@@ -3876,7 +3876,7 @@ var import_os = __toESM(require("os"), 1);
 var import_path = __toESM(require("path"), 1);
 init_db();
 init_errorHandler();
-var MAX_BYTES = 8 * 1024 * 1024;
+var MAX_BYTES = 64 * 1024 * 1024;
 function sniff(buf) {
   if (buf.length < 12) return null;
   if (buf[0] === 255 && buf[1] === 216 && buf[2] === 255) return { mime: "image/jpeg", ext: "jpg" };
@@ -3889,7 +3889,7 @@ function sniff(buf) {
 async function uploadMedia(req, res) {
   const body = req.body;
   if (!Buffer.isBuffer(body) || body.length === 0) throw new AppError("No image received", 400);
-  if (body.length > MAX_BYTES) throw new AppError("Image is too large (max 8 MB)", 413);
+  if (body.length > MAX_BYTES) throw new AppError("Image is too large (max 64 MB)", 413);
   const kind = sniff(body);
   if (!kind) throw new AppError("Only JPG, PNG, WEBP, GIF or AVIF images can be uploaded", 415);
   const width = Number(req.headers["x-image-width"]) || null;
@@ -4095,7 +4095,7 @@ router7.get("/metrics", asyncHandler(getDashboardMetrics));
 router7.get("/push", asyncHandler(getPushOverview));
 router7.post("/push/send", asyncHandler(sendPushCampaign));
 router7.post("/push/test", asyncHandler(sendPushTest));
-router7.post("/media", import_express7.default.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }), asyncHandler(uploadMedia));
+router7.post("/media", import_express7.default.raw({ type: ["image/*", "application/octet-stream"], limit: "64mb" }), asyncHandler(uploadMedia));
 router7.post("/media/video", import_express7.default.raw({ type: ["video/*", "application/octet-stream"], limit: "5mb" }), asyncHandler(uploadVideoChunk));
 router7.get("/orders", asyncHandler(getAllOrders));
 router7.get("/instagram-customers", asyncHandler(getInstagramCustomers));
