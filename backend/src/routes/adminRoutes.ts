@@ -35,7 +35,7 @@ router.post('/push/send', h(admin.sendPushCampaign));
 router.post('/push/test', h(admin.sendPushTest));
 
 // Image uploads (raw image body, compressed in the browser first)
-router.post('/media', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '8mb' }), h(uploadMedia));
+router.post('/media', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '64mb' }), h(uploadMedia));
 router.post('/media/video', express.raw({ type: ['video/*', 'application/octet-stream'], limit: '5mb' }), h(uploadVideoChunk));
 
 router.get('/orders', h(admin.getAllOrders));
