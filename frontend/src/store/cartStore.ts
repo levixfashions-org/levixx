@@ -20,7 +20,8 @@ interface CartState {
   openMobileNav: () => void;
   closeMobileNav: () => void;
 
-  openSizeGuide: () => void;
+  sizeGuideKind: 'standard' | 'waffle';
+  openSizeGuide: (kind?: 'standard' | 'waffle') => void;
   closeSizeGuide: () => void;
 
   fetchCart: () => Promise<void>;
@@ -36,6 +37,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   isSearchOpen: false,
   isMobileNavOpen: false,
   isSizeGuideOpen: false,
+  sizeGuideKind: 'standard',
 
   openCart: () => set({ isCartOpen: true }),
   closeCart: () => set({ isCartOpen: false }),
@@ -47,7 +49,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   openMobileNav: () => set({ isMobileNavOpen: true }),
   closeMobileNav: () => set({ isMobileNavOpen: false }),
 
-  openSizeGuide: () => set({ isSizeGuideOpen: true }),
+  openSizeGuide: (kind = 'standard') => set({ isSizeGuideOpen: true, sizeGuideKind: kind }),
   closeSizeGuide: () => set({ isSizeGuideOpen: false }),
 
   fetchCart: async () => {

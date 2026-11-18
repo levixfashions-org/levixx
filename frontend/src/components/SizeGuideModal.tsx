@@ -2,10 +2,40 @@ import React from 'react';
 import { X } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 
+type Chart = { title: string; note: string; cols: string[]; rows: Array<{ size: string; values: string[] }>; fit: string };
+
+const WAFFLE: Chart = {
+  title: 'Waffle Boxy Fit Guide',
+  note: 'All measurements are in inches. Measurements may vary by 5\u201310%.',
+  cols: ['Chest', 'Length'],
+  rows: [
+    { size: 'S', values: ['21', '23'] },
+    { size: 'M', values: ['22', '24'] },
+    { size: 'L', values: ['23', '25'] },
+    { size: 'XL', values: ['24', '26'] }
+  ],
+  fit: 'Our waffle tees have a boxy, relaxed cut. If you prefer a closer fit, we recommend selecting one size smaller than your usual size.'
+};
+
+const STANDARD: Chart = {
+  title: 'Oversized Fit Guide',
+  note: 'All measurements are in inches. Expect a tolerance of \u00b1 1 inch.',
+  cols: ['Chest', 'Length', 'Shoulder', 'Sleeve'],
+  rows: [
+    { size: 'S', values: ['42', '27.5', '20', '8.5'] },
+    { size: 'M', values: ['44', '28', '21', '9'] },
+    { size: 'L', values: ['46', '28.5', '22', '9.5'] },
+    { size: 'XL', values: ['48', '29', '23', '10'] },
+    { size: 'XXL', values: ['50', '29.5', '24', '10.5'] }
+  ],
+  fit: 'Levix garments feature a signature dropped shoulder and relaxed oversized silhouette. If you prefer a regular tailored fit, we recommend selecting one size smaller than your usual size.'
+};
+
 export const SizeGuideModal: React.FC = () => {
-  const { isSizeGuideOpen, closeSizeGuide } = useCartStore();
+  const { isSizeGuideOpen, closeSizeGuide, sizeGuideKind } = useCartStore();
 
   if (!isSizeGuideOpen) return null;
+  const chart = sizeGuideKind === 'waffle' ? WAFFLE : STANDARD;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
@@ -17,10 +47,8 @@ export const SizeGuideModal: React.FC = () => {
       <div className="lx-sheet relative w-full max-w-lg rounded-[28px] p-6 z-10 space-y-5">
         <div className="flex items-center justify-between border-b border-black/[0.07] pb-4">
           <div>
-            <h3 className="text-[21px] font-semibold tracking-[-0.025em] text-[#0b0b0f]">
-              Oversized Fit Guide
-            </h3>
-            <p className="text-xs text-neutral-600">All garment measurements are recorded in inches.</p>
+            <h3 className="text-[21px] font-semibold tracking-[-0.025em] text-[#0b0b0f]">{chart.title}</h3>
+            <p className="text-xs text-neutral-600">{chart.note}</p>
           </div>
           <button
             onClick={closeSizeGuide}
@@ -37,51 +65,27 @@ export const SizeGuideModal: React.FC = () => {
             <thead>
               <tr className="border-b border-black/15 text-[12px] font-semibold text-[#6e6e73]">
                 <th className="py-2.5 px-3">Size</th>
-                <th className="py-2.5 px-3">Chest</th>
-                <th className="py-2.5 px-3">Length</th>
-                <th className="py-2.5 px-3">Shoulder</th>
+                {chart.cols.map((c) => (
+                  <th key={c} className="py-2.5 px-3">{c}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.06] text-[13px]">
-              <tr>
-                <td className="py-2.5 px-3 font-bold">S</td>
-                <td className="py-2.5 px-3">44"</td>
-                <td className="py-2.5 px-3">28.5"</td>
-                <td className="py-2.5 px-3">20.5"</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-bold">M</td>
-                <td className="py-2.5 px-3">46"</td>
-                <td className="py-2.5 px-3">29.5"</td>
-                <td className="py-2.5 px-3">21.5"</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-bold">L</td>
-                <td className="py-2.5 px-3">48"</td>
-                <td className="py-2.5 px-3">30.5"</td>
-                <td className="py-2.5 px-3">22.5"</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-bold">XL</td>
-                <td className="py-2.5 px-3">50"</td>
-                <td className="py-2.5 px-3">31.5"</td>
-                <td className="py-2.5 px-3">23.5"</td>
-              </tr>
-              <tr>
-                <td className="py-2.5 px-3 font-bold">XXL</td>
-                <td className="py-2.5 px-3">52"</td>
-                <td className="py-2.5 px-3">32.5"</td>
-                <td className="py-2.5 px-3">24.5"</td>
-              </tr>
+              {chart.rows.map((r) => (
+                <tr key={r.size}>
+                  <td className="py-2.5 px-3 font-bold">{r.size}</td>
+                  {r.values.map((v, i) => (
+                    <td key={i} className="py-2.5 px-3">{v}"</td>
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
         <div className="bg-white/70 p-4 rounded-[16px] border border-black/[0.07] text-[13px] text-[#3a3a3f] space-y-1">
           <p className="font-semibold text-[#0b0b0f]">Fit note</p>
-          <p>
-            Levix garments feature a signature dropped shoulder and relaxed oversized silhouette. If you prefer a regular tailored fit, we recommend selecting one size smaller than your usual size.
-          </p>
+          <p>{chart.fit}</p>
         </div>
 
         <button

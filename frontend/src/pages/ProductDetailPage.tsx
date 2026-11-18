@@ -242,7 +242,7 @@ export const ProductDetailPage: React.FC = () => {
               </>
             )}
           </p>
-          <button onClick={openSizeGuide} className="lx-btn-soft h-8 px-3 text-[12px] font-semibold whitespace-nowrap">Size guide</button>
+          <button onClick={() => openSizeGuide(/waffle/i.test(`${product.category?.name || ''} ${product.name}`) ? 'waffle' : 'standard')} className="lx-btn-soft h-8 px-3 text-[12px] font-semibold whitespace-nowrap">Size guide</button>
         </div>
         <p className="text-[11.5px] text-[#8e8e93] mt-1">Inclusive of all taxes</p>
 
