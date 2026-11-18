@@ -3150,7 +3150,7 @@ var imageSchema = import_zod9.z.object({
   url: imageUrl,
   altText: import_zod9.z.string().max(200).optional().nullable(),
   color: import_zod9.z.string().trim().max(40).optional().nullable(),
-  gender: import_zod9.z.enum(["MEN", "WOMEN"]).optional().nullable(),
+  gender: import_zod9.z.enum(["MEN", "WOMEN", "BOTH"]).optional().nullable(),
   isCover: import_zod9.z.boolean().optional(),
   sortOrder: import_zod9.z.number().int().optional()
 });
@@ -3806,7 +3806,7 @@ async function getHome(_req, res) {
       name: key === "men" ? "Men" : "Women",
       count: rows.length,
       coverImage: (key === "men" ? settings.menCoverImage : settings.womenCoverImage) || rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || // A tee sold to both: use a photo tagged for this department.
-      rows.flatMap((r) => r.images).find((im) => im.gender === want)?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+      rows.flatMap((r) => r.images).find((im) => im.gender === want || im.gender === "BOTH")?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
       categories: categories.filter((c) => catCount.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || "TOP", count: catCount.get(c.id) || 0 })),
       collections: collections.filter((c) => c.showInMenu && colIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
     };
