@@ -15,14 +15,49 @@ import { asDept, imagesForDept } from '../utils/dept';
 
 type Tab = 'details' | 'care' | 'shipping';
 
-const Lines: React.FC<{ text?: string | null }> = ({ text }) =>
-  text ? (
-    <div className="space-y-1">
-      {text.split('\n').filter((l) => l.trim()).map((l, i) => (
-        <p key={i}>{l}</p>
-      ))}
+/** Turns *bold* / **bold** markers into real bold text (no stray asterisks on screen). */
+const inlineBold = (text: string) =>
+  text.split(/(\*\*[^*]+\*\*|\*[^*\s][^*]*\*)/g).map((part, i) => {
+    const m = part.match(/^\*{1,2}([^*]+)\*{1,2}$/);
+    return m ? <strong key={i} className="font-semibold">{m[1]}</strong> : <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+
+const BULLET = /^\s*[*\-\u2022]\s+/;
+
+/** Product text: plain lines become paragraphs, lines starting with * / - / • become a tidy bullet list. */
+const Lines: React.FC<{ text?: string | null }> = ({ text }) => {
+  if (!text) return null;
+  const blocks: Array<{ list: boolean; items: string[] }> = [];
+  text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .forEach((l) => {
+      const isBullet = BULLET.test(l);
+      const clean = isBullet ? l.replace(BULLET, '') : l;
+      const last = blocks[blocks.length - 1];
+      if (last && last.list === isBullet) last.items.push(clean);
+      else blocks.push({ list: isBullet, items: [clean] });
+    });
+  return (
+    <div className="space-y-3">
+      {blocks.map((b, i) =>
+        b.list ? (
+          <ul key={i} className="space-y-2">
+            {b.items.map((it, j) => (
+              <li key={j} className="flex items-start gap-3">
+                <span aria-hidden="true" className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+                <span>{inlineBold(it)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          b.items.map((it, j) => <p key={`${i}-${j}`}>{inlineBold(it)}</p>)
+        )
+      )}
     </div>
-  ) : null;
+  );
+};
 
 export const ProductDetailPage: React.FC = () => {
   const { handle } = useParams<{ handle: string }>();
