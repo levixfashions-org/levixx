@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { ImagePlus, Link2, Loader2, X, ArrowLeft, ArrowRight } from 'lucide-react';
+import { ImagePlus, Link2, Loader2, X, ArrowLeft, ArrowRight, Move } from 'lucide-react';
+import { ImageFramer } from './ImageFramer';
+import { FramedImg } from '../FramedImg';
 import { uploadImage } from '../../services/api';
 
 const MAX_SIDE = 1800;
@@ -43,9 +45,12 @@ interface Props {
   label?: string;
   hint?: string;
   compact?: boolean;
+  /** Show an "Adjust" button on each photo to zoom / drag it into the shop's 4:5 frame (product photos). */
+  frameable?: boolean;
 }
 
-export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, single = false, label, hint, compact }) => {
+export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, single = false, label, hint, compact, frameable }) => {
+  const [adjusting, setAdjusting] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<Pending[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -119,7 +124,18 @@ export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, sing
               }}
               className={`relative group bg-neutral-100 border border-black/10 overflow-hidden ${single ? 'aspect-[16/7]' : 'aspect-[4/5]'} ${!single ? 'cursor-grab active:cursor-grabbing' : ''} ${dragIndex === i ? 'opacity-40' : ''}`}
             >
-              <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
+              {frameable ? <FramedImg src={url} alt="" className="pointer-events-none" /> : <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />}
+              {frameable && (
+                <button
+                  type="button"
+                  onClick={() => setAdjusting(adjusting === i ? null : i)}
+                  className={`absolute bottom-1 left-1 h-6 px-1.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow ${adjusting === i ? 'bg-black text-white' : 'bg-white/95 text-black hover:bg-black hover:text-white'}`}
+                  aria-label="Adjust photo"
+                  title="Zoom and drag this photo to fit the frame"
+                >
+                  <Move className="w-3 h-3" /> Adjust
+                </button>
+              )}
               {!single && i === 0 && <span className="absolute top-1 left-1 px-1.5 py-0.5 bg-black text-white text-[9px] font-bold uppercase">Cover</span>}
               <button type="button" onClick={() => onChange(value.filter((_, x) => x !== i))} className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 flex items-center justify-center shadow hover:bg-red-50 hover:text-red-600" aria-label="Remove image">
                 <X className="w-3.5 h-3.5" />
@@ -147,6 +163,17 @@ export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, sing
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {frameable && adjusting !== null && value[adjusting] && (
+        <div className="max-w-[320px]">
+          <ImageFramer
+            value={value[adjusting]}
+            onChange={(u) => onChange(value.map((x, i) => (i === adjusting ? u : x)))}
+            shapes={[{ label: `Photo ${adjusting + 1} · how it looks in the shop`, aspect: '4 / 5' }]}
+          />
+          <button type="button" onClick={() => setAdjusting(null)} className="mt-2 px-3 py-1.5 bg-black text-white text-[11px] font-bold">Done</button>
         </div>
       )}
 

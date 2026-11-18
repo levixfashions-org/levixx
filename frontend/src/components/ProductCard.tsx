@@ -5,6 +5,7 @@ import { useCartStore } from '../store/cartStore';
 import { useWishlistStore } from '../store/wishlistStore';
 import { BookmarkIcon, CloseIcon, PlusIcon } from './Icons';
 import { imagesForDept, productHref, type Dept } from '../utils/dept';
+import { FramedImg } from './FramedImg';
 
 export const formatRs = (paise: number) => `₹${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;
 
@@ -72,10 +73,10 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
           {images.map((img, i) => (
             <Link key={img.id + i} to={href} className="relative shrink-0 w-full h-full snap-start-always" tabIndex={i === 0 ? 0 : -1} aria-label={product.name}>
               {img.url ? (
-                <img
+                <FramedImg
                   src={img.url}
                   alt={i === 0 ? product.name : ''}
-                  className={`w-full h-full object-cover ${soldOut ? 'opacity-50' : ''}`}
+                  className={soldOut ? 'opacity-50' : ''}
                   loading="lazy"
                   draggable={false}
                 />

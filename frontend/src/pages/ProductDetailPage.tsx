@@ -12,6 +12,7 @@ import { BookmarkIcon } from '../components/Icons';
 import { formatRs } from '../components/ProductCard';
 import { setSeo } from '../utils/seo';
 import { asDept, imagesForDept } from '../utils/dept';
+import { FramedImg } from '../components/FramedImg';
 
 type Tab = 'details' | 'care' | 'shipping';
 
@@ -369,7 +370,7 @@ export const ProductDetailPage: React.FC = () => {
         <div ref={sliderRef} onScroll={onSlide} className="flex overflow-x-auto no-scrollbar snap-x-mandatory">
           {images.map((img) => (
             <div key={img.id} className="snap-start-always shrink-0 w-full aspect-[4/5] bg-[#E6E7EB]">
-              <img src={img.url} alt={img.altText || product.name} className="w-full h-full object-cover" />
+              <FramedImg src={img.url} alt={img.altText || product.name} />
             </div>
           ))}
         </div>
@@ -388,14 +389,14 @@ export const ProductDetailPage: React.FC = () => {
         <div className="sticky top-[68px] self-start">
           {mainImage && (
             <div className="aspect-[4/5] max-h-[calc(100vh-80px)] w-full rounded-[20px] overflow-hidden bg-[#E6E7EB] ring-1 ring-black/[0.04]">
-              <img src={mainImage.url} alt={mainImage.altText || product.name} className="w-full h-full object-cover" />
+              <FramedImg src={mainImage.url} alt={mainImage.altText || product.name} />
             </div>
           )}
         </div>
         <div className="space-y-[6px]">
           {(otherImages.length ? otherImages : images).map((img) => (
             <div key={img.id} className="aspect-[4/5] rounded-[20px] overflow-hidden bg-[#E6E7EB] ring-1 ring-black/[0.04]">
-              <img src={img.url} alt={img.altText || product.name} className="w-full h-full object-cover" loading="lazy" />
+              <FramedImg src={img.url} alt={img.altText || product.name} loading="lazy" />
             </div>
           ))}
         </div>

@@ -5,6 +5,10 @@ import { apiClient, COLOR_GROUPS, COLOR_SWATCHES } from '../../services/api';
 import { Category, Gender, Product } from '../../types';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { ImageUploader } from '../../components/admin/ImageUploader';
+import { parseFrame } from '../../utils/frame';
+
+// Photo tags are keyed by the plain link, so zooming/dragging a photo (which adds "#lx=…" to its link) keeps its tag.
+const baseUrl = (u: string) => parseFrame(u).src;
 
 const SIZE_PRESETS: { label: string; sizes: string[] }[] = [
   { label: 'S – XXL', sizes: ['S', 'M', 'L', 'XL', 'XXL'] },
@@ -267,7 +271,7 @@ export const AdminProductsPage: React.FC = () => {
     setIsActive(asCopy ? true : p.isActive);
     setColorGroup(p.colorGroup || '');
     setGender(asGender(p.gender || null) || 'UNISEX');
-    setImageGender(Object.fromEntries((p.images || []).map((im: any) => [im.url, im.gender === 'MEN' || im.gender === 'WOMEN' || im.gender === 'BOTH' ? im.gender : ''])));
+    setImageGender(Object.fromEntries((p.images || []).map((im: any) => [baseUrl(im.url), im.gender === 'MEN' || im.gender === 'WOMEN' || im.gender === 'BOTH' ? im.gender : ''])));
     setCollectionIds(p.collectionIds || []);
     setFormError(null);
     setShowModal(true);
@@ -324,7 +328,7 @@ export const AdminProductsPage: React.FC = () => {
       c.images.map((url) => ({
         url,
         color: multiColour || c.name.trim() ? c.name.trim() || null : null,
-        gender: gender === 'UNISEX' ? imageGender[url] || null : null
+        gender: gender === 'UNISEX' ? imageGender[baseUrl(url)] || null : null
       }))
     );
     const variants = colours.flatMap((c) =>
@@ -801,6 +805,7 @@ export const AdminProductsPage: React.FC = () => {
                       max={12}
                       label={multiColour ? `Photos of ${c.name || 'this colour'} *` : 'Product photos *'}
                       compact={multiColour}
+                      frameable
                     />
 
                     {gender === 'UNISEX' && c.images.length > 0 && (
@@ -808,7 +813,7 @@ export const AdminProductsPage: React.FC = () => {
                         <p className="text-[11px] font-bold text-neutral-700">Who's wearing it? <span className="font-normal text-neutral-500">— Men page shows "M" photos, Women page "W" photos. Tap both M and W for a photo that belongs on both pages.</span></p>
                         <div className="mt-2 flex flex-wrap gap-2.5">
                           {c.images.map((url) => {
-                            const tag = imageGender[url] || '';
+                            const tag = imageGender[baseUrl(url)] || '';
                             return (
                               <div key={url} className="w-[78px]">
                                 <div className="w-[78px] h-[96px] rounded-[10px] overflow-hidden bg-neutral-200">
@@ -821,10 +826,10 @@ export const AdminProductsPage: React.FC = () => {
                                       type="button"
                                       onClick={() =>
                                         setImageGender((m) => {
-                                          const cur = m[url] || '';
+                                          const cur = m[baseUrl(url)] || '';
                                           const men = (cur === 'MEN' || cur === 'BOTH') !== (g === 'MEN');
                                           const women = (cur === 'WOMEN' || cur === 'BOTH') !== (g === 'WOMEN');
-                                          return { ...m, [url]: men && women ? 'BOTH' : men ? 'MEN' : women ? 'WOMEN' : '' };
+                                          return { ...m, [baseUrl(url)]: men && women ? 'BOTH' : men ? 'MEN' : women ? 'WOMEN' : '' };
                                         })
                                       }
                                       title={g === 'MEN' ? 'A man is wearing it' : 'A woman is wearing it'}
@@ -838,7 +843,7 @@ export const AdminProductsPage: React.FC = () => {
                             );
                           })}
                         </div>
-                        {c.images.some((u) => !imageGender[u]) && (
+                        {c.images.some((u) => !imageGender[baseUrl(u)]) && (
                           <p className="mt-2 text-[10.5px] text-amber-700">Untagged photos show in both sections until you tag them.</p>
                         )}
                       </div>

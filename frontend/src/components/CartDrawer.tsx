@@ -82,7 +82,7 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
                   {suggestions.map((p) => (
                     <Link key={p.id} to={`/products/${p.slug}`} className="shrink-0 w-[72px] aspect-[4/5] rounded-[12px] overflow-hidden bg-black/5 ring-1 ring-black/5">
-                      {p.images[0] && <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />}
+                      {p.images[0] && <FramedImg src={p.images[0].url} alt={p.name} loading="lazy" />}
                     </Link>
                   ))}
                 </div>

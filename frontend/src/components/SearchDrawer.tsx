@@ -5,6 +5,7 @@ import { useHomeStore } from '../store/homeStore';
 import { apiClient } from '../services/api';
 import { Product } from '../types';
 import { CloseIcon, SearchIcon } from './Icons';
+import { FramedImg } from './FramedImg';
 import { formatRs } from './ProductCard';
 
 export const SearchDrawer: React.FC = () => {
@@ -97,7 +98,7 @@ export const SearchDrawer: React.FC = () => {
                 {results.map((p) => (
                   <Link key={p.id} to={`/products/${p.slug}`} className="group">
                     <div className="aspect-[4/5] rounded-[14px] overflow-hidden bg-[#E6E7EB] ring-1 ring-black/[0.04]">
-                      {p.images[0] && <img src={p.images[0].url} alt={p.name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" />}
+                      {p.images[0] && <FramedImg src={p.images[0].url} alt={p.name} />}
                     </div>
                     <p className="text-[12px] font-medium mt-1.5 truncate">{p.name}</p>
                     <p className="text-[10.5px] text-neutral-600">{formatRs(p.basePrice)}</p>
