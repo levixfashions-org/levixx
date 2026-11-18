@@ -80,7 +80,7 @@ export async function getHome(_req: Request, res: Response) {
         (key === 'men' ? settings.menCoverImage : settings.womenCoverImage) ||
         rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url ||
         // A tee sold to both: use a photo tagged for this department.
-        rows.flatMap((r) => r.images).find((im) => im.gender === want)?.url ||
+        rows.flatMap((r) => r.images).find((im) => im.gender === want || im.gender === 'BOTH')?.url ||
         rows.find((r) => r.images[0])?.images[0]?.url ||
         null,
       categories: categories

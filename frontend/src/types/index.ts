@@ -3,7 +3,7 @@ export interface ProductImage {
   url: string;
   altText?: string | null;
   color?: string | null;
-  gender?: 'MEN' | 'WOMEN' | null; // who is wearing it (tees sold to both)
+  gender?: 'MEN' | 'WOMEN' | 'BOTH' | null; // who is wearing it (tees sold to both); BOTH = shows on the Men and Women pages
   sortOrder: number;
   isCover: boolean;
 }

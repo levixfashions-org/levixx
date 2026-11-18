@@ -228,7 +228,7 @@ const imageSchema = z.object({
   url: imageUrl,
   altText: z.string().max(200).optional().nullable(),
   color: z.string().trim().max(40).optional().nullable(),
-  gender: z.enum(['MEN', 'WOMEN']).optional().nullable(),
+  gender: z.enum(['MEN', 'WOMEN', 'BOTH']).optional().nullable(),
   isCover: z.boolean().optional(),
   sortOrder: z.number().int().optional()
 });

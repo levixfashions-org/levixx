@@ -17,7 +17,7 @@ export function imagesForDept(product: Pick<Product, 'images'>, dept?: Dept): Pr
   const all = product.images || [];
   if (!dept) return all;
   const want = dept === 'men' ? 'MEN' : 'WOMEN';
-  const tagged = all.filter((i) => i.gender === want);
+  const tagged = all.filter((i) => i.gender === want || i.gender === 'BOTH');
   if (tagged.length) return tagged;
   // Nothing tagged for this department: hide photos clearly tagged for the other one, keep the rest.
   const other = all.filter((i) => !i.gender);
@@ -32,5 +32,5 @@ export function showsInDept(product: Pick<Product, 'images'>, dept?: Dept): bool
   if (!dept) return true;
   const want = dept === 'men' ? 'MEN' : 'WOMEN';
   const all = product.images || [];
-  return !(all.length && all.every((i) => i.gender && i.gender !== want));
+  return !(all.length && all.every((i) => i.gender && i.gender !== want && i.gender !== 'BOTH'));
 }

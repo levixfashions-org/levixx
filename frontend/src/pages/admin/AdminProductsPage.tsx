@@ -96,7 +96,7 @@ export const AdminProductsPage: React.FC = () => {
   const [genderFilter, setGenderFilter] = useState<'ALL' | Gender>(asGender((params.get('gender') || '').toUpperCase()) || 'ALL');
   const [gender, setGender] = useState<Gender>('UNISEX');
   // Who is wearing each photo (url → MEN / WOMEN) — used when a tee is sold to both.
-  const [imageGender, setImageGender] = useState<Record<string, 'MEN' | 'WOMEN' | ''>>({});
+  const [imageGender, setImageGender] = useState<Record<string, 'MEN' | 'WOMEN' | 'BOTH' | ''>>({});
   const [collectionFilter, setCollectionFilter] = useState(params.get('collection') || 'ALL');
   const [legacyProducts, setLegacyProducts] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
@@ -267,7 +267,7 @@ export const AdminProductsPage: React.FC = () => {
     setIsActive(asCopy ? true : p.isActive);
     setColorGroup(p.colorGroup || '');
     setGender(asGender(p.gender || null) || 'UNISEX');
-    setImageGender(Object.fromEntries((p.images || []).map((im: any) => [im.url, im.gender === 'MEN' || im.gender === 'WOMEN' ? im.gender : ''])));
+    setImageGender(Object.fromEntries((p.images || []).map((im: any) => [im.url, im.gender === 'MEN' || im.gender === 'WOMEN' || im.gender === 'BOTH' ? im.gender : ''])));
     setCollectionIds(p.collectionIds || []);
     setFormError(null);
     setShowModal(true);
@@ -805,7 +805,7 @@ export const AdminProductsPage: React.FC = () => {
 
                     {gender === 'UNISEX' && c.images.length > 0 && (
                       <div className="border border-black/10 bg-neutral-50 p-3">
-                        <p className="text-[11px] font-bold text-neutral-700">Who's wearing it? <span className="font-normal text-neutral-500">— Men page shows only "M" photos, Women page only "W" photos.</span></p>
+                        <p className="text-[11px] font-bold text-neutral-700">Who's wearing it? <span className="font-normal text-neutral-500">— Men page shows "M" photos, Women page "W" photos. Tap both M and W for a photo that belongs on both pages.</span></p>
                         <div className="mt-2 flex flex-wrap gap-2.5">
                           {c.images.map((url) => {
                             const tag = imageGender[url] || '';
@@ -819,9 +819,16 @@ export const AdminProductsPage: React.FC = () => {
                                     <button
                                       key={g}
                                       type="button"
-                                      onClick={() => setImageGender((m) => ({ ...m, [url]: m[url] === g ? '' : g }))}
+                                      onClick={() =>
+                                        setImageGender((m) => {
+                                          const cur = m[url] || '';
+                                          const men = (cur === 'MEN' || cur === 'BOTH') !== (g === 'MEN');
+                                          const women = (cur === 'WOMEN' || cur === 'BOTH') !== (g === 'WOMEN');
+                                          return { ...m, [url]: men && women ? 'BOTH' : men ? 'MEN' : women ? 'WOMEN' : '' };
+                                        })
+                                      }
                                       title={g === 'MEN' ? 'A man is wearing it' : 'A woman is wearing it'}
-                                      className={`h-6 rounded-[7px] text-[11px] font-bold transition-colors ${tag === g ? (g === 'MEN' ? 'bg-blue-600 text-white' : 'bg-pink-600 text-white') : 'bg-white text-neutral-500 ring-1 ring-black/10 hover:text-black'}`}
+                                      className={`h-6 rounded-[7px] text-[11px] font-bold transition-colors ${tag === g || tag === 'BOTH' ? (g === 'MEN' ? 'bg-blue-600 text-white' : 'bg-pink-600 text-white') : 'bg-white text-neutral-500 ring-1 ring-black/10 hover:text-black'}`}
                                     >
                                       {g === 'MEN' ? 'M' : 'W'}
                                     </button>
