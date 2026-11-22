@@ -71,7 +71,7 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[18px] bg-[#E6E7EB] ring-1 ring-black/[0.04] shadow-[0_14px_30px_-22px_rgba(17,17,26,0.45)]">
         <div ref={scroller} onScroll={onScroll} className="absolute inset-0 flex overflow-x-auto no-scrollbar snap-x-mandatory">
           {images.map((img, i) => (
-            <Link key={img.id + i} to={href} className="relative shrink-0 w-full h-full snap-start-always" tabIndex={i === 0 ? 0 : -1} aria-label={product.name}>
+            <Link key={img.id + i} to={href} className="relative overflow-hidden shrink-0 w-full h-full snap-start-always" tabIndex={i === 0 ? 0 : -1} aria-label={product.name}>
               {img.url ? (
                 <FramedImg
                   src={img.url}

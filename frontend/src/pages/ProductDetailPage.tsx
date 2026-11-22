@@ -369,7 +369,7 @@ export const ProductDetailPage: React.FC = () => {
       <div className="md:hidden relative">
         <div ref={sliderRef} onScroll={onSlide} className="flex overflow-x-auto no-scrollbar snap-x-mandatory">
           {images.map((img) => (
-            <div key={img.id} className="snap-start-always shrink-0 w-full aspect-[4/5] bg-[#E6E7EB]">
+            <div key={img.id} className="relative overflow-hidden snap-start-always shrink-0 w-full aspect-[4/5] bg-[#E6E7EB]">
               <FramedImg src={img.url} alt={img.altText || product.name} />
             </div>
           ))}

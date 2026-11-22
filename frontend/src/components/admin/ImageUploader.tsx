@@ -167,7 +167,7 @@ export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, sing
       )}
 
       {frameable && adjusting !== null && value[adjusting] && (
-        <div className="max-w-[320px]">
+        <div className="max-w-[360px]">
           <ImageFramer
             value={value[adjusting]}
             onChange={(u) => onChange(value.map((x, i) => (i === adjusting ? u : x)))}

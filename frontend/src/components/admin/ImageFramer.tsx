@@ -24,32 +24,52 @@ const DEFAULT_SHAPES = [
 export const ImageFramer: React.FC<Props> = ({ value, onChange, shapes = DEFAULT_SHAPES }) => {
   const parsed = parseFrame(value);
   const [f, setF] = useState<Frame>(parsed.frame);
-  const drag = useRef<{ x: number; y: number; f: Frame; w: number; h: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; f: Frame; dx: number; dy: number } | null>(null);
+  const [stuck, setStuck] = useState(false);
 
   // Keep in sync when a different image is picked.
   useEffect(() => {
     setF(parseFrame(value).frame);
+    setStuck(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsed.src]);
 
   const commit = (next: Frame) => {
     setF(next);
+    setStuck(false);
     onChange(withFrame(value, next));
   };
   const setZoom = (z: number) => commit({ ...f, z: Math.round(Math.min(3, Math.max(0.5, z)) * 100) / 100 });
 
+  /**
+   * How far the photo moves on screen per 1% change of the focus point, worked out from the real
+   * photo size so the photo follows the finger/mouse exactly. (Photo is "cover"-fitted, then scaled
+   * by z around the focus point — the same maths frameStyle() uses in the shop.)
+   */
+  const pxPerPercent = (box: HTMLElement, z: number) => {
+    const img = box.querySelector('img') as HTMLImageElement | null;
+    const W = box.clientWidth || 1;
+    const H = box.clientHeight || 1;
+    const nw = img?.naturalWidth || W;
+    const nh = img?.naturalHeight || H;
+    const s = Math.max(W / nw, H / nh);
+    const ox = nw * s - W; // hidden width when cover-fitted
+    const oy = nh * s - H; // hidden height when cover-fitted
+    return { dx: (z * ox + (z - 1) * W) / 100, dy: (z * oy + (z - 1) * H) / 100 };
+  };
+
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    drag.current = { x: e.clientX, y: e.clientY, f, w: r.width, h: r.height };
+    const k = pxPerPercent(e.currentTarget, f.z);
+    drag.current = { x: e.clientX, y: e.clientY, f, dx: k.dx, dy: k.dy };
+    setStuck(Math.abs(k.dx) < 0.05 && Math.abs(k.dy) < 0.05);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     if (!d) return;
     // Dragging the photo right shows more of its left side → focus moves left.
-    const k = 100 / Math.max(1, d.f.z);
-    const x = Math.min(100, Math.max(0, d.f.x - ((e.clientX - d.x) / d.w) * k));
-    const y = Math.min(100, Math.max(0, d.f.y - ((e.clientY - d.y) / d.h) * k));
+    const x = Math.abs(d.dx) < 0.05 ? d.f.x : Math.min(100, Math.max(0, d.f.x - (e.clientX - d.x) / d.dx));
+    const y = Math.abs(d.dy) < 0.05 ? d.f.y : Math.min(100, Math.max(0, d.f.y - (e.clientY - d.y) / d.dy));
     setF({ ...d.f, x, y });
   };
   const onUp = () => {
@@ -96,8 +116,8 @@ export const ImageFramer: React.FC<Props> = ({ value, onChange, shapes = DEFAULT
           step={0.01}
           value={f.z}
           onChange={(e) => setF({ ...f, z: +e.target.value })}
-          onPointerUp={() => onChange(withFrame(value, f))}
-          onKeyUp={() => onChange(withFrame(value, f))}
+          onPointerUp={() => commit(f)}
+          onKeyUp={() => commit(f)}
           className="flex-1 accent-black"
           aria-label="Zoom"
         />
@@ -106,6 +126,11 @@ export const ImageFramer: React.FC<Props> = ({ value, onChange, shapes = DEFAULT
         <button type="button" className={btn} onClick={() => commit({ x: 50, y: 50, z: 0.5 })} aria-label="Show whole photo" title="Show whole photo"><Maximize className="w-3.5 h-3.5" /></button>
         <button type="button" className={btn} onClick={() => commit(DEFAULT_FRAME)} aria-label="Reset" title="Reset"><RotateCcw className="w-3.5 h-3.5" /></button>
       </div>
+      {stuck && (
+        <p className="text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-1.5">
+          This photo already fills the frame exactly, so there is nothing to move yet. Zoom in (+) to move it around, or zoom out (−) to fit more of it.
+        </p>
+      )}
       <p className="text-[10px] text-neutral-500">Tip: below 100% the whole photo fits with a plain background around it. Remember to save.</p>
     </div>
   );
