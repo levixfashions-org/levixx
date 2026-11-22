@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Package, ShoppingBag, Tag, SlidersHorizontal, Layers, LogOut, Bell, ArrowUpRight } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Tag, SlidersHorizontal, Layers, LogOut, Bell, ArrowUpRight, RotateCcw } from 'lucide-react';
 
 const NAV = [
   { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
   { name: 'Products', path: '/admin/products', icon: Package },
   { name: 'Collections', path: '/admin/collections', icon: Layers },
   { name: 'Orders', path: '/admin/orders', icon: ShoppingBag },
+  { name: 'Returns', path: '/admin/returns', icon: RotateCcw },
   { name: 'Discounts', path: '/admin/discounts', icon: Tag },
   { name: 'Notifications', path: '/admin/notifications', icon: Bell },
   { name: 'Settings', path: '/admin/settings', icon: SlidersHorizontal }

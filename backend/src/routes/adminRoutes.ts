@@ -8,6 +8,7 @@ import { broadcastChange } from '../services/live.js';
 import { clearSeoCache } from '../services/seo.js';
 import { scheduleSalesRecompute } from '../services/bestsellers.js';
 import { uploadMedia, uploadVideoChunk } from '../controllers/mediaController.js';
+import { listReturns, updateReturn } from '../controllers/returnsController.js';
 
 const router = Router();
 router.use(verifyFirebaseToken);
@@ -30,6 +31,8 @@ router.use((req, res, next) => {
 });
 
 router.get('/metrics', h(admin.getDashboardMetrics));
+router.get('/returns', h(listReturns));
+router.patch('/returns/:id', h(updateReturn));
 router.get('/push', h(admin.getPushOverview));
 router.post('/push/send', h(admin.sendPushCampaign));
 router.post('/push/test', h(admin.sendPushTest));

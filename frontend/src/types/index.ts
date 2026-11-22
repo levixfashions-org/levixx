@@ -148,6 +148,28 @@ export interface Order {
   paidAt?: string | null;
   items: OrderItem[];
   createdAt: string;
+  returns?: ReturnRequest[];
+  canReturn?: boolean;
+  returnDeadline?: string | null;
+  returnWindowHours?: number;
+}
+
+export type ReturnStatus = 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'PICKED_UP' | 'COMPLETED';
+export type ReturnReason = 'DAMAGED' | 'DEFECTIVE' | 'WRONG_ITEM' | 'MISSING';
+
+export interface ReturnRequest {
+  id: string;
+  reason: ReturnReason;
+  resolution: 'REPLACEMENT' | 'REFUND';
+  details: string;
+  items: { orderItemId: string; productName: string; size: string; color?: string | null; quantity: number; imageUrl?: string | null }[];
+  photos: string[];
+  videoUrl?: string | null;
+  refundUpi?: string | null;
+  status: ReturnStatus;
+  adminNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserProfile {

@@ -238,7 +238,8 @@ const VIDEO_CHUNK = 4 * 1024 * 1024;
 export const MAX_VIDEO_MB = 60;
 
 /** Uploads a video in 4 MB pieces (so big files work on any connection). Returns its /media URL. */
-export async function uploadVideo(file: File, onProgress?: (fraction: number) => void): Promise<string> {
+export async function uploadVideo(file: File, onProgress?: (fraction: number) => void, endpoint = '/admin/media/video'): Promise<string> {
+  const needsAuth = endpoint.startsWith('/admin');
   if (file.size > MAX_VIDEO_MB * 1024 * 1024) throw new ApiError(`Video is too large — please keep it under ${MAX_VIDEO_MB} MB.`, 413);
   const id =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -254,14 +255,14 @@ export async function uploadVideo(file: File, onProgress?: (fraction: number) =>
     let attempt = 0;
     for (;;) {
       const token = await authService.getToken();
-      if (!token) throw new ApiError('Please sign in again to upload videos.', 401);
+      if (!token && needsAuth) throw new ApiError('Please sign in again to upload videos.', 401);
       let res: Response | null = null;
       try {
-        res = await fetch(`${BASE_URL}/admin/media/video`, {
+        res = await fetch(`${BASE_URL}${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/octet-stream',
-            Authorization: `Bearer ${token}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             'X-Upload-Id': id,
             'X-Chunk-Index': String(i),
             'X-Chunk-Total': String(total),
@@ -288,6 +289,22 @@ export async function uploadVideo(file: File, onProgress?: (fraction: number) =>
   }
   if (!url) throw new ApiError('Upload did not finish — please try again.', 500);
   return url;
+}
+
+/** Uploads a customer's photo for a return request (works for signed-in buyers and guests with the order key). */
+export async function uploadReturnPhoto(orderNumber: string, key: string, blob: Blob): Promise<string> {
+  const token = await authService.getToken();
+  const headers: Record<string, string> = { 'Content-Type': blob.type || 'application/octet-stream' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/returns/${encodeURIComponent(orderNumber)}/photo${key ? `?key=${encodeURIComponent(key)}` : ''}`, { method: 'POST', headers, body: blob });
+  } catch {
+    throw new ApiError('Network error while uploading. Check your connection and try again.', 0);
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(data.error || `Upload failed (${res.status})`, res.status, data);
+  return data.url as string;
 }
 
 export const formatINR = (paise: number) => `RS. ${Math.round((paise || 0) / 100).toLocaleString('en-IN')}`;

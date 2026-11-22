@@ -7,6 +7,7 @@ import { ShipmentTracker } from '../components/ShipmentTracker';
 import { Order } from '../types';
 import { Package, ArrowLeft, ArrowRight } from 'lucide-react';
 import { StatusPill, isActiveOrder, orderDate, rupees } from '../components/account/orderStatus';
+import { ReturnPanel } from '../components/account/ReturnPanel';
 
 export const OrderHistoryPage: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -130,6 +131,12 @@ export const OrderHistoryPage: React.FC = () => {
                   <div className="px-5 sm:px-6 py-5 border-b border-black/[0.06]">
                     <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} paymentMethod={order.paymentMethod} paymentStatus={order.paymentStatus} refundStatus={order.refundStatus} refundAmountPaise={order.refundAmountPaise} refundedAt={order.refundedAt} refundRequestedAt={order.refundRequestedAt} totalPaise={order.totalPaise} />
                   </div>
+
+                  {(order.status === 'DELIVERED' || (order.returns && order.returns.length > 0)) && (
+                    <div id={`return-${order.orderNumber}`} className="px-5 sm:px-6 py-4 border-b border-black/[0.06]">
+                      <ReturnPanel order={order} onSubmitted={() => setFocusTick((t) => t + 1)} />
+                    </div>
+                  )}
 
                   <ul className="px-5 sm:px-6 divide-y divide-black/[0.06]">
                     {order.items.map((it) => (

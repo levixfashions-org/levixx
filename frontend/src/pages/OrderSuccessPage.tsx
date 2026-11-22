@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { ShipmentTracker } from '../components/ShipmentTracker';
 import { useLiveRefresh } from '../hooks/useLiveRefresh';
+import { ReturnPanel } from '../components/account/ReturnPanel';
 
 export const OrderSuccessPage: React.FC = () => {
   const { orderNumber } = useParams<{ orderNumber: string }>();
@@ -19,6 +20,18 @@ export const OrderSuccessPage: React.FC = () => {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [reload, setReload] = useState(0);
+  const accessKey = React.useMemo(() => {
+    let k = params.get('key') || '';
+    if (!k && orderNumber) {
+      try {
+        k = sessionStorage.getItem(`levix_order_${orderNumber}`) || '';
+      } catch {
+        /* ignore */
+      }
+    }
+    return k;
+  }, [params, orderNumber]);
 
   useEffect(() => {
     if (authLoading || !orderNumber) return;
@@ -51,7 +64,7 @@ export const OrderSuccessPage: React.FC = () => {
     load();
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderNumber, authLoading, user?.uid, live]);
+  }, [orderNumber, authLoading, user?.uid, live, reload]);
 
   if (loading) {
     return <div className="py-24 flex justify-center"><span className="w-8 h-8 rounded-full border-2 border-black/10 border-t-[#FF5400] animate-spin" aria-label="Loading your order" /></div>;
@@ -112,6 +125,12 @@ export const OrderSuccessPage: React.FC = () => {
         {order.status !== 'PENDING' && (
           <div className="border-b border-black/[0.07] pb-5">
             <ShipmentTracker status={order.status} courier={order.courier} trackingNumber={order.trackingNumber} paymentMethod={order.paymentMethod} paymentStatus={order.paymentStatus} refundStatus={order.refundStatus} refundAmountPaise={order.refundAmountPaise} refundedAt={order.refundedAt} refundRequestedAt={order.refundRequestedAt} totalPaise={order.totalPaise} />
+          </div>
+        )}
+
+        {(order.status === 'DELIVERED' || (order.returns && order.returns.length > 0)) && (
+          <div id="return" className="border-b border-black/[0.07] pb-5">
+            <ReturnPanel order={order} accessKey={accessKey} onSubmitted={() => setReload((r) => r + 1)} />
           </div>
         )}
 

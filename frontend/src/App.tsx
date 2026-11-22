@@ -45,6 +45,7 @@ const AdminOrdersPage = named(() => import('./pages/admin/AdminOrdersPage'), 'Ad
 const AdminDiscountsPage = named(() => import('./pages/admin/AdminDiscountsPage'), 'AdminDiscountsPage');
 const AdminSettingsPage = named(() => import('./pages/admin/AdminSettingsPage'), 'AdminSettingsPage');
 const AdminNotificationsPage = named(() => import('./pages/admin/AdminNotificationsPage'), 'AdminNotificationsPage');
+const AdminReturnsPage = named(() => import('./pages/admin/AdminReturnsPage'), 'AdminReturnsPage');
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -151,6 +152,7 @@ export const App: React.FC = () => {
                   <Route path="/admin/discounts" element={admin(<AdminDiscountsPage />)} />
                   <Route path="/admin/settings" element={admin(<AdminSettingsPage />)} />
                   <Route path="/admin/notifications" element={admin(<AdminNotificationsPage />)} />
+                  <Route path="/admin/returns" element={admin(<AdminReturnsPage />)} />
                   <Route path="/admin/collections" element={admin(<AdminCollectionsPage />)} />
 
                   <Route

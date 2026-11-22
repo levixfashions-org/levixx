@@ -261,7 +261,11 @@ export const PolicyPage: React.FC = () => {
             </Section>
 
             <Section title="3. How to report a damaged or wrong item" id="report">
-              <p>Within 48 hours of delivery, contact us at {contactLine} with:</p>
+              <p>
+                <span className="font-semibold">Easiest way:</span> open <Link className="underline" to="/account/orders">My Orders</Link> (or the order link in your confirmation email), find the delivered order and tap{' '}
+                <span className="font-semibold">“Return / report a problem”</span>. Choose the item, tell us what is wrong, add photos and your unboxing video, and pick a replacement or refund. You can follow the status of your request on the same page.
+              </p>
+              <p>You can also contact us within 48 hours of delivery at {contactLine} with:</p>
               <List
                 items={[
                   'Your order number (for example LVX-…).',

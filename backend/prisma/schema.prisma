@@ -259,8 +259,10 @@ model Order {
   refundRequestedAt       DateTime?
   refundedAt              DateTime?
   paidAt                  DateTime?
+  deliveredAt             DateTime?     // set when the order is marked Delivered — starts the return window
   payment                 Payment?
   items                   OrderItem[]
+  returns                 ReturnRequest[]
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
@@ -436,4 +438,25 @@ model PushCampaign {
   sentCount   Int      @default(0)
   failedCount Int      @default(0)
   createdAt   DateTime @default(now())
+}
+
+/// A customer's request to return / replace a damaged, defective or wrong item (made from the order page).
+model ReturnRequest {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reason      String   @db.VarChar(20) // DAMAGED | DEFECTIVE | WRONG_ITEM | MISSING
+  resolution  String   @db.VarChar(12) // REPLACEMENT | REFUND
+  details     String   @db.Text
+  items       Json     // [{ orderItemId, productName, size, color, quantity }]
+  photos      Json     // ["/media/<id>.jpg", …]
+  videoUrl    String?  @db.VarChar(300)
+  refundUpi   String?  @db.VarChar(80) // for Cash on Delivery refunds
+  status      String   @default("REQUESTED") @db.VarChar(12) // REQUESTED | APPROVED | REJECTED | PICKED_UP | COMPLETED
+  adminNote   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
 }
