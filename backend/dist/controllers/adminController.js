@@ -159,6 +159,7 @@ export async function updateOrder(req, res) {
             where: { id: order.id },
             data: {
                 ...(data.status ? { status: data.status } : {}),
+                ...(data.status === OrderStatus.DELIVERED && order.status !== OrderStatus.DELIVERED ? { deliveredAt: new Date() } : {}),
                 ...(data.status === OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {}),
                 ...(data.courier !== undefined ? { courier: data.courier || null } : {}),
                 ...(data.trackingNumber !== undefined ? { trackingNumber: data.trackingNumber || null } : {}),

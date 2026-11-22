@@ -8,6 +8,7 @@ import { addressSchema } from './authController.js';
 import { INSTAGRAM_RE, normalizeInstagram } from '../utils/instagram.js';
 import { formatCart, getAnonymousToken, imageForColor, resolveCart } from './cartController.js';
 import { calculateShippingPaise, getSettings } from '../services/store.js';
+import { returnInfo } from './returnsController.js';
 import { evaluateCoupon, formatAddress, generateAccessKey, generateOrderNumber, notifyOrder, safeEqual } from '../services/orders.js';
 const createOrderSchema = z.object({
     customerEmail: z.string().trim().toLowerCase().email('Enter a valid email address'),
@@ -237,24 +238,24 @@ export async function getUserOrders(req, res) {
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
-        include: { items: true }
+        include: { items: true, returns: { orderBy: { createdAt: 'desc' } } }
     });
     res.set('Cache-Control', 'no-store');
-    res.json({ orders: orders.map(({ accessKey, adminNotes, cartId, ...o }) => o) });
+    res.json({ orders: orders.map(({ accessKey, adminNotes, cartId, returns, ...o }) => ({ ...o, ...returnInfo({ ...o, returns }) })) });
 }
 export async function getOrderByNumber(req, res) {
     const { orderNumber } = req.params;
     const key = typeof req.query.key === 'string' ? req.query.key : undefined;
-    const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true } });
+    const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true, returns: { orderBy: { createdAt: 'desc' } } } });
     if (!order)
         throw new AppError('Order not found', 404);
     const isOwner = req.user && (order.userId === req.user.id || order.customerEmail === req.user.email || req.user.role === Role.ADMIN);
     if (!isOwner && !safeEqual(key, order.accessKey)) {
         throw new AppError('Order not found', 404);
     }
-    const { accessKey, adminNotes, cartId, ...publicOrder } = order;
+    const { accessKey, adminNotes, cartId, returns, ...publicOrder } = order;
     res.set('Cache-Control', 'no-store');
-    res.json({ order: { ...publicOrder, shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
+    res.json({ order: { ...publicOrder, ...returnInfo(order), shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
 }
 /** Public order tracking: order number + checkout email. Returns status only (no address or payment details). */
 export async function trackOrder(req, res) {

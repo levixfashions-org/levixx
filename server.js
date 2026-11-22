@@ -1073,7 +1073,7 @@ __export(server_exports, {
 module.exports = __toCommonJS(server_exports);
 
 // src/app.ts
-var import_express11 = __toESM(require("express"), 1);
+var import_express12 = __toESM(require("express"), 1);
 var import_cors = __toESM(require("cors"), 1);
 var import_helmet = __toESM(require("helmet"), 1);
 var import_compression = __toESM(require("compression"), 1);
@@ -2436,1439 +2436,23 @@ var import_express5 = require("express");
 init_errorHandler();
 
 // src/controllers/orderController.ts
-var import_zod6 = require("zod");
-var import_client6 = require("@prisma/client");
-init_db();
-init_env();
-init_errorHandler();
-init_store();
-init_orders();
-var createOrderSchema = import_zod6.z.object({
-  customerEmail: import_zod6.z.string().trim().toLowerCase().email("Enter a valid email address"),
-  customerName: import_zod6.z.string().trim().min(2, "Enter your full name").max(100),
-  customerPhone: addressSchema.shape.phone,
-  shippingAddress: addressSchema.omit({ isDefault: true }),
-  couponCode: import_zod6.z.string().trim().max(40).optional().or(import_zod6.z.literal("")),
-  saveAddress: import_zod6.z.boolean().optional(),
-  paymentMethod: import_zod6.z.enum(["ONLINE", "COD"]).default("ONLINE"),
-  instagram: import_zod6.z.string().max(200).optional().nullable().transform(normalizeInstagram).refine((v) => v === null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores."),
-  // Map pin from "Use my current location" (optional) — helps the courier find the door.
-  deliveryLocation: import_zod6.z.object({
-    lat: import_zod6.z.number().min(6).max(37.6),
-    lng: import_zod6.z.number().min(68).max(97.5),
-    accuracy: import_zod6.z.number().min(0).max(1e5).optional()
-  }).optional().nullable().catch(null)
-});
-async function validateCoupon(req, res) {
-  const { code } = import_zod6.z.object({ code: import_zod6.z.string().trim().min(1).max(40) }).parse(req.body);
-  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
-  const formatted = await formatCart(cart);
-  if (formatted.items.length === 0) throw new AppError("Your bag is empty", 400);
-  const result = await evaluateCoupon(code, formatted.subtotalPaise);
-  res.json(result);
-}
-async function saveCheckoutAddress(req, data2) {
-  if (req.user && data2.instagram) {
-    await prisma.user.update({ where: { id: req.user.id }, data: { instagram: data2.instagram } }).catch(() => void 0);
-  }
-  if (!req.user || !data2.saveAddress) return;
-  const existing = await prisma.address.findFirst({
-    where: { userId: req.user.id, line1: data2.shippingAddress.line1, postalCode: data2.shippingAddress.postalCode }
-  });
-  if (existing) return;
-  const count = await prisma.address.count({ where: { userId: req.user.id } });
-  if (count < 10) {
-    await prisma.address.create({ data: { ...data2.shippingAddress, userId: req.user.id, isDefault: count === 0 } }).catch(() => void 0);
-  }
-}
-async function createOrder(req, res) {
-  const data2 = createOrderSchema.parse(req.body);
-  const isCod = data2.paymentMethod === "COD";
-  if (!isCod && !isRazorpayConfigured()) {
-    throw new AppError("Online payments are temporarily unavailable. Please try again shortly.", 503);
-  }
-  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
-  const items = cart.items.filter((i) => i.variant?.product?.isActive);
-  if (items.length === 0) throw new AppError("Your bag is empty", 400);
-  let subtotalPaise = 0;
-  for (const item of items) {
-    if (item.quantity > item.variant.stockQuantity) {
-      throw new AppError(
-        item.variant.stockQuantity <= 0 ? `${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(" / ")}) just sold out. Please remove it from your bag.` : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(" / ")}). Please update your bag.`,
-        409
-      );
-    }
-    subtotalPaise += (item.variant.product.basePrice + item.variant.priceDelta) * item.quantity;
-  }
-  let discountPaise = 0;
-  let couponCode = null;
-  if (data2.couponCode) {
-    const coupon = await evaluateCoupon(data2.couponCode, subtotalPaise);
-    discountPaise = coupon.discountPaise;
-    couponCode = coupon.code;
-  }
-  const settings = await getSettings();
-  const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
-  let codFeePaise = 0;
-  if (isCod) {
-    if (!settings.codEnabled) throw new AppError("Cash on Delivery is not available right now. Please pay online.", 400);
-    codFeePaise = Math.max(0, Math.round((settings.codFee || 0) * 100));
-  }
-  const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise + codFeePaise;
-  if (totalPaise < 100) throw new AppError("Order total must be at least Rs. 1", 400);
-  if (isCod && settings.codMaxOrder > 0 && totalPaise > settings.codMaxOrder * 100) {
-    throw new AppError(`Cash on Delivery is available for orders up to Rs. ${settings.codMaxOrder.toLocaleString("en-IN")}. Please pay online.`, 400);
-  }
-  const orderNumber = generateOrderNumber();
-  const accessKey = generateAccessKey();
-  const itemRows = items.map((item) => {
-    const unit = item.variant.product.basePrice + item.variant.priceDelta;
-    return {
-      productId: item.variant.product.id,
-      variantId: item.variantId,
-      productName: item.variant.product.name,
-      productSlug: item.variant.product.slug,
-      size: item.variant.size,
-      color: item.variant.color,
-      unitPricePaise: unit,
-      quantity: item.quantity,
-      subtotalPaise: unit * item.quantity,
-      imageUrl: imageForColor(item.variant.product.images, item.variant.color)
-    };
-  });
-  const baseOrder = {
-    orderNumber,
-    accessKey,
-    userId: req.user?.id || null,
-    cartId: cart.id,
-    customerEmail: data2.customerEmail,
-    customerName: data2.customerName,
-    customerPhone: data2.customerPhone,
-    instagram: data2.instagram,
-    shippingAddressSnapshot: {
-      ...data2.shippingAddress,
-      phone: data2.shippingAddress.phone,
-      ...data2.deliveryLocation ? { geo: { lat: +data2.deliveryLocation.lat.toFixed(6), lng: +data2.deliveryLocation.lng.toFixed(6), accuracy: data2.deliveryLocation.accuracy ? Math.round(data2.deliveryLocation.accuracy) : void 0 } } : {}
-    },
-    subtotalPaise,
-    shippingPaise,
-    discountPaise,
-    totalPaise,
-    couponCode
-  };
-  if (isCod) {
-    const order2 = await prisma.$transaction(
-      async (tx) => {
-        const created = await tx.order.create({
-          data: {
-            ...baseOrder,
-            paymentMethod: "COD",
-            codFeePaise,
-            status: import_client6.OrderStatus.PROCESSING,
-            paymentStatus: import_client6.PaymentStatus.PENDING,
-            stockDeducted: true,
-            items: { create: itemRows }
-          }
-        });
-        for (const row of itemRows) {
-          if (!row.variantId) continue;
-          const dec = await tx.productVariant.updateMany({
-            where: { id: row.variantId, stockQuantity: { gte: row.quantity } },
-            data: { stockQuantity: { decrement: row.quantity } }
-          });
-          if (dec.count === 0) {
-            throw new AppError(`${row.productName} (${[row.color, row.size].filter(Boolean).join(" / ")}) just sold out. Please update your bag.`, 409);
-          }
-        }
-        if (couponCode) await tx.coupon.updateMany({ where: { code: couponCode }, data: { usedCount: { increment: 1 } } });
-        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
-        return created;
-      },
-      { timeout: 2e4, maxWait: 1e4 }
-    );
-    await saveCheckoutAddress(req, data2);
-    notifyOrder(order2.id);
-    res.status(201).json({
-      order: { id: order2.id, orderNumber: order2.orderNumber, totalPaise: order2.totalPaise, customerEmail: order2.customerEmail, customerName: order2.customerName },
-      accessKey,
-      paymentMethod: "COD"
-    });
-    return;
-  }
-  let rzpOrder;
-  try {
-    rzpOrder = await getRazorpay().orders.create({
-      amount: totalPaise,
-      currency: "INR",
-      receipt: orderNumber,
-      notes: { orderNumber, customerEmail: data2.customerEmail }
-    });
-  } catch (err) {
-    console.error("Razorpay order creation failed:", err?.statusCode, err?.error || err?.message || err);
-    const rejected = err?.statusCode === 401;
-    throw new AppError(
-      rejected ? "Online payments are being set up and are not available right now. Please try again later. (code RZP-401)" : "Could not start the payment. Please try again in a moment.",
-      rejected ? 503 : 502
-    );
-  }
-  const order = await prisma.order.create({
-    data: {
-      ...baseOrder,
-      paymentMethod: "ONLINE",
-      status: import_client6.OrderStatus.PENDING,
-      paymentStatus: import_client6.PaymentStatus.PENDING,
-      razorpayOrderId: rzpOrder.id,
-      items: { create: itemRows }
-    },
-    include: { items: true }
-  });
-  await saveCheckoutAddress(req, data2);
-  res.status(201).json({
-    order: {
-      id: order.id,
-      orderNumber: order.orderNumber,
-      totalPaise: order.totalPaise,
-      customerEmail: order.customerEmail,
-      customerName: order.customerName
-    },
-    accessKey,
-    razorpayOrderId: rzpOrder.id,
-    amountPaise: totalPaise,
-    currency: "INR",
-    keyId: env.RAZORPAY_KEY_ID
-  });
-}
-async function getUserOrders(req, res) {
-  if (!req.user) throw new AppError("Please sign in to continue.", 401);
-  const orders = await prisma.order.findMany({
-    where: {
-      AND: [
-        { OR: [{ userId: req.user.id }, { customerEmail: req.user.email }] },
-        { OR: [{ paymentStatus: { in: [import_client6.PaymentStatus.PAID, import_client6.PaymentStatus.REFUNDED] } }, { paymentMethod: "COD" }] }
-      ]
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    include: { items: true }
-  });
-  res.set("Cache-Control", "no-store");
-  res.json({ orders: orders.map(({ accessKey, adminNotes, cartId, ...o }) => o) });
-}
-async function getOrderByNumber(req, res) {
-  const { orderNumber } = req.params;
-  const key = typeof req.query.key === "string" ? req.query.key : void 0;
-  const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true } });
-  if (!order) throw new AppError("Order not found", 404);
-  const isOwner = req.user && (order.userId === req.user.id || order.customerEmail === req.user.email || req.user.role === import_client6.Role.ADMIN);
-  if (!isOwner && !safeEqual(key, order.accessKey)) {
-    throw new AppError("Order not found", 404);
-  }
-  const { accessKey, adminNotes, cartId, ...publicOrder } = order;
-  res.set("Cache-Control", "no-store");
-  res.json({ order: { ...publicOrder, shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
-}
-async function trackOrder(req, res) {
-  const { orderNumber, email } = import_zod6.z.object({ orderNumber: import_zod6.z.string().trim().min(5).max(40), email: import_zod6.z.string().trim().toLowerCase().email() }).parse(req.body);
-  const order = await prisma.order.findUnique({
-    where: { orderNumber: orderNumber.toUpperCase() },
-    include: { items: { select: { quantity: true } } }
-  });
-  if (!order || order.customerEmail.toLowerCase() !== email) {
-    throw new AppError("No order found with that number and email", 404);
-  }
-  res.set("Cache-Control", "no-store");
-  res.json({
-    order: {
-      orderNumber: order.orderNumber,
-      status: order.status,
-      paymentStatus: order.paymentStatus,
-      paymentMethod: order.paymentMethod,
-      courier: order.courier,
-      trackingNumber: order.trackingNumber,
-      refundStatus: order.refundStatus,
-      refundAmountPaise: order.refundAmountPaise,
-      refundedAt: order.refundedAt,
-      createdAt: order.createdAt,
-      itemCount: order.items.reduce((a, i) => a + i.quantity, 0)
-    }
-  });
-}
-
-// src/routes/orderRoutes.ts
-var router5 = (0, import_express5.Router)();
-router5.post("/", checkoutRateLimiter, optionalAuth, asyncHandler(createOrder));
-router5.post("/validate-coupon", checkoutRateLimiter, optionalAuth, asyncHandler(validateCoupon));
-router5.post("/track", checkoutRateLimiter, asyncHandler(trackOrder));
-router5.get("/my-orders", verifyFirebaseToken, asyncHandler(getUserOrders));
-router5.get("/:orderNumber", optionalAuth, asyncHandler(getOrderByNumber));
-var orderRoutes_default = router5;
-
-// src/routes/paymentRoutes.ts
-var import_express6 = require("express");
-init_errorHandler();
-
-// src/controllers/paymentController.ts
 var import_zod7 = require("zod");
-var import_client8 = require("@prisma/client");
-init_db();
-init_env();
-init_errorHandler();
-init_orders();
-
-// src/services/refunds.ts
 var import_client7 = require("@prisma/client");
 init_db();
-init_errorHandler();
-init_push();
-var REFUND = {
-  REQUESTING: "REQUESTING",
-  // we are talking to Razorpay right now (guards against double clicks)
-  PROCESSING: "PROCESSING",
-  // Razorpay accepted it; money is on its way (normal speed ≈ 5–7 working days)
-  PROCESSED: "PROCESSED",
-  // money sent back to the customer's original payment method
-  FAILED: "FAILED"
-  // Razorpay refused / failed — can be retried
-};
-function razorpayError(err) {
-  const d = err?.error?.description || err?.error?.reason || err?.message || "Razorpay could not process the refund";
-  return String(d).slice(0, 280);
-}
-async function refundOrder(orderId) {
-  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { payment: true } });
-  if (!order) throw new AppError("Order not found", 404);
-  if (order.paymentMethod === "COD") throw new AppError("Cash on Delivery orders are refunded by you directly (cash/UPI), not through Razorpay.", 400);
-  if (order.paymentStatus !== import_client7.PaymentStatus.PAID && order.paymentStatus !== import_client7.PaymentStatus.REFUNDED) {
-    throw new AppError("This order was never paid online, so there is nothing to refund.", 400);
-  }
-  if (order.refundStatus === REFUND.PROCESSED || order.paymentStatus === import_client7.PaymentStatus.REFUNDED) {
-    throw new AppError("This order has already been refunded.", 400);
-  }
-  if (order.refundStatus === REFUND.PROCESSING) throw new AppError("A refund for this order is already on its way.", 400);
-  if (order.refundStatus === REFUND.REQUESTING) throw new AppError("A refund for this order is being sent right now \u2014 please wait a moment.", 409);
-  const paymentId = order.payment?.razorpayPaymentId;
-  if (!paymentId) throw new AppError("No Razorpay payment ID is saved for this order. Refund it from the Razorpay dashboard instead.", 400);
-  if (!isRazorpayConfigured()) throw new AppError("Razorpay keys are not configured on the server.", 503);
-  const amount = order.payment?.amountPaise || order.totalPaise;
-  if (!amount || amount < 100) throw new AppError("Refund amount is too small (Razorpay minimum is \u20B91).", 400);
-  const lock = await prisma.order.updateMany({
-    where: { id: order.id, OR: [{ refundStatus: null }, { refundStatus: REFUND.FAILED }] },
-    data: { refundStatus: REFUND.REQUESTING, refundError: null, refundRequestedAt: /* @__PURE__ */ new Date() }
-  });
-  if (lock.count !== 1) throw new AppError("A refund for this order is already in progress.", 409);
-  let refund;
-  try {
-    refund = await getRazorpay().payments.refund(paymentId, {
-      amount,
-      speed: "normal",
-      receipt: order.orderNumber.slice(0, 40),
-      notes: { order_number: order.orderNumber, reason: "Order cancelled by LEVIX" }
-    });
-  } catch (err) {
-    const message = razorpayError(err);
-    if (/fully refunded|already been refunded|refunded fully/i.test(message)) {
-      const done = await prisma.order.update({
-        where: { id: order.id },
-        data: { refundStatus: REFUND.PROCESSED, refundAmountPaise: amount, refundedAt: /* @__PURE__ */ new Date(), paymentStatus: import_client7.PaymentStatus.REFUNDED, status: import_client7.OrderStatus.CANCELLED }
-      });
-      await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client7.PaymentStatus.REFUNDED } });
-      broadcastChange("orders");
-      return { order: done, refund: null, alreadyRefunded: true };
-    }
-    await prisma.order.update({ where: { id: order.id }, data: { refundStatus: REFUND.FAILED, refundError: message } });
-    broadcastChange("orders");
-    throw new AppError(`Refund failed: ${message}`, 502);
-  }
-  const processed = refund?.status === "processed";
-  const updated = await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      refundId: String(refund?.id || "").slice(0, 40) || null,
-      refundAmountPaise: Number(refund?.amount) || amount,
-      refundStatus: processed ? REFUND.PROCESSED : REFUND.PROCESSING,
-      refundError: null,
-      ...processed ? { refundedAt: /* @__PURE__ */ new Date(), paymentStatus: import_client7.PaymentStatus.REFUNDED } : {},
-      // A refunded order is always a cancelled order.
-      ...order.status !== import_client7.OrderStatus.CANCELLED ? { status: import_client7.OrderStatus.CANCELLED } : {}
-    }
-  });
-  if (processed) await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client7.PaymentStatus.REFUNDED } });
-  notifyOrderPush(order.id, processed ? "refunded" : "refund_started");
-  broadcastChange("orders");
-  return { order: updated, refund, alreadyRefunded: false };
-}
-async function handleRefundWebhook(event, refundEntity) {
-  const paymentId = refundEntity?.payment_id;
-  if (!paymentId) return;
-  const payment = await prisma.payment.findFirst({ where: { razorpayPaymentId: paymentId }, select: { orderId: true } });
-  if (!payment) return;
-  const order = await prisma.order.findUnique({ where: { id: payment.orderId } });
-  if (!order) return;
-  const base = {
-    refundId: order.refundId || String(refundEntity.id || "").slice(0, 40) || null,
-    refundAmountPaise: Number(refundEntity.amount) || order.refundAmountPaise || order.totalPaise
-  };
-  if (event === "refund.processed") {
-    if (order.refundStatus === REFUND.PROCESSED) return;
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        ...base,
-        refundStatus: REFUND.PROCESSED,
-        refundError: null,
-        refundedAt: /* @__PURE__ */ new Date(),
-        paymentStatus: import_client7.PaymentStatus.REFUNDED,
-        ...order.status !== import_client7.OrderStatus.CANCELLED ? { status: import_client7.OrderStatus.CANCELLED } : {}
-      }
-    });
-    await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client7.PaymentStatus.REFUNDED } });
-    notifyOrderPush(order.id, "refunded");
-  } else if (event === "refund.failed") {
-    if (order.refundStatus === REFUND.PROCESSED) return;
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { ...base, refundStatus: REFUND.FAILED, refundError: String(refundEntity?.error_description || "Refund failed at the bank").slice(0, 280) }
-    });
-  } else if (event === "refund.created") {
-    if (order.refundStatus === REFUND.PROCESSED || order.refundStatus === REFUND.PROCESSING) return;
-    await prisma.order.update({ where: { id: order.id }, data: { ...base, refundStatus: REFUND.PROCESSING, refundRequestedAt: order.refundRequestedAt || /* @__PURE__ */ new Date() } });
-  } else return;
-  broadcastChange("orders");
-}
-
-// src/controllers/paymentController.ts
-var verifySchema = import_zod7.z.object({
-  orderNumber: import_zod7.z.string().min(5).max(40),
-  razorpayOrderId: import_zod7.z.string().min(5).max(60),
-  razorpayPaymentId: import_zod7.z.string().min(5).max(60),
-  razorpaySignature: import_zod7.z.string().min(10).max(200)
-});
-async function verifyPayment(req, res) {
-  const { orderNumber, razorpayOrderId, razorpayPaymentId, razorpaySignature } = verifySchema.parse(req.body);
-  const order = await prisma.order.findUnique({ where: { orderNumber } });
-  if (!order) throw new AppError("Order not found", 404);
-  if (!order.razorpayOrderId || order.razorpayOrderId !== razorpayOrderId) {
-    throw new AppError("Payment does not match this order", 400);
-  }
-  if (!verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
-    await prisma.payment.upsert({
-      where: { orderId: order.id },
-      update: { status: import_client8.PaymentStatus.FAILED, razorpayPaymentId },
-      create: {
-        orderId: order.id,
-        amountPaise: order.totalPaise,
-        razorpayOrderId,
-        razorpayPaymentId,
-        status: import_client8.PaymentStatus.FAILED
-      }
-    }).catch(() => void 0);
-    throw new AppError("Payment verification failed. If money was deducted it will be refunded automatically.", 400);
-  }
-  if (order.paymentStatus !== import_client8.PaymentStatus.PAID) {
-    try {
-      const rzp = getRazorpay();
-      const payment = await rzp.payments.fetch(razorpayPaymentId);
-      if (payment.order_id !== razorpayOrderId || Number(payment.amount) !== order.totalPaise) {
-        throw new AppError("Payment amount mismatch. Please contact support.", 400);
-      }
-      if (payment.status === "authorized") {
-        await rzp.payments.capture(razorpayPaymentId, order.totalPaise, "INR");
-      }
-    } catch (err) {
-      if (err instanceof AppError) throw err;
-      console.warn("Razorpay payment fetch/capture warning:", err?.error?.description || err?.message);
-    }
-    await markOrderPaid(order.id, {
-      razorpayOrderId,
-      razorpayPaymentId,
-      razorpaySignature,
-      amountPaise: order.totalPaise
-    });
-  }
-  res.json({ success: true, orderNumber: order.orderNumber });
-}
-async function handleWebhook(req, res) {
-  if (!env.RAZORPAY_WEBHOOK_SECRET) {
-    console.warn("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not configured \u2014 ignoring.");
-    res.status(503).json({ error: "Webhook not configured" });
-    return;
-  }
-  const signature = req.headers["x-razorpay-signature"];
-  if (!signature || !req.rawBody || !verifyWebhookSignature(req.rawBody, signature)) {
-    res.status(400).json({ error: "Invalid webhook signature" });
-    return;
-  }
-  const event = req.body?.event;
-  if (typeof event === "string" && event.startsWith("refund.")) {
-    try {
-      await handleRefundWebhook(event, req.body?.payload?.refund?.entity);
-    } catch (err) {
-      console.error("Refund webhook error:", err?.message || err);
-    }
-    res.json({ status: "ok" });
-    return;
-  }
-  const paymentEntity = req.body?.payload?.payment?.entity;
-  const rzpOrderId = paymentEntity?.order_id || req.body?.payload?.order?.entity?.id;
-  if (rzpOrderId) {
-    const order = await prisma.order.findUnique({ where: { razorpayOrderId: rzpOrderId } });
-    if (order) {
-      if ((event === "payment.captured" || event === "order.paid") && paymentEntity) {
-        if (Number(paymentEntity.amount) === order.totalPaise) {
-          await markOrderPaid(order.id, {
-            razorpayOrderId: rzpOrderId,
-            razorpayPaymentId: paymentEntity.id,
-            amountPaise: Number(paymentEntity.amount),
-            rawPayload: req.body.payload
-          });
-        } else {
-          console.error(`Webhook amount mismatch for ${order.orderNumber}: ${paymentEntity.amount} vs ${order.totalPaise}`);
-        }
-      } else if (event === "payment.failed" && order.paymentStatus !== import_client8.PaymentStatus.PAID && paymentEntity) {
-        await prisma.payment.upsert({
-          where: { orderId: order.id },
-          update: { status: import_client8.PaymentStatus.FAILED, razorpayPaymentId: paymentEntity.id },
-          create: {
-            orderId: order.id,
-            amountPaise: order.totalPaise,
-            razorpayOrderId: rzpOrderId,
-            razorpayPaymentId: paymentEntity.id,
-            status: import_client8.PaymentStatus.FAILED
-          }
-        }).catch(() => void 0);
-      }
-    }
-  }
-  res.json({ status: "ok" });
-}
-
-// src/routes/paymentRoutes.ts
-var router6 = (0, import_express6.Router)();
-router6.post("/verify", checkoutRateLimiter, asyncHandler(verifyPayment));
-router6.post("/webhook", asyncHandler(handleWebhook));
-var paymentRoutes_default = router6;
-
-// src/routes/adminRoutes.ts
-var import_express7 = __toESM(require("express"), 1);
-init_errorHandler();
-
-// src/utils/zodPatch.ts
-var import_zod8 = require("zod");
-function patchSchema(schema) {
-  const shape = {};
-  for (const [key, field] of Object.entries(schema.shape)) {
-    let inner = field;
-    while (inner instanceof import_zod8.z.ZodDefault) inner = inner.unwrap();
-    shape[key] = inner.optional();
-  }
-  return import_zod8.z.object(shape);
-}
-
-// src/controllers/adminController.ts
-var import_zod9 = require("zod");
-var import_client9 = require("@prisma/client");
-init_db();
+init_env();
 init_errorHandler();
 init_store();
-init_push();
+
+// src/controllers/returnsController.ts
+var import_client6 = require("@prisma/client");
+var import_zod6 = require("zod");
+init_db();
+init_env();
+init_errorHandler();
 init_orders();
-var COUNTED_ORDER = {
-  status: { in: [import_client9.OrderStatus.PAID, import_client9.OrderStatus.PROCESSING, import_client9.OrderStatus.SHIPPED, import_client9.OrderStatus.DELIVERED, import_client9.OrderStatus.PENDING] },
-  paymentStatus: { not: import_client9.PaymentStatus.REFUNDED },
-  OR: [{ paymentStatus: import_client9.PaymentStatus.PAID }, { paymentMethod: "COD" }]
-};
-async function getDashboardMetrics(_req, res) {
-  const startOfToday = /* @__PURE__ */ new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const [paidAgg, todayAgg, paidOrders, toFulfil, totalCustomers, totalProducts, lowStockVariants, recentOrders, subscribers] = await Promise.all([
-    prisma.order.aggregate({ where: { paymentStatus: import_client9.PaymentStatus.PAID }, _sum: { totalPaise: true } }),
-    prisma.order.aggregate({
-      where: { paymentStatus: import_client9.PaymentStatus.PAID, paidAt: { gte: startOfToday } },
-      _sum: { totalPaise: true },
-      _count: true
-    }),
-    prisma.order.count({ where: { paymentStatus: import_client9.PaymentStatus.PAID } }),
-    prisma.order.count({ where: { status: { in: [import_client9.OrderStatus.PAID, import_client9.OrderStatus.PROCESSING] } } }),
-    prisma.user.count({ where: { role: import_client9.Role.CUSTOMER } }),
-    prisma.product.count({ where: { isActive: true } }),
-    prisma.productVariant.findMany({
-      where: { stockQuantity: { lte: 5 }, product: { isActive: true } },
-      orderBy: { stockQuantity: "asc" },
-      include: { product: { select: { name: true, slug: true } } },
-      take: 20
-    }),
-    prisma.order.findMany({
-      where: { paymentStatus: import_client9.PaymentStatus.PAID },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      include: { items: true }
-    }),
-    prisma.subscriber.count()
-  ]);
-  const totalRevenuePaise = paidAgg._sum.totalPaise || 0;
-  res.set("Cache-Control", "no-store");
-  res.json({
-    metrics: {
-      totalOrders: paidOrders,
-      ordersToFulfil: toFulfil,
-      totalRevenuePaise,
-      totalRevenueINR: Math.round(totalRevenuePaise / 100),
-      todayRevenueINR: Math.round((todayAgg._sum.totalPaise || 0) / 100),
-      todayOrders: todayAgg._count,
-      totalCustomers,
-      totalProducts,
-      lowStockAlertsCount: lowStockVariants.length,
-      subscribers
-    },
-    lowStockVariants,
-    recentOrders
-  });
-}
-async function getAllOrders(req, res) {
-  const status = typeof req.query.status === "string" ? req.query.status : void 0;
-  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-  const includeUnpaid = req.query.includeUnpaid === "true";
-  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
-  const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "100"), 10) || 100));
-  const where = {};
-  if (status && status !== "ALL" && Object.values(import_client9.OrderStatus).includes(status)) {
-    where.status = status;
-  } else if (!includeUnpaid) {
-    where.NOT = { status: import_client9.OrderStatus.PENDING, paymentStatus: { not: import_client9.PaymentStatus.PAID } };
-  }
-  if (search) {
-    where.OR = [
-      { orderNumber: { contains: search } },
-      { customerName: { contains: search } },
-      { customerEmail: { contains: search } },
-      { customerPhone: { contains: search } },
-      { instagram: { contains: search.replace(/^@/, "").toLowerCase() } }
-    ];
-  }
-  const [total, orders] = await Promise.all([
-    prisma.order.count({ where }),
-    prisma.order.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * take,
-      take,
-      include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } }
-    })
-  ]);
-  const handles = [...new Set(orders.map((o) => o.instagram).filter(Boolean))];
-  const igCounts = /* @__PURE__ */ new Map();
-  if (handles.length) {
-    const rows = await prisma.order.groupBy({ by: ["instagram"], where: { instagram: { in: handles }, ...COUNTED_ORDER }, _count: { _all: true } });
-    rows.forEach((r) => r.instagram && igCounts.set(r.instagram, r._count._all));
-  }
-  res.set("Cache-Control", "no-store");
-  res.json({
-    orders: orders.map(({ accessKey, ...o }) => ({
-      ...o,
-      instagramOrderCount: o.instagram ? igCounts.get(o.instagram) || 0 : 0,
-      shippingAddress: formatAddress(o.shippingAddressSnapshot)
-    })),
-    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
-  });
-}
-var updateOrderSchema = import_zod9.z.object({
-  status: import_zod9.z.nativeEnum(import_client9.OrderStatus).optional(),
-  courier: import_zod9.z.string().trim().max(100).optional(),
-  trackingNumber: import_zod9.z.string().trim().max(100).optional(),
-  adminNotes: import_zod9.z.string().max(5e3).optional(),
-  markCodPaid: import_zod9.z.boolean().optional()
-});
-async function updateOrder(req, res) {
-  const data2 = updateOrderSchema.parse(req.body);
-  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
-  if (!order) throw new AppError("Order not found", 404);
-  if (data2.status && data2.status !== import_client9.OrderStatus.CANCELLED && order.refundStatus && order.refundStatus !== "FAILED") {
-    throw new AppError("This order has been refunded, so it must stay Cancelled.", 400);
-  }
-  if (data2.status && data2.status !== import_client9.OrderStatus.CANCELLED && data2.status !== import_client9.OrderStatus.PENDING) {
-    if (order.paymentStatus !== import_client9.PaymentStatus.PAID && order.paymentMethod !== "COD") {
-      throw new AppError("This order has not been paid yet, so it cannot be moved to fulfilment", 400);
-    }
-  }
-  if (data2.markCodPaid) {
-    if (order.paymentMethod !== "COD") throw new AppError("Only Cash on Delivery orders can be marked as paid here", 400);
-    if (order.status === import_client9.OrderStatus.CANCELLED) throw new AppError("This order is cancelled", 400);
-  }
-  const updated = await prisma.$transaction(async (tx) => {
-    if (data2.status === import_client9.OrderStatus.CANCELLED && order.status !== import_client9.OrderStatus.CANCELLED && order.stockDeducted) {
-      for (const item of order.items) {
-        if (item.variantId) {
-          await tx.productVariant.updateMany({
-            where: { id: item.variantId },
-            data: { stockQuantity: { increment: item.quantity } }
-          });
-        }
-      }
-    }
-    return tx.order.update({
-      where: { id: order.id },
-      data: {
-        ...data2.status ? { status: data2.status } : {},
-        ...data2.status === import_client9.OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {},
-        ...data2.courier !== void 0 ? { courier: data2.courier || null } : {},
-        ...data2.trackingNumber !== void 0 ? { trackingNumber: data2.trackingNumber || null } : {},
-        ...data2.adminNotes !== void 0 ? { adminNotes: data2.adminNotes || null } : {},
-        ...data2.markCodPaid && order.paymentStatus !== import_client9.PaymentStatus.PAID ? { paymentStatus: import_client9.PaymentStatus.PAID, paidAt: /* @__PURE__ */ new Date() } : {}
-      },
-      include: { items: true }
-    });
-  });
-  if (data2.status && data2.status !== order.status) {
-    if (data2.status === import_client9.OrderStatus.SHIPPED) notifyOrderPush(order.id, "shipped");
-    else if (data2.status === import_client9.OrderStatus.DELIVERED) notifyOrderPush(order.id, "delivered");
-  }
-  const { accessKey, ...o } = updated;
-  res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
-}
-async function deleteOrder(req, res) {
-  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
-  if (!order) throw new AppError("Order not found", 404);
-  const testConfirmed = req.query.test === "1";
-  if (order.paymentStatus === import_client9.PaymentStatus.PAID && !testConfirmed) {
-    throw new AppError("Paid orders are kept for your records. If this was a TEST order, confirm it as a test order to delete it.", 400);
-  }
-  const shipped = ["SHIPPED", "DELIVERED"].includes(String(order.status));
-  await prisma.$transaction(async (tx) => {
-    if (order.stockDeducted && !shipped) {
-      for (const it of order.items) {
-        if (it.variantId) {
-          await tx.productVariant.updateMany({ where: { id: it.variantId }, data: { stockQuantity: { increment: it.quantity } } });
-        }
-      }
-    }
-    await tx.order.delete({ where: { id: order.id } });
-  });
-  res.json({ success: true, stockRestored: Boolean(order.stockDeducted && !shipped) });
-}
-var imageUrl = import_zod9.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+(#lx=[\d.,]+)?$/i.test(v), "Each image must be uploaded or be a full https:// link");
-var imageSchema = import_zod9.z.object({
-  url: imageUrl,
-  altText: import_zod9.z.string().max(200).optional().nullable(),
-  color: import_zod9.z.string().trim().max(40).optional().nullable(),
-  gender: import_zod9.z.enum(["MEN", "WOMEN", "BOTH"]).optional().nullable(),
-  isCover: import_zod9.z.boolean().optional(),
-  sortOrder: import_zod9.z.number().int().optional()
-});
-var variantSchema = import_zod9.z.object({
-  size: import_zod9.z.string().trim().min(1).max(10),
-  color: import_zod9.z.string().trim().max(40).optional().nullable(),
-  colorHex: import_zod9.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod9.z.literal("")),
-  stockQuantity: import_zod9.z.number().int().min(0).max(1e5),
-  priceDelta: import_zod9.z.number().int().default(0)
-});
-var productSchema = import_zod9.z.object({
-  name: import_zod9.z.string().trim().min(2).max(190),
-  slug: import_zod9.z.string().trim().max(120).optional(),
-  description: import_zod9.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
-  details: import_zod9.z.string().max(2e4).optional().nullable(),
-  fabricCare: import_zod9.z.string().max(2e4).optional().nullable(),
-  fitGuide: import_zod9.z.string().max(2e4).optional().nullable(),
-  basePrice: import_zod9.z.number().int().positive("Price must be more than 0"),
-  comparePrice: import_zod9.z.number().int().positive().optional().nullable(),
-  categoryId: import_zod9.z.string().max(120).optional().nullable(),
-  categoryName: import_zod9.z.string().max(120).optional().nullable(),
-  isFeatured: import_zod9.z.boolean().default(false),
-  isActive: import_zod9.z.boolean().default(true),
-  colorGroup: import_zod9.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
-  gender: import_zod9.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
-  collectionIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(50).optional(),
-  images: import_zod9.z.array(imageSchema).min(1, "Add at least one product image").max(60),
-  variants: import_zod9.z.array(variantSchema).min(1, "Add at least one size").max(200)
-});
-async function resolveCategoryId(categoryId, categoryName) {
-  if (categoryId) {
-    const found = await prisma.category.findFirst({ where: { OR: [{ id: categoryId }, { slug: categoryId }] } });
-    if (found) return found.id;
-  }
-  if (categoryName && categoryName.trim()) {
-    const slug = slugify(categoryName);
-    const cat = await prisma.category.upsert({
-      where: { slug },
-      update: {},
-      create: { name: categoryName.trim(), slug }
-    });
-    return cat.id;
-  }
-  return null;
-}
-function normaliseImages(images, productGender) {
-  return images.map((img, idx) => ({
-    url: img.url,
-    altText: img.altText || null,
-    color: img.color?.trim() || null,
-    // Photo tags only matter for tees sold to both men & women; a Men-only or Women-only product's photos follow the product.
-    gender: productGender === "MEN" || productGender === "WOMEN" ? productGender : img.gender || null,
-    sortOrder: idx,
-    isCover: idx === 0
-  }));
-}
-var variantKey = (color, size) => `${(color || "").trim().toLowerCase()}|${size.trim().toUpperCase()}`;
-function buildSku(slug, size, color) {
-  const c = color ? `-${color.toUpperCase().replace(/[^A-Z0-9]+/g, "")}` : "";
-  return `${slug.toUpperCase()}${c}-${size.toUpperCase()}`.slice(0, 180);
-}
-function dedupeVariants(variants) {
-  const map = /* @__PURE__ */ new Map();
-  for (const v of variants) {
-    const color = v.color?.trim() || null;
-    map.set(variantKey(color, v.size), {
-      size: v.size.trim().toUpperCase(),
-      color,
-      colorHex: color && v.colorHex ? v.colorHex.toUpperCase() : null,
-      stockQuantity: v.stockQuantity,
-      priceDelta: v.priceDelta ?? 0
-    });
-  }
-  return [...map.values()];
-}
-async function loadAdminProduct(id) {
-  const p = await prisma.product.findUnique({
-    where: { id },
-    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
-  });
-  return p ? { ...p, collectionIds: p.collections.map((c) => c.collectionId) } : p;
-}
-async function setProductCollections(productId, collectionIds) {
-  const unique = [...new Set(collectionIds)];
-  const valid = await prisma.collection.findMany({ where: { id: { in: unique } }, select: { id: true } });
-  const validIds = valid.map((v) => v.id);
-  await prisma.collectionProduct.deleteMany({ where: { productId, collectionId: { notIn: validIds } } });
-  for (const collectionId of validIds) {
-    const exists = await prisma.collectionProduct.findUnique({ where: { collectionId_productId: { collectionId, productId } } });
-    if (!exists) {
-      const max = await prisma.collectionProduct.aggregate({ where: { collectionId }, _max: { sortOrder: true } });
-      await prisma.collectionProduct.create({ data: { collectionId, productId, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
-    }
-  }
-}
-async function reorderProducts(req, res) {
-  const { ids } = import_zod9.z.object({ ids: import_zod9.z.array(import_zod9.z.string().min(1).max(64)).min(1).max(2e3) }).parse(req.body);
-  const unique = [...new Set(ids)];
-  await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
-  res.json({ success: true, count: unique.length });
-}
-async function pinProduct(req, res) {
-  const { pinned } = import_zod9.z.object({ pinned: import_zod9.z.boolean() }).parse(req.body);
-  const product = await prisma.product.update({ where: { id: req.params.id }, data: { pinned }, select: { id: true, pinned: true } });
-  res.json({ product });
-}
-async function recountSales(_req, res) {
-  const { recomputeSalesScores: recomputeSalesScores2 } = await Promise.resolve().then(() => (init_bestsellers(), bestsellers_exports));
-  const changed = await recomputeSalesScores2();
-  res.json({ success: true, changed });
-}
-async function reorderCategories(req, res) {
-  const { ids } = import_zod9.z.object({ ids: import_zod9.z.array(import_zod9.z.string().min(1).max(64)).min(1).max(500) }).parse(req.body);
-  await prisma.$transaction([...new Set(ids)].map((id, i) => prisma.category.updateMany({ where: { id }, data: { sortOrder: i } })));
-  res.json({ success: true });
-}
-async function getAdminProducts(req, res) {
-  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-  const products = await prisma.product.findMany({
-    where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
-    orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
-    take: 500,
-    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
-  });
-  res.set("Cache-Control", "no-store");
-  res.json({
-    products: products.map((p) => ({ ...serializeProduct(p), collectionIds: p.collections.map((c) => c.collectionId) }))
-  });
-}
-async function createProduct(req, res) {
-  const data2 = productSchema.parse(req.body);
-  const slug = slugify(data2.slug || data2.name);
-  if (!slug) throw new AppError("Please enter a valid product name", 400);
-  if (data2.comparePrice && data2.comparePrice <= data2.basePrice) data2.comparePrice = null;
-  const categoryId = await resolveCategoryId(data2.categoryId, data2.categoryName);
-  const variants = dedupeVariants(data2.variants);
-  const product = await prisma.product.create({
-    data: {
-      name: data2.name,
-      slug,
-      description: data2.description,
-      details: data2.details || null,
-      fabricCare: data2.fabricCare || null,
-      fitGuide: data2.fitGuide || null,
-      basePrice: data2.basePrice,
-      comparePrice: data2.comparePrice || null,
-      isFeatured: data2.isFeatured,
-      isActive: data2.isActive,
-      colorGroup: data2.colorGroup || null,
-      gender: data2.gender,
-      categoryId,
-      images: { create: normaliseImages(data2.images, data2.gender) },
-      variants: {
-        create: variants.map((v) => ({
-          size: v.size,
-          color: v.color,
-          colorHex: v.colorHex,
-          sku: buildSku(slug, v.size, v.color),
-          stockQuantity: v.stockQuantity,
-          priceDelta: v.priceDelta
-        }))
-      }
-    },
-    include: productFullInclude
-  });
-  if (data2.collectionIds?.length) await setProductCollections(product.id, data2.collectionIds);
-  res.status(201).json({ product: serializeProduct(await loadAdminProduct(product.id)) });
-}
-async function updateProduct(req, res) {
-  const { id } = req.params;
-  const data2 = patchSchema(productSchema).parse(req.body);
-  const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
-  if (!existing) throw new AppError("Product not found", 404);
-  const slug = data2.slug !== void 0 || data2.name !== void 0 ? slugify(data2.slug || data2.name || existing.slug) : existing.slug;
-  const basePrice = data2.basePrice ?? existing.basePrice;
-  let comparePrice = data2.comparePrice !== void 0 ? data2.comparePrice : existing.comparePrice;
-  if (comparePrice && comparePrice <= basePrice) comparePrice = null;
-  const categoryId = data2.categoryId !== void 0 || data2.categoryName !== void 0 ? await resolveCategoryId(data2.categoryId, data2.categoryName) : existing.categoryId;
-  await prisma.$transaction(
-    async (tx) => {
-      await tx.product.update({
-        where: { id },
-        data: {
-          ...data2.name !== void 0 ? { name: data2.name } : {},
-          slug,
-          ...data2.description !== void 0 ? { description: data2.description } : {},
-          ...data2.details !== void 0 ? { details: data2.details || null } : {},
-          ...data2.fabricCare !== void 0 ? { fabricCare: data2.fabricCare || null } : {},
-          ...data2.fitGuide !== void 0 ? { fitGuide: data2.fitGuide || null } : {},
-          basePrice,
-          comparePrice: comparePrice || null,
-          categoryId,
-          ...data2.isFeatured !== void 0 ? { isFeatured: data2.isFeatured } : {},
-          ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
-          ...data2.colorGroup !== void 0 ? { colorGroup: data2.colorGroup || null } : {},
-          ...req.body.gender !== void 0 && data2.gender ? { gender: data2.gender } : {}
-        }
-      });
-      if (data2.images) {
-        await tx.productImage.deleteMany({ where: { productId: id } });
-        await tx.productImage.createMany({ data: normaliseImages(data2.images, req.body.gender !== void 0 && data2.gender ? data2.gender : existing.gender).map((img) => ({ ...img, productId: id })) });
-      }
-      if (data2.variants) {
-        const incoming = dedupeVariants(data2.variants);
-        const keys = new Set(incoming.map((v) => variantKey(v.color, v.size)));
-        const removed = existing.variants.filter((v) => !keys.has(variantKey(v.color, v.size)));
-        if (removed.length) {
-          await tx.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } });
-        }
-        const kept = existing.variants.filter((v) => keys.has(variantKey(v.color, v.size)));
-        for (const v of kept) {
-          await tx.productVariant.update({ where: { id: v.id }, data: { sku: `TMP-${v.id}` } });
-        }
-        for (const v of incoming) {
-          const match = kept.find((ev) => variantKey(ev.color, ev.size) === variantKey(v.color, v.size));
-          const data3 = {
-            size: v.size,
-            color: v.color,
-            colorHex: v.colorHex,
-            sku: buildSku(slug, v.size, v.color),
-            stockQuantity: v.stockQuantity,
-            priceDelta: v.priceDelta
-          };
-          if (match) await tx.productVariant.update({ where: { id: match.id }, data: data3 });
-          else await tx.productVariant.create({ data: { ...data3, productId: id } });
-        }
-      } else if (slug !== existing.slug) {
-        for (const v of existing.variants) {
-          await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size, v.color) } });
-        }
-      }
-    },
-    { timeout: 2e4 }
-  );
-  if (data2.collectionIds) await setProductCollections(id, data2.collectionIds);
-  res.json({ product: serializeProduct(await loadAdminProduct(id)) });
-}
-async function deleteProduct(req, res) {
-  const { id } = req.params;
-  const product = await prisma.product.findUnique({ where: { id }, include: { _count: { select: { orderItems: true } } } });
-  if (!product) throw new AppError("Product not found", 404);
-  if (product._count.orderItems > 0) {
-    await prisma.product.update({ where: { id }, data: { isActive: false } });
-    res.json({ success: true, archived: true, message: "Product has past orders, so it was hidden from the store instead of deleted." });
-    return;
-  }
-  await prisma.product.delete({ where: { id } });
-  res.json({ success: true, archived: false });
-}
-var categorySchema = import_zod9.z.object({
-  name: import_zod9.z.string().trim().min(2).max(120),
-  group: import_zod9.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
-  description: import_zod9.z.string().max(2e3).optional().nullable(),
-  imageUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
-  sortOrder: import_zod9.z.number().int().optional(),
-  autoSort: import_zod9.z.boolean().optional()
-});
-async function createCategory(req, res) {
-  const data2 = categorySchema.parse(req.body);
-  const category = await prisma.category.create({
-    data: {
-      name: data2.name,
-      slug: slugify(data2.name),
-      description: data2.description || null,
-      imageUrl: data2.imageUrl || null,
-      sortOrder: data2.sortOrder ?? 0,
-      group: data2.group || "TOP",
-      autoSort: data2.autoSort ?? true
-    }
-  });
-  res.status(201).json({ category });
-}
-async function updateCategory(req, res) {
-  const data2 = patchSchema(categorySchema).parse(req.body);
-  const category = await prisma.category.update({
-    where: { id: req.params.id },
-    data: {
-      ...data2.name !== void 0 ? { name: data2.name } : {},
-      ...data2.description !== void 0 ? { description: data2.description || null } : {},
-      ...data2.imageUrl !== void 0 ? { imageUrl: data2.imageUrl || null } : {},
-      ...data2.sortOrder !== void 0 ? { sortOrder: data2.sortOrder } : {},
-      ...data2.group !== void 0 ? { group: data2.group || "TOP" } : {},
-      ...data2.autoSort !== void 0 ? { autoSort: data2.autoSort } : {}
-    }
-  });
-  res.json({ category });
-}
-async function deleteCategory(req, res) {
-  await prisma.category.delete({ where: { id: req.params.id } });
-  res.json({ success: true });
-}
-var settingsSchema = patchSchema(import_zod9.z.object({
-  announcementText: import_zod9.z.string().max(1e3),
-  heroHeadline: import_zod9.z.string().max(190),
-  heroSubtitle: import_zod9.z.string().max(1e3),
-  supportEmail: import_zod9.z.string().trim().email().or(import_zod9.z.literal("")),
-  supportPhone: import_zod9.z.string().trim().max(30),
-  instagramHandle: import_zod9.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
-  freeShippingThreshold: import_zod9.z.coerce.number().int().min(0).max(1e6),
-  shippingFee: import_zod9.z.coerce.number().int().min(0).max(1e5),
-  announcementEnabled: import_zod9.z.boolean(),
-  googleSiteVerification: import_zod9.z.string().trim().max(300),
-  introTagline: import_zod9.z.string().trim().max(80),
-  introSubline: import_zod9.z.string().trim().max(80),
-  menCoverImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Cover image must be uploaded or a full URL"),
-  womenCoverImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Cover image must be uploaded or a full URL"),
-  heroDesktopImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
-  heroMobileImage: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
-  heroDesktopVideo: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
-  heroMobileVideo: import_zod9.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
-  heroLink: import_zod9.z.string().trim().max(500),
-  legalName: import_zod9.z.string().trim().max(190),
-  businessAddress: import_zod9.z.string().trim().max(1e3),
-  grievanceOfficer: import_zod9.z.string().trim().max(190),
-  gstin: import_zod9.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
-  jurisdictionCity: import_zod9.z.string().trim().max(100),
-  codEnabled: import_zod9.z.boolean(),
-  codFee: import_zod9.z.coerce.number().int().min(0).max(1e3),
-  codMaxOrder: import_zod9.z.coerce.number().int().min(0).max(1e6),
-  heroCtaText: import_zod9.z.string().trim().max(60),
-  latestDropTitle: import_zod9.z.string().trim().max(100),
-  seoTitle: import_zod9.z.string().max(300),
-  seoText: import_zod9.z.string().max(2e4),
-  shippingInfo: import_zod9.z.string().max(5e3),
-  careInfo: import_zod9.z.string().max(5e3)
-}));
-async function getAdminStoreSettings(_req, res) {
-  res.json({ settings: await getSettings() });
-}
-async function updateAdminStoreSettings(req, res) {
-  const data2 = settingsSchema.parse(req.body);
-  const settings = await saveSettings(data2);
-  res.json({ success: true, settings });
-}
-function toDiscountDto(c) {
-  return {
-    id: c.id,
-    code: c.code,
-    type: c.discountType,
-    // percentage → percent; fixed → rupees
-    value: c.discountType === import_client9.DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
-    minOrderPaise: c.minOrderPaise,
-    maxDiscountPaise: c.maxDiscountPaise ?? null,
-    isActive: c.isActive,
-    expiresAt: c.validUntil ? c.validUntil.toISOString().slice(0, 10) : "",
-    maxUses: c.maxUses,
-    usedCount: c.usedCount
-  };
-}
-var discountSchema = import_zod9.z.object({
-  code: import_zod9.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
-  type: import_zod9.z.enum(["PERCENTAGE", "FIXED"]),
-  value: import_zod9.z.coerce.number().positive(),
-  minOrderINR: import_zod9.z.coerce.number().min(0).default(0),
-  maxDiscountINR: import_zod9.z.coerce.number().min(0).max(1e6).optional().nullable(),
-  expiresAt: import_zod9.z.string().optional().or(import_zod9.z.literal("")),
-  isActive: import_zod9.z.boolean().default(true),
-  maxUses: import_zod9.z.coerce.number().int().positive().optional().nullable()
-});
-async function getAdminDiscounts(_req, res) {
-  const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
-  res.json({ discounts: coupons.map(toDiscountDto) });
-}
-async function createAdminDiscount(req, res) {
-  const data2 = discountSchema.parse(req.body);
-  if (data2.type === "PERCENTAGE" && data2.value > 90) throw new AppError("Percentage discount cannot be more than 90%", 400);
-  let validUntil = null;
-  if (data2.expiresAt) {
-    validUntil = /* @__PURE__ */ new Date(`${data2.expiresAt}T23:59:59+05:30`);
-    if (isNaN(validUntil.getTime())) throw new AppError("Invalid expiry date", 400);
-  }
-  const coupon = await prisma.coupon.create({
-    data: {
-      code: data2.code,
-      discountType: data2.type === "FIXED" ? import_client9.DiscountType.FIXED : import_client9.DiscountType.PERCENTAGE,
-      discountValue: data2.type === "FIXED" ? Math.round(data2.value * 100) : Math.round(data2.value),
-      minOrderPaise: Math.round(data2.minOrderINR * 100),
-      maxDiscountPaise: data2.type === "PERCENTAGE" && data2.maxDiscountINR && data2.maxDiscountINR > 0 ? Math.round(data2.maxDiscountINR * 100) : null,
-      isActive: data2.isActive,
-      validUntil,
-      maxUses: data2.maxUses ?? null
-    }
-  });
-  res.status(201).json({ success: true, discount: toDiscountDto(coupon) });
-}
-async function toggleAdminDiscount(req, res) {
-  const coupon = await prisma.coupon.findFirst({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
-  if (!coupon) throw new AppError("Discount code not found", 404);
-  const updated = await prisma.coupon.update({ where: { id: coupon.id }, data: { isActive: !coupon.isActive } });
-  res.json({ success: true, discount: toDiscountDto(updated) });
-}
-async function deleteAdminDiscount(req, res) {
-  await prisma.coupon.deleteMany({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
-  res.json({ success: true });
-}
-async function exportSubscribers(req, res) {
-  const subs = await prisma.subscriber.findMany({ orderBy: { createdAt: "desc" } });
-  if (req.query.format === "json") {
-    res.json({ total: subs.length, subscribers: subs });
-    return;
-  }
-  const csv = ["email,subscribed_at", ...subs.map((s) => `${s.email},${s.createdAt.toISOString()}`)].join("\n");
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", 'attachment; filename="levix-subscribers.csv"');
-  res.send(csv);
-}
-var collectionSchema = import_zod9.z.object({
-  name: import_zod9.z.string().trim().min(2).max(120),
-  slug: import_zod9.z.string().trim().max(120).optional(),
-  description: import_zod9.z.string().max(5e3).optional().nullable(),
-  bannerImageUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
-  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod9.z.literal("")),
-  isActive: import_zod9.z.boolean().default(true),
-  sortOrder: import_zod9.z.coerce.number().int().default(0),
-  homeLayout: import_zod9.z.enum(["NONE", "CAROUSEL", "GRID"]).default("CAROUSEL"),
-  showInGallery: import_zod9.z.boolean().default(false),
-  showInMenu: import_zod9.z.boolean().default(true),
-  productIds: import_zod9.z.array(import_zod9.z.string().max(64)).max(500).optional()
-});
-async function getAdminCollections(_req, res) {
-  const collections = await prisma.collection.findMany({
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    include: { products: { orderBy: { sortOrder: "asc" }, select: { productId: true } } }
-  });
-  res.set("Cache-Control", "no-store");
-  res.json({
-    collections: collections.map(({ products, ...c }) => ({ ...c, productIds: products.map((p) => p.productId) }))
-  });
-}
-async function setCollectionProducts(collectionId, productIds) {
-  const unique = [...new Set(productIds)];
-  const valid = new Set((await prisma.product.findMany({ where: { id: { in: unique } }, select: { id: true } })).map((p) => p.id));
-  const ordered = unique.filter((id) => valid.has(id));
-  await prisma.$transaction([
-    prisma.collectionProduct.deleteMany({ where: { collectionId } }),
-    prisma.collectionProduct.createMany({ data: ordered.map((productId, idx) => ({ collectionId, productId, sortOrder: idx })) })
-  ]);
-}
-async function createCollection(req, res) {
-  const data2 = collectionSchema.parse(req.body);
-  const slug = slugify(data2.slug || data2.name);
-  const clash = await prisma.category.findUnique({ where: { slug } });
-  if (clash) throw new AppError(`"${slug}" is already used by a category. Choose a different name or handle.`, 409);
-  const collection = await prisma.collection.create({
-    data: {
-      name: data2.name,
-      slug,
-      description: data2.description || null,
-      bannerImageUrl: data2.bannerImageUrl || null,
-      mobileBannerUrl: data2.mobileBannerUrl || null,
-      isActive: data2.isActive,
-      sortOrder: data2.sortOrder,
-      homeLayout: data2.homeLayout,
-      showInGallery: data2.showInGallery,
-      showInMenu: data2.showInMenu
-    }
-  });
-  if (data2.productIds) await setCollectionProducts(collection.id, data2.productIds);
-  res.status(201).json({ collection });
-}
-async function updateCollection(req, res) {
-  const data2 = patchSchema(collectionSchema).parse(req.body);
-  const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
-  if (!existing) throw new AppError("Collection not found", 404);
-  const slug = data2.slug !== void 0 ? slugify(data2.slug || data2.name || existing.name) : existing.slug;
-  if (slug !== existing.slug && await prisma.category.findUnique({ where: { slug } })) {
-    throw new AppError(`"${slug}" is already used by a category.`, 409);
-  }
-  const collection = await prisma.collection.update({
-    where: { id: existing.id },
-    data: {
-      ...data2.name !== void 0 ? { name: data2.name } : {},
-      slug,
-      ...data2.description !== void 0 ? { description: data2.description || null } : {},
-      ...data2.bannerImageUrl !== void 0 ? { bannerImageUrl: data2.bannerImageUrl || null } : {},
-      ...data2.mobileBannerUrl !== void 0 ? { mobileBannerUrl: data2.mobileBannerUrl || null } : {},
-      ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
-      ...data2.sortOrder !== void 0 ? { sortOrder: data2.sortOrder } : {},
-      ...data2.homeLayout !== void 0 ? { homeLayout: data2.homeLayout } : {},
-      ...data2.showInGallery !== void 0 ? { showInGallery: data2.showInGallery } : {},
-      ...data2.showInMenu !== void 0 ? { showInMenu: data2.showInMenu } : {}
-    }
-  });
-  if (data2.productIds) await setCollectionProducts(collection.id, data2.productIds);
-  res.json({ collection });
-}
-async function deleteCollection(req, res) {
-  await prisma.collection.delete({ where: { id: req.params.id } });
-  res.json({ success: true });
-}
-var pushSchema = import_zod9.z.object({
-  title: import_zod9.z.string().trim().min(2, "Add a title").max(80),
-  body: import_zod9.z.string().trim().min(2, "Add a message").max(240),
-  url: import_zod9.z.string().trim().max(500).refine((v) => !v || v.startsWith("/") || /^https:\/\//.test(v), "Link must start with / or https://").default("/"),
-  imageUrl: import_zod9.z.string().trim().max(2e3).optional().nullable()
-});
-async function getPushOverview(_req, res) {
-  const [total, android, ios, desktop, signedIn, campaigns] = await Promise.all([
-    prisma.pushSubscription.count(),
-    prisma.pushSubscription.count({ where: { platform: "android" } }),
-    prisma.pushSubscription.count({ where: { platform: "ios" } }),
-    prisma.pushSubscription.count({ where: { platform: "desktop" } }),
-    prisma.pushSubscription.count({ where: { userId: { not: null } } }),
-    prisma.pushCampaign.findMany({ orderBy: { createdAt: "desc" }, take: 30 })
-  ]);
-  res.set("Cache-Control", "no-store");
-  res.json({ subscribers: { total, android, ios, desktop, signedIn }, campaigns });
-}
-async function sendPushCampaign(req, res) {
-  const data2 = pushSchema.parse(req.body);
-  const result = await pushToAll({ title: data2.title, body: data2.body, url: data2.url || "/", image: data2.imageUrl || null, tag: "levix-drop" });
-  const campaign = await prisma.pushCampaign.create({
-    data: {
-      title: data2.title,
-      body: data2.body,
-      url: data2.url || "/",
-      imageUrl: data2.imageUrl || null,
-      targetCount: result.target,
-      sentCount: result.sent,
-      failedCount: result.failed
-    }
-  });
-  res.json({ success: true, campaign, removed: result.removed });
-}
-async function sendPushTest(req, res) {
-  const data2 = pushSchema.parse(req.body);
-  const result = await pushToUser(req.user.id, { title: data2.title, body: data2.body, url: data2.url || "/", image: data2.imageUrl || null, tag: "levix-test" });
-  if (!result.target) {
-    throw new AppError("This device is not subscribed yet. Turn on notifications on your phone (signed in as admin), then try again.", 400);
-  }
-  res.json({ success: true, ...result });
-}
-async function refundAdminOrder(req, res) {
-  const before = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
-  if (!before) throw new AppError("Order not found", 404);
-  if (before.paymentMethod !== "COD" && before.paymentStatus === import_client9.PaymentStatus.PAID && before.status !== import_client9.OrderStatus.CANCELLED) {
-    await prisma.$transaction(async (tx) => {
-      if (before.stockDeducted) {
-        for (const item of before.items) {
-          if (item.variantId) await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: { increment: item.quantity } } });
-        }
-      }
-      await tx.order.update({ where: { id: before.id }, data: { status: import_client9.OrderStatus.CANCELLED, stockDeducted: false } });
-    });
-  }
-  const result = await refundOrder(req.params.id);
-  const full = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } } });
-  const { accessKey, ...o } = full;
-  res.json({ success: true, alreadyRefunded: result.alreadyRefunded, order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
-}
-async function getInstagramCustomers(req, res) {
-  const take = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10) || 200));
-  const rows = await prisma.order.groupBy({
-    by: ["instagram"],
-    where: { instagram: { not: null }, ...COUNTED_ORDER },
-    _count: { _all: true },
-    _sum: { totalPaise: true },
-    _max: { createdAt: true },
-    orderBy: [{ _count: { instagram: "desc" } }],
-    take
-  });
-  const handles = rows.map((r) => r.instagram).filter(Boolean);
-  const latest = handles.length ? await prisma.order.findMany({
-    where: { instagram: { in: handles } },
-    orderBy: { createdAt: "desc" },
-    select: { instagram: true, customerName: true, customerEmail: true, customerPhone: true }
-  }) : [];
-  const who = /* @__PURE__ */ new Map();
-  latest.forEach((o) => o.instagram && !who.has(o.instagram) && who.set(o.instagram, o));
-  const totalWithIg = await prisma.order.count({ where: { instagram: { not: null }, ...COUNTED_ORDER } });
-  const totalAll = await prisma.order.count({ where: COUNTED_ORDER });
-  res.set("Cache-Control", "no-store");
-  res.json({
-    customers: rows.map((r) => ({
-      instagram: r.instagram,
-      orders: r._count._all,
-      spentPaise: r._sum.totalPaise || 0,
-      lastOrderAt: r._max.createdAt,
-      name: who.get(r.instagram)?.customerName || null,
-      email: who.get(r.instagram)?.customerEmail || null,
-      phone: who.get(r.instagram)?.customerPhone || null
-    })).sort((a, b) => b.orders - a.orders || b.spentPaise - a.spentPaise),
-    summary: { handles: rows.length, ordersWithInstagram: totalWithIg, allOrders: totalAll }
-  });
-}
-
-// src/controllers/homeController.ts
-init_bestsellers();
-init_db();
+init_mailer();
 init_store();
-var cache3 = null;
-function invalidateHomeCache() {
-  cache3 = null;
-}
-async function getHome(_req, res) {
-  if (cache3 && cache3.expires > Date.now()) {
-    res.set("Cache-Control", "no-cache");
-    res.json(cache3.body);
-    return;
-  }
-  const [settings, latest, collections, categories, colors, genderRows] = await Promise.all([
-    getSettings(),
-    prisma.product.findMany({
-      where: { isActive: true },
-      orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
-      take: 12,
-      include: productListInclude
-    }),
-    prisma.collection.findMany({
-      where: { isActive: true },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      include: {
-        products: {
-          orderBy: [{ product: { position: "asc" } }, { sortOrder: "asc" }],
-          take: 16,
-          where: { product: { isActive: true } },
-          include: { product: { include: productListInclude } }
-        }
-      }
-    }),
-    prisma.category.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      include: { _count: { select: { products: { where: { isActive: true } } } } }
-    }),
-    prisma.product.findMany({
-      where: { isActive: true, colorGroup: { not: null } },
-      distinct: ["colorGroup"],
-      select: { colorGroup: true }
-    }),
-    prisma.product.findMany({
-      where: { isActive: true },
-      select: {
-        gender: true,
-        categoryId: true,
-        collections: { select: { collectionId: true } },
-        images: { orderBy: { sortOrder: "asc" }, take: 8, select: { url: true, gender: true } }
-      },
-      orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
-      take: 2e3
-    })
-  ]);
-  const departments = ["men", "women"].map((key) => {
-    const want = key === "men" ? "MEN" : "WOMEN";
-    const rows = genderRows.filter((r) => r.gender === want || r.gender === "UNISEX");
-    const catCount = /* @__PURE__ */ new Map();
-    const colIds = /* @__PURE__ */ new Set();
-    rows.forEach((r) => {
-      if (r.categoryId) catCount.set(r.categoryId, (catCount.get(r.categoryId) || 0) + 1);
-      r.collections.forEach((c) => colIds.add(c.collectionId));
-    });
-    return {
-      key,
-      name: key === "men" ? "Men" : "Women",
-      count: rows.length,
-      coverImage: (key === "men" ? settings.menCoverImage : settings.womenCoverImage) || rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || // A tee sold to both: use a photo tagged for this department.
-      rows.flatMap((r) => r.images).find((im) => im.gender === want || im.gender === "BOTH")?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
-      categories: categories.filter((c) => catCount.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || "TOP", count: catCount.get(c.id) || 0 })),
-      collections: collections.filter((c) => c.showInMenu && colIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
-    };
-  });
-  const toSection = (c) => ({
-    id: c.id,
-    name: c.name,
-    slug: c.slug,
-    description: c.description,
-    bannerImageUrl: c.bannerImageUrl,
-    mobileBannerUrl: c.mobileBannerUrl,
-    layout: c.homeLayout,
-    products: c.products.map((cp) => serializeProduct(cp.product))
-  });
-  const catProducts = await prisma.product.findMany({
-    where: { isActive: true, categoryId: { in: categories.map((c) => c.id) } },
-    orderBy: [{ position: "asc" }, { createdAt: "desc" }],
-    take: 600,
-    include: productListInclude
-  });
-  const categorySections = categories.map((c) => {
-    const list = catProducts.filter((p) => p.categoryId === c.id);
-    const ordered = c.autoSort ? sortBestSellers(list) : list;
-    return {
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      description: c.description,
-      bannerImageUrl: c.imageUrl,
-      mobileBannerUrl: null,
-      layout: "CAROUSEL",
-      products: ordered.slice(0, 16).map(serializeProduct)
-    };
-  }).filter((s) => s.products.length > 0);
-  const body = {
-    settings,
-    categorySections,
-    latestDrop: latest.map(serializeProduct),
-    sections: collections.filter((c) => (c.homeLayout === "CAROUSEL" || c.homeLayout === "GRID") && c.products.length > 0).map(toSection),
-    gallery: collections.filter((c) => c.showInGallery && c.bannerImageUrl).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl, mobileBannerUrl: c.mobileBannerUrl })),
-    menu: {
-      collections: collections.filter((c) => c.showInMenu && c.products.length > 0).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl })),
-      categories: categories.map((c) => ({
-        id: c.id,
-        name: c.name,
-        slug: c.slug,
-        group: c.group || "TOP",
-        imageUrl: c.imageUrl,
-        count: c._count.products
-      })),
-      colors: colors.map((c) => c.colorGroup).filter(Boolean),
-      departments
-    }
-  };
-  cache3 = { body, expires: Date.now() + 20 * 1e3 };
-  res.set("Cache-Control", "no-cache");
-  res.json(body);
-}
-
-// src/routes/adminRoutes.ts
-init_store();
-init_bestsellers();
+init_push();
 
 // src/controllers/mediaController.ts
 var import_fs3 = __toESM(require("fs"), 1);
@@ -4073,7 +2657,1698 @@ async function streamVideo(req, res, id, size, chunkCount) {
   res.end();
 }
 
+// src/controllers/returnsController.ts
+var RETURN_WINDOW_HOURS = 48;
+var OPEN = ["REQUESTED", "APPROVED", "PICKED_UP"];
+var MAX_PHOTO_BYTES = 12 * 1024 * 1024;
+var REASONS = {
+  DAMAGED: "Arrived damaged (torn, hole, stain, damaged print)",
+  DEFECTIVE: "Manufacturing defect (stitching, peeling print, seam)",
+  WRONG_ITEM: "Wrong product, colour or size received",
+  MISSING: "Item missing from the parcel"
+};
+var STATUS_TEXT = {
+  REQUESTED: "Request received",
+  APPROVED: "Approved",
+  REJECTED: "Not approved",
+  PICKED_UP: "Item picked up",
+  COMPLETED: "Completed"
+};
+function deliveredTime(o) {
+  return o.deliveredAt || o.updatedAt;
+}
+function returnDeadline(o) {
+  return new Date(deliveredTime(o).getTime() + RETURN_WINDOW_HOURS * 3600 * 1e3);
+}
+async function orderForCustomer(req) {
+  const orderNumber = String(req.params.orderNumber || "");
+  const key = typeof req.query.key === "string" ? req.query.key : void 0;
+  const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true, returns: { orderBy: { createdAt: "desc" } } } });
+  if (!order) throw new AppError("Order not found", 404);
+  const isOwner = req.user && (order.userId === req.user.id || order.customerEmail === req.user.email || req.user.role === import_client6.Role.ADMIN);
+  if (!isOwner && !safeEqual(key, order.accessKey)) throw new AppError("Order not found", 404);
+  return order;
+}
+function assertCanReturn(order) {
+  if (order.status !== import_client6.OrderStatus.DELIVERED) throw new AppError("You can report a problem once your order has been delivered.", 400);
+  if (Date.now() > returnDeadline(order).getTime()) {
+    throw new AppError(`The ${RETURN_WINDOW_HOURS}-hour window to report a problem with this order has closed. Please contact us if you need help.`, 400);
+  }
+  if (order.returns.some((r) => OPEN.includes(r.status))) throw new AppError("You already have an open request for this order \u2014 we will update you soon.", 409);
+}
+function sniffImage(buf) {
+  if (buf.length < 12) return null;
+  if (buf[0] === 255 && buf[1] === 216 && buf[2] === 255) return "jpg";
+  if (buf.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return "png";
+  if (buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return "webp";
+  return null;
+}
+async function uploadReturnPhoto(req, res) {
+  const order = await orderForCustomer(req);
+  assertCanReturn(order);
+  const body = req.body;
+  if (!Buffer.isBuffer(body) || body.length === 0) throw new AppError("No photo received", 400);
+  if (body.length > MAX_PHOTO_BYTES) throw new AppError("Photo is too large (max 12 MB)", 413);
+  const ext = sniffImage(body);
+  if (!ext) throw new AppError("Please upload a JPG, PNG or WEBP photo", 415);
+  const mime = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+  const file = await prisma.mediaFile.create({
+    data: { mime, size: body.length, fileName: `return-${order.orderNumber}`, data: body },
+    select: { id: true }
+  });
+  res.status(201).json({ url: `/media/${file.id}.${ext}` });
+}
+async function uploadReturnVideo(req, res) {
+  const order = await orderForCustomer(req);
+  assertCanReturn(order);
+  await uploadVideoChunk(req, res);
+}
+var mediaUrl = import_zod6.z.string().regex(/^\/media\/[0-9a-f-]{36}\.(jpg|png|webp|mp4|mov|webm)$/i, "Invalid file");
+var createSchema = import_zod6.z.object({
+  reason: import_zod6.z.enum(["DAMAGED", "DEFECTIVE", "WRONG_ITEM", "MISSING"]),
+  resolution: import_zod6.z.enum(["REPLACEMENT", "REFUND"]),
+  details: import_zod6.z.string().trim().min(10, "Please describe the problem in a few words (at least 10 characters)").max(2e3),
+  items: import_zod6.z.array(import_zod6.z.object({ orderItemId: import_zod6.z.string().min(1), quantity: import_zod6.z.number().int().min(1).max(50) })).min(1, "Choose the item(s) with the problem").max(50),
+  photos: import_zod6.z.array(mediaUrl).max(6).default([]),
+  videoUrl: mediaUrl.optional().nullable(),
+  refundUpi: import_zod6.z.string().trim().max(80).optional().nullable()
+});
+async function createReturn(req, res) {
+  const order = await orderForCustomer(req);
+  assertCanReturn(order);
+  const data2 = createSchema.parse(req.body);
+  if (data2.reason !== "MISSING" && data2.photos.length === 0) throw new AppError("Please add at least one clear photo of the problem.", 400);
+  const items = data2.items.map((it) => {
+    const oi = order.items.find((x) => x.id === it.orderItemId);
+    if (!oi) throw new AppError("One of the chosen items is not part of this order", 400);
+    if (it.quantity > oi.quantity) throw new AppError(`You ordered only ${oi.quantity} of ${oi.productName}`, 400);
+    return { orderItemId: oi.id, productName: oi.productName, size: oi.size, color: oi.color, quantity: it.quantity, imageUrl: oi.imageUrl };
+  });
+  const cod = order.paymentMethod === "COD";
+  if (data2.resolution === "REFUND" && cod && !data2.refundUpi) throw new AppError("Please share a UPI ID for the refund (Cash on Delivery orders are refunded by UPI).", 400);
+  const created = await prisma.returnRequest.create({
+    data: {
+      orderId: order.id,
+      reason: data2.reason,
+      resolution: data2.resolution,
+      details: data2.details,
+      items,
+      photos: data2.photos,
+      videoUrl: data2.videoUrl || null,
+      refundUpi: data2.resolution === "REFUND" && cod ? data2.refundUpi || null : null
+    }
+  });
+  notifyNewReturn(order.id, created.id).catch((e) => console.error("Return email failed:", e?.message || e));
+  res.status(201).json({ request: publicReturn(created) });
+}
+function publicReturn(r) {
+  return {
+    id: r.id,
+    reason: r.reason,
+    resolution: r.resolution,
+    details: r.details,
+    items: r.items,
+    photos: r.photos,
+    videoUrl: r.videoUrl,
+    status: r.status,
+    adminNote: r.adminNote,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt
+  };
+}
+function returnInfo(order) {
+  const delivered = order.status === import_client6.OrderStatus.DELIVERED;
+  const deadline = delivered ? returnDeadline(order) : null;
+  const returns = (order.returns || []).map(publicReturn);
+  const open = returns.some((r) => OPEN.includes(r.status));
+  return {
+    returns,
+    returnWindowHours: RETURN_WINDOW_HOURS,
+    returnDeadline: deadline,
+    canReturn: Boolean(delivered && deadline && Date.now() <= deadline.getTime() && !open)
+  };
+}
+var esc4 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+async function notifyNewReturn(orderId, returnId) {
+  if (!isMailConfigured()) return;
+  const [order, r, settings] = await Promise.all([
+    prisma.order.findUnique({ where: { id: orderId } }),
+    prisma.returnRequest.findUnique({ where: { id: returnId } }),
+    getSettings()
+  ]);
+  if (!order || !r) return;
+  const SITE3 = env.FRONTEND_URL || "https://thelevix.shop";
+  const items = r.items.map((i) => `${i.productName} (${[i.color, i.size].filter(Boolean).join(" / ")}) \xD7 ${i.quantity}`).join(", ");
+  const reason = REASONS[r.reason] || r.reason;
+  const name = (order.customerName || "").trim().split(" ")[0] || "there";
+  const jobs = [];
+  const cust = brandedEmail({
+    preheader: `We received your request for order ${order.orderNumber}.`,
+    title: "Request received",
+    greeting: `Hi ${name},`,
+    body: `We have received your ${r.resolution === "REFUND" ? "refund" : "replacement"} request for order ${order.orderNumber} (${reason}). Our team will review it within 2 business days and update you by email. Please keep the product unused with its tags and packaging until then.`,
+    button: "View request",
+    link: `${SITE3}/order-success/${encodeURIComponent(order.orderNumber)}${order.accessKey ? `?key=${encodeURIComponent(order.accessKey)}` : ""}`,
+    footnote: "You can follow the status of your request on your order page at any time."
+  });
+  jobs.push(sendMail(order.customerEmail, `Return request received \u2014 ${order.orderNumber} | LEVIX`, cust.html, cust.text));
+  const owner = settings.supportEmail || env.ADMIN_EMAILS[0];
+  if (owner) {
+    const photos = r.photos.map((p) => `<a href="${SITE3}${esc4(p)}">${SITE3}${esc4(p)}</a>`).join("<br>");
+    const html = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111">
+<h2 style="margin:0 0 8px">New return request \u2014 ${esc4(order.orderNumber)}</h2>
+<p><b>${esc4(order.customerName)}</b> \xB7 ${esc4(order.customerEmail)} \xB7 ${esc4(order.customerPhone || "")}</p>
+<p><b>Reason:</b> ${esc4(reason)}<br><b>Wants:</b> ${r.resolution === "REFUND" ? "Refund" : "Replacement"}${r.refundUpi ? ` (UPI ${esc4(r.refundUpi)})` : ""}<br><b>Items:</b> ${esc4(items)}</p>
+<p><b>Details:</b><br>${esc4(r.details).replace(/\n/g, "<br>")}</p>
+${photos ? `<p><b>Photos:</b><br>${photos}</p>` : ""}
+${r.videoUrl ? `<p><b>Unboxing video:</b> <a href="${SITE3}${esc4(r.videoUrl)}">${SITE3}${esc4(r.videoUrl)}</a></p>` : "<p><b>Unboxing video:</b> not uploaded</p>"}
+<p><a href="${SITE3}/admin/returns" style="display:inline-block;background:#000;color:#fff;padding:12px 22px;text-decoration:none;font-weight:bold">Review in admin</a></p></div>`;
+    const text = `New return request ${order.orderNumber}
+${order.customerName} ${order.customerEmail} ${order.customerPhone}
+Reason: ${reason}
+Wants: ${r.resolution}
+Items: ${items}
+Details: ${r.details}
+Review: ${SITE3}/admin/returns`;
+    jobs.push(sendMail(owner, `\u21A9\uFE0F Return request ${order.orderNumber} \u2014 ${reason}`, html, text));
+  }
+  await Promise.allSettled(jobs);
+}
+async function notifyReturnUpdate(returnId) {
+  const r = await prisma.returnRequest.findUnique({ where: { id: returnId }, include: { order: true } });
+  if (!r) return;
+  const order = r.order;
+  const SITE3 = env.FRONTEND_URL || "https://thelevix.shop";
+  const link = `${SITE3}/order-success/${encodeURIComponent(order.orderNumber)}${order.accessKey ? `?key=${encodeURIComponent(order.accessKey)}` : ""}`;
+  const name = (order.customerName || "").trim().split(" ")[0] || "there";
+  const replace = r.resolution === "REPLACEMENT";
+  const bodies = {
+    APPROVED: `Good news \u2014 your ${replace ? "replacement" : "refund"} request for order ${order.orderNumber} has been approved. We will arrange a pickup of the item (or contact you with the next step) shortly.`,
+    REJECTED: `We have reviewed your request for order ${order.orderNumber} and unfortunately could not approve it.`,
+    PICKED_UP: `We have collected the item from order ${order.orderNumber}. Once it reaches us and is checked, we will ${replace ? "ship your replacement" : "start your refund"}.`,
+    COMPLETED: replace ? `Your replacement for order ${order.orderNumber} has been sent. Thank you for your patience!` : `Your refund for order ${order.orderNumber} has been processed. It usually shows in your account within 5\u20137 business days.`
+  };
+  const body = bodies[r.status];
+  if (!body) return;
+  const note = r.adminNote ? ` Note from LEVIX: ${r.adminNote}` : "";
+  if (order.userId) {
+    pushToUser(order.userId, { title: `Return update: ${STATUS_TEXT[r.status]}`, body: body + note, url: "/account/orders", tag: `return-${order.orderNumber}` }).catch(() => void 0);
+  }
+  if (!isMailConfigured()) return;
+  const mail = brandedEmail({
+    preheader: `Update on your request for order ${order.orderNumber}`,
+    title: `Return ${STATUS_TEXT[r.status].toLowerCase()}`,
+    greeting: `Hi ${name},`,
+    body: body + note,
+    button: "View request",
+    link,
+    footnote: "Questions? Just reply to this email."
+  });
+  await sendMail(order.customerEmail, `Return update \u2014 ${STATUS_TEXT[r.status]} \u2014 ${order.orderNumber} | LEVIX`, mail.html, mail.text);
+}
+async function listReturns(req, res) {
+  const status = String(req.query.status || "OPEN").toUpperCase();
+  const where = status === "ALL" ? {} : status === "OPEN" ? { status: { in: OPEN } } : { status };
+  const [rows, counts] = await Promise.all([
+    prisma.returnRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            customerName: true,
+            customerEmail: true,
+            customerPhone: true,
+            paymentMethod: true,
+            paymentStatus: true,
+            totalPaise: true,
+            status: true,
+            deliveredAt: true,
+            updatedAt: true,
+            refundStatus: true
+          }
+        }
+      }
+    }),
+    prisma.returnRequest.groupBy({ by: ["status"], _count: { _all: true } })
+  ]);
+  res.set("Cache-Control", "no-store");
+  res.json({
+    returns: rows.map((r) => ({ ...r, order: { ...r.order, deliveredAt: deliveredTime(r.order) } })),
+    counts: Object.fromEntries(counts.map((c) => [c.status, c._count._all]))
+  });
+}
+var updateSchema = import_zod6.z.object({
+  status: import_zod6.z.enum(["REQUESTED", "APPROVED", "REJECTED", "PICKED_UP", "COMPLETED"]).optional(),
+  adminNote: import_zod6.z.string().max(2e3).optional()
+});
+async function updateReturn(req, res) {
+  const data2 = updateSchema.parse(req.body);
+  const before = await prisma.returnRequest.findUnique({ where: { id: req.params.id } });
+  if (!before) throw new AppError("Request not found", 404);
+  const updated = await prisma.returnRequest.update({
+    where: { id: before.id },
+    data: {
+      ...data2.status ? { status: data2.status } : {},
+      ...data2.adminNote !== void 0 ? { adminNote: data2.adminNote.trim() || null } : {}
+    }
+  });
+  if (data2.status && data2.status !== before.status) notifyReturnUpdate(updated.id).catch((e) => console.error("Return update email failed:", e?.message || e));
+  res.json({ request: updated });
+}
+
+// src/controllers/orderController.ts
+init_orders();
+var createOrderSchema = import_zod7.z.object({
+  customerEmail: import_zod7.z.string().trim().toLowerCase().email("Enter a valid email address"),
+  customerName: import_zod7.z.string().trim().min(2, "Enter your full name").max(100),
+  customerPhone: addressSchema.shape.phone,
+  shippingAddress: addressSchema.omit({ isDefault: true }),
+  couponCode: import_zod7.z.string().trim().max(40).optional().or(import_zod7.z.literal("")),
+  saveAddress: import_zod7.z.boolean().optional(),
+  paymentMethod: import_zod7.z.enum(["ONLINE", "COD"]).default("ONLINE"),
+  instagram: import_zod7.z.string().max(200).optional().nullable().transform(normalizeInstagram).refine((v) => v === null || INSTAGRAM_RE.test(v), "That Instagram ID doesn't look right. Use letters, numbers, dots or underscores."),
+  // Map pin from "Use my current location" (optional) — helps the courier find the door.
+  deliveryLocation: import_zod7.z.object({
+    lat: import_zod7.z.number().min(6).max(37.6),
+    lng: import_zod7.z.number().min(68).max(97.5),
+    accuracy: import_zod7.z.number().min(0).max(1e5).optional()
+  }).optional().nullable().catch(null)
+});
+async function validateCoupon(req, res) {
+  const { code } = import_zod7.z.object({ code: import_zod7.z.string().trim().min(1).max(40) }).parse(req.body);
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const formatted = await formatCart(cart);
+  if (formatted.items.length === 0) throw new AppError("Your bag is empty", 400);
+  const result = await evaluateCoupon(code, formatted.subtotalPaise);
+  res.json(result);
+}
+async function saveCheckoutAddress(req, data2) {
+  if (req.user && data2.instagram) {
+    await prisma.user.update({ where: { id: req.user.id }, data: { instagram: data2.instagram } }).catch(() => void 0);
+  }
+  if (!req.user || !data2.saveAddress) return;
+  const existing = await prisma.address.findFirst({
+    where: { userId: req.user.id, line1: data2.shippingAddress.line1, postalCode: data2.shippingAddress.postalCode }
+  });
+  if (existing) return;
+  const count = await prisma.address.count({ where: { userId: req.user.id } });
+  if (count < 10) {
+    await prisma.address.create({ data: { ...data2.shippingAddress, userId: req.user.id, isDefault: count === 0 } }).catch(() => void 0);
+  }
+}
+async function createOrder(req, res) {
+  const data2 = createOrderSchema.parse(req.body);
+  const isCod = data2.paymentMethod === "COD";
+  if (!isCod && !isRazorpayConfigured()) {
+    throw new AppError("Online payments are temporarily unavailable. Please try again shortly.", 503);
+  }
+  const cart = await resolveCart(req.user?.id, getAnonymousToken(req));
+  const items = cart.items.filter((i) => i.variant?.product?.isActive);
+  if (items.length === 0) throw new AppError("Your bag is empty", 400);
+  let subtotalPaise = 0;
+  for (const item of items) {
+    if (item.quantity > item.variant.stockQuantity) {
+      throw new AppError(
+        item.variant.stockQuantity <= 0 ? `${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(" / ")}) just sold out. Please remove it from your bag.` : `Only ${item.variant.stockQuantity} left of ${item.variant.product.name} (${[item.variant.color, item.variant.size].filter(Boolean).join(" / ")}). Please update your bag.`,
+        409
+      );
+    }
+    subtotalPaise += (item.variant.product.basePrice + item.variant.priceDelta) * item.quantity;
+  }
+  let discountPaise = 0;
+  let couponCode = null;
+  if (data2.couponCode) {
+    const coupon = await evaluateCoupon(data2.couponCode, subtotalPaise);
+    discountPaise = coupon.discountPaise;
+    couponCode = coupon.code;
+  }
+  const settings = await getSettings();
+  const shippingPaise = calculateShippingPaise(subtotalPaise, settings);
+  let codFeePaise = 0;
+  if (isCod) {
+    if (!settings.codEnabled) throw new AppError("Cash on Delivery is not available right now. Please pay online.", 400);
+    codFeePaise = Math.max(0, Math.round((settings.codFee || 0) * 100));
+  }
+  const totalPaise = Math.max(0, subtotalPaise - discountPaise) + shippingPaise + codFeePaise;
+  if (totalPaise < 100) throw new AppError("Order total must be at least Rs. 1", 400);
+  if (isCod && settings.codMaxOrder > 0 && totalPaise > settings.codMaxOrder * 100) {
+    throw new AppError(`Cash on Delivery is available for orders up to Rs. ${settings.codMaxOrder.toLocaleString("en-IN")}. Please pay online.`, 400);
+  }
+  const orderNumber = generateOrderNumber();
+  const accessKey = generateAccessKey();
+  const itemRows = items.map((item) => {
+    const unit = item.variant.product.basePrice + item.variant.priceDelta;
+    return {
+      productId: item.variant.product.id,
+      variantId: item.variantId,
+      productName: item.variant.product.name,
+      productSlug: item.variant.product.slug,
+      size: item.variant.size,
+      color: item.variant.color,
+      unitPricePaise: unit,
+      quantity: item.quantity,
+      subtotalPaise: unit * item.quantity,
+      imageUrl: imageForColor(item.variant.product.images, item.variant.color)
+    };
+  });
+  const baseOrder = {
+    orderNumber,
+    accessKey,
+    userId: req.user?.id || null,
+    cartId: cart.id,
+    customerEmail: data2.customerEmail,
+    customerName: data2.customerName,
+    customerPhone: data2.customerPhone,
+    instagram: data2.instagram,
+    shippingAddressSnapshot: {
+      ...data2.shippingAddress,
+      phone: data2.shippingAddress.phone,
+      ...data2.deliveryLocation ? { geo: { lat: +data2.deliveryLocation.lat.toFixed(6), lng: +data2.deliveryLocation.lng.toFixed(6), accuracy: data2.deliveryLocation.accuracy ? Math.round(data2.deliveryLocation.accuracy) : void 0 } } : {}
+    },
+    subtotalPaise,
+    shippingPaise,
+    discountPaise,
+    totalPaise,
+    couponCode
+  };
+  if (isCod) {
+    const order2 = await prisma.$transaction(
+      async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            ...baseOrder,
+            paymentMethod: "COD",
+            codFeePaise,
+            status: import_client7.OrderStatus.PROCESSING,
+            paymentStatus: import_client7.PaymentStatus.PENDING,
+            stockDeducted: true,
+            items: { create: itemRows }
+          }
+        });
+        for (const row of itemRows) {
+          if (!row.variantId) continue;
+          const dec = await tx.productVariant.updateMany({
+            where: { id: row.variantId, stockQuantity: { gte: row.quantity } },
+            data: { stockQuantity: { decrement: row.quantity } }
+          });
+          if (dec.count === 0) {
+            throw new AppError(`${row.productName} (${[row.color, row.size].filter(Boolean).join(" / ")}) just sold out. Please update your bag.`, 409);
+          }
+        }
+        if (couponCode) await tx.coupon.updateMany({ where: { code: couponCode }, data: { usedCount: { increment: 1 } } });
+        await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+        return created;
+      },
+      { timeout: 2e4, maxWait: 1e4 }
+    );
+    await saveCheckoutAddress(req, data2);
+    notifyOrder(order2.id);
+    res.status(201).json({
+      order: { id: order2.id, orderNumber: order2.orderNumber, totalPaise: order2.totalPaise, customerEmail: order2.customerEmail, customerName: order2.customerName },
+      accessKey,
+      paymentMethod: "COD"
+    });
+    return;
+  }
+  let rzpOrder;
+  try {
+    rzpOrder = await getRazorpay().orders.create({
+      amount: totalPaise,
+      currency: "INR",
+      receipt: orderNumber,
+      notes: { orderNumber, customerEmail: data2.customerEmail }
+    });
+  } catch (err) {
+    console.error("Razorpay order creation failed:", err?.statusCode, err?.error || err?.message || err);
+    const rejected = err?.statusCode === 401;
+    throw new AppError(
+      rejected ? "Online payments are being set up and are not available right now. Please try again later. (code RZP-401)" : "Could not start the payment. Please try again in a moment.",
+      rejected ? 503 : 502
+    );
+  }
+  const order = await prisma.order.create({
+    data: {
+      ...baseOrder,
+      paymentMethod: "ONLINE",
+      status: import_client7.OrderStatus.PENDING,
+      paymentStatus: import_client7.PaymentStatus.PENDING,
+      razorpayOrderId: rzpOrder.id,
+      items: { create: itemRows }
+    },
+    include: { items: true }
+  });
+  await saveCheckoutAddress(req, data2);
+  res.status(201).json({
+    order: {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      totalPaise: order.totalPaise,
+      customerEmail: order.customerEmail,
+      customerName: order.customerName
+    },
+    accessKey,
+    razorpayOrderId: rzpOrder.id,
+    amountPaise: totalPaise,
+    currency: "INR",
+    keyId: env.RAZORPAY_KEY_ID
+  });
+}
+async function getUserOrders(req, res) {
+  if (!req.user) throw new AppError("Please sign in to continue.", 401);
+  const orders = await prisma.order.findMany({
+    where: {
+      AND: [
+        { OR: [{ userId: req.user.id }, { customerEmail: req.user.email }] },
+        { OR: [{ paymentStatus: { in: [import_client7.PaymentStatus.PAID, import_client7.PaymentStatus.REFUNDED] } }, { paymentMethod: "COD" }] }
+      ]
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { items: true, returns: { orderBy: { createdAt: "desc" } } }
+  });
+  res.set("Cache-Control", "no-store");
+  res.json({ orders: orders.map(({ accessKey, adminNotes, cartId, returns, ...o }) => ({ ...o, ...returnInfo({ ...o, returns }) })) });
+}
+async function getOrderByNumber(req, res) {
+  const { orderNumber } = req.params;
+  const key = typeof req.query.key === "string" ? req.query.key : void 0;
+  const order = await prisma.order.findUnique({ where: { orderNumber }, include: { items: true, returns: { orderBy: { createdAt: "desc" } } } });
+  if (!order) throw new AppError("Order not found", 404);
+  const isOwner = req.user && (order.userId === req.user.id || order.customerEmail === req.user.email || req.user.role === import_client7.Role.ADMIN);
+  if (!isOwner && !safeEqual(key, order.accessKey)) {
+    throw new AppError("Order not found", 404);
+  }
+  const { accessKey, adminNotes, cartId, returns, ...publicOrder } = order;
+  res.set("Cache-Control", "no-store");
+  res.json({ order: { ...publicOrder, ...returnInfo(order), shippingAddress: formatAddress(order.shippingAddressSnapshot) } });
+}
+async function trackOrder(req, res) {
+  const { orderNumber, email } = import_zod7.z.object({ orderNumber: import_zod7.z.string().trim().min(5).max(40), email: import_zod7.z.string().trim().toLowerCase().email() }).parse(req.body);
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: orderNumber.toUpperCase() },
+    include: { items: { select: { quantity: true } } }
+  });
+  if (!order || order.customerEmail.toLowerCase() !== email) {
+    throw new AppError("No order found with that number and email", 404);
+  }
+  res.set("Cache-Control", "no-store");
+  res.json({
+    order: {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      courier: order.courier,
+      trackingNumber: order.trackingNumber,
+      refundStatus: order.refundStatus,
+      refundAmountPaise: order.refundAmountPaise,
+      refundedAt: order.refundedAt,
+      createdAt: order.createdAt,
+      itemCount: order.items.reduce((a, i) => a + i.quantity, 0)
+    }
+  });
+}
+
+// src/routes/orderRoutes.ts
+var router5 = (0, import_express5.Router)();
+router5.post("/", checkoutRateLimiter, optionalAuth, asyncHandler(createOrder));
+router5.post("/validate-coupon", checkoutRateLimiter, optionalAuth, asyncHandler(validateCoupon));
+router5.post("/track", checkoutRateLimiter, asyncHandler(trackOrder));
+router5.get("/my-orders", verifyFirebaseToken, asyncHandler(getUserOrders));
+router5.get("/:orderNumber", optionalAuth, asyncHandler(getOrderByNumber));
+var orderRoutes_default = router5;
+
+// src/routes/paymentRoutes.ts
+var import_express6 = require("express");
+init_errorHandler();
+
+// src/controllers/paymentController.ts
+var import_zod8 = require("zod");
+var import_client9 = require("@prisma/client");
+init_db();
+init_env();
+init_errorHandler();
+init_orders();
+
+// src/services/refunds.ts
+var import_client8 = require("@prisma/client");
+init_db();
+init_errorHandler();
+init_push();
+var REFUND = {
+  REQUESTING: "REQUESTING",
+  // we are talking to Razorpay right now (guards against double clicks)
+  PROCESSING: "PROCESSING",
+  // Razorpay accepted it; money is on its way (normal speed ≈ 5–7 working days)
+  PROCESSED: "PROCESSED",
+  // money sent back to the customer's original payment method
+  FAILED: "FAILED"
+  // Razorpay refused / failed — can be retried
+};
+function razorpayError(err) {
+  const d = err?.error?.description || err?.error?.reason || err?.message || "Razorpay could not process the refund";
+  return String(d).slice(0, 280);
+}
+async function refundOrder(orderId) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { payment: true } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (order.paymentMethod === "COD") throw new AppError("Cash on Delivery orders are refunded by you directly (cash/UPI), not through Razorpay.", 400);
+  if (order.paymentStatus !== import_client8.PaymentStatus.PAID && order.paymentStatus !== import_client8.PaymentStatus.REFUNDED) {
+    throw new AppError("This order was never paid online, so there is nothing to refund.", 400);
+  }
+  if (order.refundStatus === REFUND.PROCESSED || order.paymentStatus === import_client8.PaymentStatus.REFUNDED) {
+    throw new AppError("This order has already been refunded.", 400);
+  }
+  if (order.refundStatus === REFUND.PROCESSING) throw new AppError("A refund for this order is already on its way.", 400);
+  if (order.refundStatus === REFUND.REQUESTING) throw new AppError("A refund for this order is being sent right now \u2014 please wait a moment.", 409);
+  const paymentId = order.payment?.razorpayPaymentId;
+  if (!paymentId) throw new AppError("No Razorpay payment ID is saved for this order. Refund it from the Razorpay dashboard instead.", 400);
+  if (!isRazorpayConfigured()) throw new AppError("Razorpay keys are not configured on the server.", 503);
+  const amount = order.payment?.amountPaise || order.totalPaise;
+  if (!amount || amount < 100) throw new AppError("Refund amount is too small (Razorpay minimum is \u20B91).", 400);
+  const lock = await prisma.order.updateMany({
+    where: { id: order.id, OR: [{ refundStatus: null }, { refundStatus: REFUND.FAILED }] },
+    data: { refundStatus: REFUND.REQUESTING, refundError: null, refundRequestedAt: /* @__PURE__ */ new Date() }
+  });
+  if (lock.count !== 1) throw new AppError("A refund for this order is already in progress.", 409);
+  let refund;
+  try {
+    refund = await getRazorpay().payments.refund(paymentId, {
+      amount,
+      speed: "normal",
+      receipt: order.orderNumber.slice(0, 40),
+      notes: { order_number: order.orderNumber, reason: "Order cancelled by LEVIX" }
+    });
+  } catch (err) {
+    const message = razorpayError(err);
+    if (/fully refunded|already been refunded|refunded fully/i.test(message)) {
+      const done = await prisma.order.update({
+        where: { id: order.id },
+        data: { refundStatus: REFUND.PROCESSED, refundAmountPaise: amount, refundedAt: /* @__PURE__ */ new Date(), paymentStatus: import_client8.PaymentStatus.REFUNDED, status: import_client8.OrderStatus.CANCELLED }
+      });
+      await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client8.PaymentStatus.REFUNDED } });
+      broadcastChange("orders");
+      return { order: done, refund: null, alreadyRefunded: true };
+    }
+    await prisma.order.update({ where: { id: order.id }, data: { refundStatus: REFUND.FAILED, refundError: message } });
+    broadcastChange("orders");
+    throw new AppError(`Refund failed: ${message}`, 502);
+  }
+  const processed = refund?.status === "processed";
+  const updated = await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      refundId: String(refund?.id || "").slice(0, 40) || null,
+      refundAmountPaise: Number(refund?.amount) || amount,
+      refundStatus: processed ? REFUND.PROCESSED : REFUND.PROCESSING,
+      refundError: null,
+      ...processed ? { refundedAt: /* @__PURE__ */ new Date(), paymentStatus: import_client8.PaymentStatus.REFUNDED } : {},
+      // A refunded order is always a cancelled order.
+      ...order.status !== import_client8.OrderStatus.CANCELLED ? { status: import_client8.OrderStatus.CANCELLED } : {}
+    }
+  });
+  if (processed) await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client8.PaymentStatus.REFUNDED } });
+  notifyOrderPush(order.id, processed ? "refunded" : "refund_started");
+  broadcastChange("orders");
+  return { order: updated, refund, alreadyRefunded: false };
+}
+async function handleRefundWebhook(event, refundEntity) {
+  const paymentId = refundEntity?.payment_id;
+  if (!paymentId) return;
+  const payment = await prisma.payment.findFirst({ where: { razorpayPaymentId: paymentId }, select: { orderId: true } });
+  if (!payment) return;
+  const order = await prisma.order.findUnique({ where: { id: payment.orderId } });
+  if (!order) return;
+  const base = {
+    refundId: order.refundId || String(refundEntity.id || "").slice(0, 40) || null,
+    refundAmountPaise: Number(refundEntity.amount) || order.refundAmountPaise || order.totalPaise
+  };
+  if (event === "refund.processed") {
+    if (order.refundStatus === REFUND.PROCESSED) return;
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        ...base,
+        refundStatus: REFUND.PROCESSED,
+        refundError: null,
+        refundedAt: /* @__PURE__ */ new Date(),
+        paymentStatus: import_client8.PaymentStatus.REFUNDED,
+        ...order.status !== import_client8.OrderStatus.CANCELLED ? { status: import_client8.OrderStatus.CANCELLED } : {}
+      }
+    });
+    await prisma.payment.updateMany({ where: { orderId: order.id }, data: { status: import_client8.PaymentStatus.REFUNDED } });
+    notifyOrderPush(order.id, "refunded");
+  } else if (event === "refund.failed") {
+    if (order.refundStatus === REFUND.PROCESSED) return;
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { ...base, refundStatus: REFUND.FAILED, refundError: String(refundEntity?.error_description || "Refund failed at the bank").slice(0, 280) }
+    });
+  } else if (event === "refund.created") {
+    if (order.refundStatus === REFUND.PROCESSED || order.refundStatus === REFUND.PROCESSING) return;
+    await prisma.order.update({ where: { id: order.id }, data: { ...base, refundStatus: REFUND.PROCESSING, refundRequestedAt: order.refundRequestedAt || /* @__PURE__ */ new Date() } });
+  } else return;
+  broadcastChange("orders");
+}
+
+// src/controllers/paymentController.ts
+var verifySchema = import_zod8.z.object({
+  orderNumber: import_zod8.z.string().min(5).max(40),
+  razorpayOrderId: import_zod8.z.string().min(5).max(60),
+  razorpayPaymentId: import_zod8.z.string().min(5).max(60),
+  razorpaySignature: import_zod8.z.string().min(10).max(200)
+});
+async function verifyPayment(req, res) {
+  const { orderNumber, razorpayOrderId, razorpayPaymentId, razorpaySignature } = verifySchema.parse(req.body);
+  const order = await prisma.order.findUnique({ where: { orderNumber } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (!order.razorpayOrderId || order.razorpayOrderId !== razorpayOrderId) {
+    throw new AppError("Payment does not match this order", 400);
+  }
+  if (!verifyPaymentSignature(razorpayOrderId, razorpayPaymentId, razorpaySignature)) {
+    await prisma.payment.upsert({
+      where: { orderId: order.id },
+      update: { status: import_client9.PaymentStatus.FAILED, razorpayPaymentId },
+      create: {
+        orderId: order.id,
+        amountPaise: order.totalPaise,
+        razorpayOrderId,
+        razorpayPaymentId,
+        status: import_client9.PaymentStatus.FAILED
+      }
+    }).catch(() => void 0);
+    throw new AppError("Payment verification failed. If money was deducted it will be refunded automatically.", 400);
+  }
+  if (order.paymentStatus !== import_client9.PaymentStatus.PAID) {
+    try {
+      const rzp = getRazorpay();
+      const payment = await rzp.payments.fetch(razorpayPaymentId);
+      if (payment.order_id !== razorpayOrderId || Number(payment.amount) !== order.totalPaise) {
+        throw new AppError("Payment amount mismatch. Please contact support.", 400);
+      }
+      if (payment.status === "authorized") {
+        await rzp.payments.capture(razorpayPaymentId, order.totalPaise, "INR");
+      }
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      console.warn("Razorpay payment fetch/capture warning:", err?.error?.description || err?.message);
+    }
+    await markOrderPaid(order.id, {
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      amountPaise: order.totalPaise
+    });
+  }
+  res.json({ success: true, orderNumber: order.orderNumber });
+}
+async function handleWebhook(req, res) {
+  if (!env.RAZORPAY_WEBHOOK_SECRET) {
+    console.warn("Razorpay webhook received but RAZORPAY_WEBHOOK_SECRET is not configured \u2014 ignoring.");
+    res.status(503).json({ error: "Webhook not configured" });
+    return;
+  }
+  const signature = req.headers["x-razorpay-signature"];
+  if (!signature || !req.rawBody || !verifyWebhookSignature(req.rawBody, signature)) {
+    res.status(400).json({ error: "Invalid webhook signature" });
+    return;
+  }
+  const event = req.body?.event;
+  if (typeof event === "string" && event.startsWith("refund.")) {
+    try {
+      await handleRefundWebhook(event, req.body?.payload?.refund?.entity);
+    } catch (err) {
+      console.error("Refund webhook error:", err?.message || err);
+    }
+    res.json({ status: "ok" });
+    return;
+  }
+  const paymentEntity = req.body?.payload?.payment?.entity;
+  const rzpOrderId = paymentEntity?.order_id || req.body?.payload?.order?.entity?.id;
+  if (rzpOrderId) {
+    const order = await prisma.order.findUnique({ where: { razorpayOrderId: rzpOrderId } });
+    if (order) {
+      if ((event === "payment.captured" || event === "order.paid") && paymentEntity) {
+        if (Number(paymentEntity.amount) === order.totalPaise) {
+          await markOrderPaid(order.id, {
+            razorpayOrderId: rzpOrderId,
+            razorpayPaymentId: paymentEntity.id,
+            amountPaise: Number(paymentEntity.amount),
+            rawPayload: req.body.payload
+          });
+        } else {
+          console.error(`Webhook amount mismatch for ${order.orderNumber}: ${paymentEntity.amount} vs ${order.totalPaise}`);
+        }
+      } else if (event === "payment.failed" && order.paymentStatus !== import_client9.PaymentStatus.PAID && paymentEntity) {
+        await prisma.payment.upsert({
+          where: { orderId: order.id },
+          update: { status: import_client9.PaymentStatus.FAILED, razorpayPaymentId: paymentEntity.id },
+          create: {
+            orderId: order.id,
+            amountPaise: order.totalPaise,
+            razorpayOrderId: rzpOrderId,
+            razorpayPaymentId: paymentEntity.id,
+            status: import_client9.PaymentStatus.FAILED
+          }
+        }).catch(() => void 0);
+      }
+    }
+  }
+  res.json({ status: "ok" });
+}
+
+// src/routes/paymentRoutes.ts
+var router6 = (0, import_express6.Router)();
+router6.post("/verify", checkoutRateLimiter, asyncHandler(verifyPayment));
+router6.post("/webhook", asyncHandler(handleWebhook));
+var paymentRoutes_default = router6;
+
 // src/routes/adminRoutes.ts
+var import_express7 = __toESM(require("express"), 1);
+init_errorHandler();
+
+// src/utils/zodPatch.ts
+var import_zod9 = require("zod");
+function patchSchema(schema) {
+  const shape = {};
+  for (const [key, field] of Object.entries(schema.shape)) {
+    let inner = field;
+    while (inner instanceof import_zod9.z.ZodDefault) inner = inner.unwrap();
+    shape[key] = inner.optional();
+  }
+  return import_zod9.z.object(shape);
+}
+
+// src/controllers/adminController.ts
+var import_zod10 = require("zod");
+var import_client10 = require("@prisma/client");
+init_db();
+init_errorHandler();
+init_store();
+init_push();
+init_orders();
+var COUNTED_ORDER = {
+  status: { in: [import_client10.OrderStatus.PAID, import_client10.OrderStatus.PROCESSING, import_client10.OrderStatus.SHIPPED, import_client10.OrderStatus.DELIVERED, import_client10.OrderStatus.PENDING] },
+  paymentStatus: { not: import_client10.PaymentStatus.REFUNDED },
+  OR: [{ paymentStatus: import_client10.PaymentStatus.PAID }, { paymentMethod: "COD" }]
+};
+async function getDashboardMetrics(_req, res) {
+  const startOfToday = /* @__PURE__ */ new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const [paidAgg, todayAgg, paidOrders, toFulfil, totalCustomers, totalProducts, lowStockVariants, recentOrders, subscribers] = await Promise.all([
+    prisma.order.aggregate({ where: { paymentStatus: import_client10.PaymentStatus.PAID }, _sum: { totalPaise: true } }),
+    prisma.order.aggregate({
+      where: { paymentStatus: import_client10.PaymentStatus.PAID, paidAt: { gte: startOfToday } },
+      _sum: { totalPaise: true },
+      _count: true
+    }),
+    prisma.order.count({ where: { paymentStatus: import_client10.PaymentStatus.PAID } }),
+    prisma.order.count({ where: { status: { in: [import_client10.OrderStatus.PAID, import_client10.OrderStatus.PROCESSING] } } }),
+    prisma.user.count({ where: { role: import_client10.Role.CUSTOMER } }),
+    prisma.product.count({ where: { isActive: true } }),
+    prisma.productVariant.findMany({
+      where: { stockQuantity: { lte: 5 }, product: { isActive: true } },
+      orderBy: { stockQuantity: "asc" },
+      include: { product: { select: { name: true, slug: true } } },
+      take: 20
+    }),
+    prisma.order.findMany({
+      where: { paymentStatus: import_client10.PaymentStatus.PAID },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: { items: true }
+    }),
+    prisma.subscriber.count()
+  ]);
+  const totalRevenuePaise = paidAgg._sum.totalPaise || 0;
+  res.set("Cache-Control", "no-store");
+  res.json({
+    metrics: {
+      totalOrders: paidOrders,
+      ordersToFulfil: toFulfil,
+      totalRevenuePaise,
+      totalRevenueINR: Math.round(totalRevenuePaise / 100),
+      todayRevenueINR: Math.round((todayAgg._sum.totalPaise || 0) / 100),
+      todayOrders: todayAgg._count,
+      totalCustomers,
+      totalProducts,
+      lowStockAlertsCount: lowStockVariants.length,
+      subscribers
+    },
+    lowStockVariants,
+    recentOrders
+  });
+}
+async function getAllOrders(req, res) {
+  const status = typeof req.query.status === "string" ? req.query.status : void 0;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const includeUnpaid = req.query.includeUnpaid === "true";
+  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+  const take = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "100"), 10) || 100));
+  const where = {};
+  if (status && status !== "ALL" && Object.values(import_client10.OrderStatus).includes(status)) {
+    where.status = status;
+  } else if (!includeUnpaid) {
+    where.NOT = { status: import_client10.OrderStatus.PENDING, paymentStatus: { not: import_client10.PaymentStatus.PAID } };
+  }
+  if (search) {
+    where.OR = [
+      { orderNumber: { contains: search } },
+      { customerName: { contains: search } },
+      { customerEmail: { contains: search } },
+      { customerPhone: { contains: search } },
+      { instagram: { contains: search.replace(/^@/, "").toLowerCase() } }
+    ];
+  }
+  const [total, orders] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * take,
+      take,
+      include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } }
+    })
+  ]);
+  const handles = [...new Set(orders.map((o) => o.instagram).filter(Boolean))];
+  const igCounts = /* @__PURE__ */ new Map();
+  if (handles.length) {
+    const rows = await prisma.order.groupBy({ by: ["instagram"], where: { instagram: { in: handles }, ...COUNTED_ORDER }, _count: { _all: true } });
+    rows.forEach((r) => r.instagram && igCounts.set(r.instagram, r._count._all));
+  }
+  res.set("Cache-Control", "no-store");
+  res.json({
+    orders: orders.map(({ accessKey, ...o }) => ({
+      ...o,
+      instagramOrderCount: o.instagram ? igCounts.get(o.instagram) || 0 : 0,
+      shippingAddress: formatAddress(o.shippingAddressSnapshot)
+    })),
+    pagination: { page, limit: take, total, totalPages: Math.ceil(total / take) }
+  });
+}
+var updateOrderSchema = import_zod10.z.object({
+  status: import_zod10.z.nativeEnum(import_client10.OrderStatus).optional(),
+  courier: import_zod10.z.string().trim().max(100).optional(),
+  trackingNumber: import_zod10.z.string().trim().max(100).optional(),
+  adminNotes: import_zod10.z.string().max(5e3).optional(),
+  markCodPaid: import_zod10.z.boolean().optional()
+});
+async function updateOrder(req, res) {
+  const data2 = updateOrderSchema.parse(req.body);
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (data2.status && data2.status !== import_client10.OrderStatus.CANCELLED && order.refundStatus && order.refundStatus !== "FAILED") {
+    throw new AppError("This order has been refunded, so it must stay Cancelled.", 400);
+  }
+  if (data2.status && data2.status !== import_client10.OrderStatus.CANCELLED && data2.status !== import_client10.OrderStatus.PENDING) {
+    if (order.paymentStatus !== import_client10.PaymentStatus.PAID && order.paymentMethod !== "COD") {
+      throw new AppError("This order has not been paid yet, so it cannot be moved to fulfilment", 400);
+    }
+  }
+  if (data2.markCodPaid) {
+    if (order.paymentMethod !== "COD") throw new AppError("Only Cash on Delivery orders can be marked as paid here", 400);
+    if (order.status === import_client10.OrderStatus.CANCELLED) throw new AppError("This order is cancelled", 400);
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    if (data2.status === import_client10.OrderStatus.CANCELLED && order.status !== import_client10.OrderStatus.CANCELLED && order.stockDeducted) {
+      for (const item of order.items) {
+        if (item.variantId) {
+          await tx.productVariant.updateMany({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } }
+          });
+        }
+      }
+    }
+    return tx.order.update({
+      where: { id: order.id },
+      data: {
+        ...data2.status ? { status: data2.status } : {},
+        ...data2.status === import_client10.OrderStatus.DELIVERED && order.status !== import_client10.OrderStatus.DELIVERED ? { deliveredAt: /* @__PURE__ */ new Date() } : {},
+        ...data2.status === import_client10.OrderStatus.CANCELLED && order.stockDeducted ? { stockDeducted: false } : {},
+        ...data2.courier !== void 0 ? { courier: data2.courier || null } : {},
+        ...data2.trackingNumber !== void 0 ? { trackingNumber: data2.trackingNumber || null } : {},
+        ...data2.adminNotes !== void 0 ? { adminNotes: data2.adminNotes || null } : {},
+        ...data2.markCodPaid && order.paymentStatus !== import_client10.PaymentStatus.PAID ? { paymentStatus: import_client10.PaymentStatus.PAID, paidAt: /* @__PURE__ */ new Date() } : {}
+      },
+      include: { items: true }
+    });
+  });
+  if (data2.status && data2.status !== order.status) {
+    if (data2.status === import_client10.OrderStatus.SHIPPED) notifyOrderPush(order.id, "shipped");
+    else if (data2.status === import_client10.OrderStatus.DELIVERED) notifyOrderPush(order.id, "delivered");
+  }
+  const { accessKey, ...o } = updated;
+  res.json({ order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
+}
+async function deleteOrder(req, res) {
+  const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!order) throw new AppError("Order not found", 404);
+  const testConfirmed = req.query.test === "1";
+  if (order.paymentStatus === import_client10.PaymentStatus.PAID && !testConfirmed) {
+    throw new AppError("Paid orders are kept for your records. If this was a TEST order, confirm it as a test order to delete it.", 400);
+  }
+  const shipped = ["SHIPPED", "DELIVERED"].includes(String(order.status));
+  await prisma.$transaction(async (tx) => {
+    if (order.stockDeducted && !shipped) {
+      for (const it of order.items) {
+        if (it.variantId) {
+          await tx.productVariant.updateMany({ where: { id: it.variantId }, data: { stockQuantity: { increment: it.quantity } } });
+        }
+      }
+    }
+    await tx.order.delete({ where: { id: order.id } });
+  });
+  res.json({ success: true, stockRestored: Boolean(order.stockDeducted && !shipped) });
+}
+var imageUrl = import_zod10.z.string().trim().max(2e3).refine((v) => /^https?:\/\//i.test(v) || /^\/media\/[0-9a-f-]{36}\.[a-z]+(#lx=[\d.,]+)?$/i.test(v), "Each image must be uploaded or be a full https:// link");
+var imageSchema = import_zod10.z.object({
+  url: imageUrl,
+  altText: import_zod10.z.string().max(200).optional().nullable(),
+  color: import_zod10.z.string().trim().max(40).optional().nullable(),
+  gender: import_zod10.z.enum(["MEN", "WOMEN", "BOTH"]).optional().nullable(),
+  isCover: import_zod10.z.boolean().optional(),
+  sortOrder: import_zod10.z.number().int().optional()
+});
+var variantSchema = import_zod10.z.object({
+  size: import_zod10.z.string().trim().min(1).max(10),
+  color: import_zod10.z.string().trim().max(40).optional().nullable(),
+  colorHex: import_zod10.z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Colour code must look like #1A2B3C").optional().nullable().or(import_zod10.z.literal("")),
+  stockQuantity: import_zod10.z.number().int().min(0).max(1e5),
+  priceDelta: import_zod10.z.number().int().default(0)
+});
+var productSchema = import_zod10.z.object({
+  name: import_zod10.z.string().trim().min(2).max(190),
+  slug: import_zod10.z.string().trim().max(120).optional(),
+  description: import_zod10.z.string().trim().min(5, "Description must be at least 5 characters").max(2e4),
+  details: import_zod10.z.string().max(2e4).optional().nullable(),
+  fabricCare: import_zod10.z.string().max(2e4).optional().nullable(),
+  fitGuide: import_zod10.z.string().max(2e4).optional().nullable(),
+  basePrice: import_zod10.z.number().int().positive("Price must be more than 0"),
+  comparePrice: import_zod10.z.number().int().positive().optional().nullable(),
+  categoryId: import_zod10.z.string().max(120).optional().nullable(),
+  categoryName: import_zod10.z.string().max(120).optional().nullable(),
+  isFeatured: import_zod10.z.boolean().default(false),
+  isActive: import_zod10.z.boolean().default(true),
+  colorGroup: import_zod10.z.string().trim().max(30).optional().nullable().transform((v) => v ? v.toUpperCase() : null),
+  gender: import_zod10.z.enum(["MEN", "WOMEN", "UNISEX"]).default("UNISEX"),
+  collectionIds: import_zod10.z.array(import_zod10.z.string().max(64)).max(50).optional(),
+  images: import_zod10.z.array(imageSchema).min(1, "Add at least one product image").max(60),
+  variants: import_zod10.z.array(variantSchema).min(1, "Add at least one size").max(200)
+});
+async function resolveCategoryId(categoryId, categoryName) {
+  if (categoryId) {
+    const found = await prisma.category.findFirst({ where: { OR: [{ id: categoryId }, { slug: categoryId }] } });
+    if (found) return found.id;
+  }
+  if (categoryName && categoryName.trim()) {
+    const slug = slugify(categoryName);
+    const cat = await prisma.category.upsert({
+      where: { slug },
+      update: {},
+      create: { name: categoryName.trim(), slug }
+    });
+    return cat.id;
+  }
+  return null;
+}
+function normaliseImages(images, productGender) {
+  return images.map((img, idx) => ({
+    url: img.url,
+    altText: img.altText || null,
+    color: img.color?.trim() || null,
+    // Photo tags only matter for tees sold to both men & women; a Men-only or Women-only product's photos follow the product.
+    gender: productGender === "MEN" || productGender === "WOMEN" ? productGender : img.gender || null,
+    sortOrder: idx,
+    isCover: idx === 0
+  }));
+}
+var variantKey = (color, size) => `${(color || "").trim().toLowerCase()}|${size.trim().toUpperCase()}`;
+function buildSku(slug, size, color) {
+  const c = color ? `-${color.toUpperCase().replace(/[^A-Z0-9]+/g, "")}` : "";
+  return `${slug.toUpperCase()}${c}-${size.toUpperCase()}`.slice(0, 180);
+}
+function dedupeVariants(variants) {
+  const map = /* @__PURE__ */ new Map();
+  for (const v of variants) {
+    const color = v.color?.trim() || null;
+    map.set(variantKey(color, v.size), {
+      size: v.size.trim().toUpperCase(),
+      color,
+      colorHex: color && v.colorHex ? v.colorHex.toUpperCase() : null,
+      stockQuantity: v.stockQuantity,
+      priceDelta: v.priceDelta ?? 0
+    });
+  }
+  return [...map.values()];
+}
+async function loadAdminProduct(id) {
+  const p = await prisma.product.findUnique({
+    where: { id },
+    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
+  });
+  return p ? { ...p, collectionIds: p.collections.map((c) => c.collectionId) } : p;
+}
+async function setProductCollections(productId, collectionIds) {
+  const unique = [...new Set(collectionIds)];
+  const valid = await prisma.collection.findMany({ where: { id: { in: unique } }, select: { id: true } });
+  const validIds = valid.map((v) => v.id);
+  await prisma.collectionProduct.deleteMany({ where: { productId, collectionId: { notIn: validIds } } });
+  for (const collectionId of validIds) {
+    const exists = await prisma.collectionProduct.findUnique({ where: { collectionId_productId: { collectionId, productId } } });
+    if (!exists) {
+      const max = await prisma.collectionProduct.aggregate({ where: { collectionId }, _max: { sortOrder: true } });
+      await prisma.collectionProduct.create({ data: { collectionId, productId, sortOrder: (max._max.sortOrder ?? -1) + 1 } });
+    }
+  }
+}
+async function reorderProducts(req, res) {
+  const { ids } = import_zod10.z.object({ ids: import_zod10.z.array(import_zod10.z.string().min(1).max(64)).min(1).max(2e3) }).parse(req.body);
+  const unique = [...new Set(ids)];
+  await prisma.$transaction(unique.map((id, i) => prisma.product.updateMany({ where: { id }, data: { position: i + 1 } })));
+  res.json({ success: true, count: unique.length });
+}
+async function pinProduct(req, res) {
+  const { pinned } = import_zod10.z.object({ pinned: import_zod10.z.boolean() }).parse(req.body);
+  const product = await prisma.product.update({ where: { id: req.params.id }, data: { pinned }, select: { id: true, pinned: true } });
+  res.json({ product });
+}
+async function recountSales(_req, res) {
+  const { recomputeSalesScores: recomputeSalesScores2 } = await Promise.resolve().then(() => (init_bestsellers(), bestsellers_exports));
+  const changed = await recomputeSalesScores2();
+  res.json({ success: true, changed });
+}
+async function reorderCategories(req, res) {
+  const { ids } = import_zod10.z.object({ ids: import_zod10.z.array(import_zod10.z.string().min(1).max(64)).min(1).max(500) }).parse(req.body);
+  await prisma.$transaction([...new Set(ids)].map((id, i) => prisma.category.updateMany({ where: { id }, data: { sortOrder: i } })));
+  res.json({ success: true });
+}
+async function getAdminProducts(req, res) {
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const products = await prisma.product.findMany({
+    where: search ? { OR: [{ name: { contains: search } }, { slug: { contains: search } }] } : {},
+    orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
+    take: 500,
+    include: { ...productFullInclude, collections: { select: { collectionId: true } } }
+  });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    products: products.map((p) => ({ ...serializeProduct(p), collectionIds: p.collections.map((c) => c.collectionId) }))
+  });
+}
+async function createProduct(req, res) {
+  const data2 = productSchema.parse(req.body);
+  const slug = slugify(data2.slug || data2.name);
+  if (!slug) throw new AppError("Please enter a valid product name", 400);
+  if (data2.comparePrice && data2.comparePrice <= data2.basePrice) data2.comparePrice = null;
+  const categoryId = await resolveCategoryId(data2.categoryId, data2.categoryName);
+  const variants = dedupeVariants(data2.variants);
+  const product = await prisma.product.create({
+    data: {
+      name: data2.name,
+      slug,
+      description: data2.description,
+      details: data2.details || null,
+      fabricCare: data2.fabricCare || null,
+      fitGuide: data2.fitGuide || null,
+      basePrice: data2.basePrice,
+      comparePrice: data2.comparePrice || null,
+      isFeatured: data2.isFeatured,
+      isActive: data2.isActive,
+      colorGroup: data2.colorGroup || null,
+      gender: data2.gender,
+      categoryId,
+      images: { create: normaliseImages(data2.images, data2.gender) },
+      variants: {
+        create: variants.map((v) => ({
+          size: v.size,
+          color: v.color,
+          colorHex: v.colorHex,
+          sku: buildSku(slug, v.size, v.color),
+          stockQuantity: v.stockQuantity,
+          priceDelta: v.priceDelta
+        }))
+      }
+    },
+    include: productFullInclude
+  });
+  if (data2.collectionIds?.length) await setProductCollections(product.id, data2.collectionIds);
+  res.status(201).json({ product: serializeProduct(await loadAdminProduct(product.id)) });
+}
+async function updateProduct(req, res) {
+  const { id } = req.params;
+  const data2 = patchSchema(productSchema).parse(req.body);
+  const existing = await prisma.product.findUnique({ where: { id }, include: { variants: true } });
+  if (!existing) throw new AppError("Product not found", 404);
+  const slug = data2.slug !== void 0 || data2.name !== void 0 ? slugify(data2.slug || data2.name || existing.slug) : existing.slug;
+  const basePrice = data2.basePrice ?? existing.basePrice;
+  let comparePrice = data2.comparePrice !== void 0 ? data2.comparePrice : existing.comparePrice;
+  if (comparePrice && comparePrice <= basePrice) comparePrice = null;
+  const categoryId = data2.categoryId !== void 0 || data2.categoryName !== void 0 ? await resolveCategoryId(data2.categoryId, data2.categoryName) : existing.categoryId;
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          ...data2.name !== void 0 ? { name: data2.name } : {},
+          slug,
+          ...data2.description !== void 0 ? { description: data2.description } : {},
+          ...data2.details !== void 0 ? { details: data2.details || null } : {},
+          ...data2.fabricCare !== void 0 ? { fabricCare: data2.fabricCare || null } : {},
+          ...data2.fitGuide !== void 0 ? { fitGuide: data2.fitGuide || null } : {},
+          basePrice,
+          comparePrice: comparePrice || null,
+          categoryId,
+          ...data2.isFeatured !== void 0 ? { isFeatured: data2.isFeatured } : {},
+          ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
+          ...data2.colorGroup !== void 0 ? { colorGroup: data2.colorGroup || null } : {},
+          ...req.body.gender !== void 0 && data2.gender ? { gender: data2.gender } : {}
+        }
+      });
+      if (data2.images) {
+        await tx.productImage.deleteMany({ where: { productId: id } });
+        await tx.productImage.createMany({ data: normaliseImages(data2.images, req.body.gender !== void 0 && data2.gender ? data2.gender : existing.gender).map((img) => ({ ...img, productId: id })) });
+      }
+      if (data2.variants) {
+        const incoming = dedupeVariants(data2.variants);
+        const keys = new Set(incoming.map((v) => variantKey(v.color, v.size)));
+        const removed = existing.variants.filter((v) => !keys.has(variantKey(v.color, v.size)));
+        if (removed.length) {
+          await tx.productVariant.deleteMany({ where: { id: { in: removed.map((v) => v.id) } } });
+        }
+        const kept = existing.variants.filter((v) => keys.has(variantKey(v.color, v.size)));
+        for (const v of kept) {
+          await tx.productVariant.update({ where: { id: v.id }, data: { sku: `TMP-${v.id}` } });
+        }
+        for (const v of incoming) {
+          const match = kept.find((ev) => variantKey(ev.color, ev.size) === variantKey(v.color, v.size));
+          const data3 = {
+            size: v.size,
+            color: v.color,
+            colorHex: v.colorHex,
+            sku: buildSku(slug, v.size, v.color),
+            stockQuantity: v.stockQuantity,
+            priceDelta: v.priceDelta
+          };
+          if (match) await tx.productVariant.update({ where: { id: match.id }, data: data3 });
+          else await tx.productVariant.create({ data: { ...data3, productId: id } });
+        }
+      } else if (slug !== existing.slug) {
+        for (const v of existing.variants) {
+          await tx.productVariant.update({ where: { id: v.id }, data: { sku: buildSku(slug, v.size, v.color) } });
+        }
+      }
+    },
+    { timeout: 2e4 }
+  );
+  if (data2.collectionIds) await setProductCollections(id, data2.collectionIds);
+  res.json({ product: serializeProduct(await loadAdminProduct(id)) });
+}
+async function deleteProduct(req, res) {
+  const { id } = req.params;
+  const product = await prisma.product.findUnique({ where: { id }, include: { _count: { select: { orderItems: true } } } });
+  if (!product) throw new AppError("Product not found", 404);
+  if (product._count.orderItems > 0) {
+    await prisma.product.update({ where: { id }, data: { isActive: false } });
+    res.json({ success: true, archived: true, message: "Product has past orders, so it was hidden from the store instead of deleted." });
+    return;
+  }
+  await prisma.product.delete({ where: { id } });
+  res.json({ success: true, archived: false });
+}
+var categorySchema = import_zod10.z.object({
+  name: import_zod10.z.string().trim().min(2).max(120),
+  group: import_zod10.z.enum(["TOP", "BOTTOM", "ACCESSORIES"]).optional().nullable(),
+  description: import_zod10.z.string().max(2e3).optional().nullable(),
+  imageUrl: imageUrl.optional().nullable().or(import_zod10.z.literal("")),
+  sortOrder: import_zod10.z.number().int().optional(),
+  autoSort: import_zod10.z.boolean().optional()
+});
+async function createCategory(req, res) {
+  const data2 = categorySchema.parse(req.body);
+  const category = await prisma.category.create({
+    data: {
+      name: data2.name,
+      slug: slugify(data2.name),
+      description: data2.description || null,
+      imageUrl: data2.imageUrl || null,
+      sortOrder: data2.sortOrder ?? 0,
+      group: data2.group || "TOP",
+      autoSort: data2.autoSort ?? true
+    }
+  });
+  res.status(201).json({ category });
+}
+async function updateCategory(req, res) {
+  const data2 = patchSchema(categorySchema).parse(req.body);
+  const category = await prisma.category.update({
+    where: { id: req.params.id },
+    data: {
+      ...data2.name !== void 0 ? { name: data2.name } : {},
+      ...data2.description !== void 0 ? { description: data2.description || null } : {},
+      ...data2.imageUrl !== void 0 ? { imageUrl: data2.imageUrl || null } : {},
+      ...data2.sortOrder !== void 0 ? { sortOrder: data2.sortOrder } : {},
+      ...data2.group !== void 0 ? { group: data2.group || "TOP" } : {},
+      ...data2.autoSort !== void 0 ? { autoSort: data2.autoSort } : {}
+    }
+  });
+  res.json({ category });
+}
+async function deleteCategory(req, res) {
+  await prisma.category.delete({ where: { id: req.params.id } });
+  res.json({ success: true });
+}
+var settingsSchema = patchSchema(import_zod10.z.object({
+  announcementText: import_zod10.z.string().max(1e3),
+  heroHeadline: import_zod10.z.string().max(190),
+  heroSubtitle: import_zod10.z.string().max(1e3),
+  supportEmail: import_zod10.z.string().trim().email().or(import_zod10.z.literal("")),
+  supportPhone: import_zod10.z.string().trim().max(30),
+  instagramHandle: import_zod10.z.string().trim().max(100).transform((v) => v.replace(/^@/, "")),
+  freeShippingThreshold: import_zod10.z.coerce.number().int().min(0).max(1e6),
+  shippingFee: import_zod10.z.coerce.number().int().min(0).max(1e5),
+  announcementEnabled: import_zod10.z.boolean(),
+  googleSiteVerification: import_zod10.z.string().trim().max(300),
+  introTagline: import_zod10.z.string().trim().max(80),
+  introSubline: import_zod10.z.string().trim().max(80),
+  menCoverImage: import_zod10.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Cover image must be uploaded or a full URL"),
+  womenCoverImage: import_zod10.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Cover image must be uploaded or a full URL"),
+  heroDesktopImage: import_zod10.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroMobileImage: import_zod10.z.string().trim().max(2e3).refine((v) => !v || /^https?:\/\//.test(v) || v.startsWith("/"), "Hero image must be a full URL"),
+  heroDesktopVideo: import_zod10.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroMobileVideo: import_zod10.z.string().trim().max(2e3).refine((v) => !v || /^\/media\/[0-9a-f-]{36}\.(mp4|webm|mov)$/i.test(v) || /^https:\/\//.test(v), "Hero video must be an uploaded video"),
+  heroLink: import_zod10.z.string().trim().max(500),
+  legalName: import_zod10.z.string().trim().max(190),
+  businessAddress: import_zod10.z.string().trim().max(1e3),
+  grievanceOfficer: import_zod10.z.string().trim().max(190),
+  gstin: import_zod10.z.string().trim().toUpperCase().max(15).refine((v) => !v || /^[0-9A-Z]{15}$/.test(v), "GSTIN must be 15 letters/numbers"),
+  jurisdictionCity: import_zod10.z.string().trim().max(100),
+  codEnabled: import_zod10.z.boolean(),
+  codFee: import_zod10.z.coerce.number().int().min(0).max(1e3),
+  codMaxOrder: import_zod10.z.coerce.number().int().min(0).max(1e6),
+  heroCtaText: import_zod10.z.string().trim().max(60),
+  latestDropTitle: import_zod10.z.string().trim().max(100),
+  seoTitle: import_zod10.z.string().max(300),
+  seoText: import_zod10.z.string().max(2e4),
+  shippingInfo: import_zod10.z.string().max(5e3),
+  careInfo: import_zod10.z.string().max(5e3)
+}));
+async function getAdminStoreSettings(_req, res) {
+  res.json({ settings: await getSettings() });
+}
+async function updateAdminStoreSettings(req, res) {
+  const data2 = settingsSchema.parse(req.body);
+  const settings = await saveSettings(data2);
+  res.json({ success: true, settings });
+}
+function toDiscountDto(c) {
+  return {
+    id: c.id,
+    code: c.code,
+    type: c.discountType,
+    // percentage → percent; fixed → rupees
+    value: c.discountType === import_client10.DiscountType.FIXED ? c.discountValue / 100 : c.discountValue,
+    minOrderPaise: c.minOrderPaise,
+    maxDiscountPaise: c.maxDiscountPaise ?? null,
+    isActive: c.isActive,
+    expiresAt: c.validUntil ? c.validUntil.toISOString().slice(0, 10) : "",
+    maxUses: c.maxUses,
+    usedCount: c.usedCount
+  };
+}
+var discountSchema = import_zod10.z.object({
+  code: import_zod10.z.string().trim().min(3).max(30).transform((v) => v.toUpperCase()).refine((v) => /^[A-Z0-9_-]+$/.test(v), "Use only letters, numbers, - and _"),
+  type: import_zod10.z.enum(["PERCENTAGE", "FIXED"]),
+  value: import_zod10.z.coerce.number().positive(),
+  minOrderINR: import_zod10.z.coerce.number().min(0).default(0),
+  maxDiscountINR: import_zod10.z.coerce.number().min(0).max(1e6).optional().nullable(),
+  expiresAt: import_zod10.z.string().optional().or(import_zod10.z.literal("")),
+  isActive: import_zod10.z.boolean().default(true),
+  maxUses: import_zod10.z.coerce.number().int().positive().optional().nullable()
+});
+async function getAdminDiscounts(_req, res) {
+  const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
+  res.json({ discounts: coupons.map(toDiscountDto) });
+}
+async function createAdminDiscount(req, res) {
+  const data2 = discountSchema.parse(req.body);
+  if (data2.type === "PERCENTAGE" && data2.value > 90) throw new AppError("Percentage discount cannot be more than 90%", 400);
+  let validUntil = null;
+  if (data2.expiresAt) {
+    validUntil = /* @__PURE__ */ new Date(`${data2.expiresAt}T23:59:59+05:30`);
+    if (isNaN(validUntil.getTime())) throw new AppError("Invalid expiry date", 400);
+  }
+  const coupon = await prisma.coupon.create({
+    data: {
+      code: data2.code,
+      discountType: data2.type === "FIXED" ? import_client10.DiscountType.FIXED : import_client10.DiscountType.PERCENTAGE,
+      discountValue: data2.type === "FIXED" ? Math.round(data2.value * 100) : Math.round(data2.value),
+      minOrderPaise: Math.round(data2.minOrderINR * 100),
+      maxDiscountPaise: data2.type === "PERCENTAGE" && data2.maxDiscountINR && data2.maxDiscountINR > 0 ? Math.round(data2.maxDiscountINR * 100) : null,
+      isActive: data2.isActive,
+      validUntil,
+      maxUses: data2.maxUses ?? null
+    }
+  });
+  res.status(201).json({ success: true, discount: toDiscountDto(coupon) });
+}
+async function toggleAdminDiscount(req, res) {
+  const coupon = await prisma.coupon.findFirst({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
+  if (!coupon) throw new AppError("Discount code not found", 404);
+  const updated = await prisma.coupon.update({ where: { id: coupon.id }, data: { isActive: !coupon.isActive } });
+  res.json({ success: true, discount: toDiscountDto(updated) });
+}
+async function deleteAdminDiscount(req, res) {
+  await prisma.coupon.deleteMany({ where: { OR: [{ id: req.params.id }, { code: req.params.id }] } });
+  res.json({ success: true });
+}
+async function exportSubscribers(req, res) {
+  const subs = await prisma.subscriber.findMany({ orderBy: { createdAt: "desc" } });
+  if (req.query.format === "json") {
+    res.json({ total: subs.length, subscribers: subs });
+    return;
+  }
+  const csv = ["email,subscribed_at", ...subs.map((s) => `${s.email},${s.createdAt.toISOString()}`)].join("\n");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="levix-subscribers.csv"');
+  res.send(csv);
+}
+var collectionSchema = import_zod10.z.object({
+  name: import_zod10.z.string().trim().min(2).max(120),
+  slug: import_zod10.z.string().trim().max(120).optional(),
+  description: import_zod10.z.string().max(5e3).optional().nullable(),
+  bannerImageUrl: imageUrl.optional().nullable().or(import_zod10.z.literal("")),
+  mobileBannerUrl: imageUrl.optional().nullable().or(import_zod10.z.literal("")),
+  isActive: import_zod10.z.boolean().default(true),
+  sortOrder: import_zod10.z.coerce.number().int().default(0),
+  homeLayout: import_zod10.z.enum(["NONE", "CAROUSEL", "GRID"]).default("CAROUSEL"),
+  showInGallery: import_zod10.z.boolean().default(false),
+  showInMenu: import_zod10.z.boolean().default(true),
+  productIds: import_zod10.z.array(import_zod10.z.string().max(64)).max(500).optional()
+});
+async function getAdminCollections(_req, res) {
+  const collections = await prisma.collection.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    include: { products: { orderBy: { sortOrder: "asc" }, select: { productId: true } } }
+  });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    collections: collections.map(({ products, ...c }) => ({ ...c, productIds: products.map((p) => p.productId) }))
+  });
+}
+async function setCollectionProducts(collectionId, productIds) {
+  const unique = [...new Set(productIds)];
+  const valid = new Set((await prisma.product.findMany({ where: { id: { in: unique } }, select: { id: true } })).map((p) => p.id));
+  const ordered = unique.filter((id) => valid.has(id));
+  await prisma.$transaction([
+    prisma.collectionProduct.deleteMany({ where: { collectionId } }),
+    prisma.collectionProduct.createMany({ data: ordered.map((productId, idx) => ({ collectionId, productId, sortOrder: idx })) })
+  ]);
+}
+async function createCollection(req, res) {
+  const data2 = collectionSchema.parse(req.body);
+  const slug = slugify(data2.slug || data2.name);
+  const clash = await prisma.category.findUnique({ where: { slug } });
+  if (clash) throw new AppError(`"${slug}" is already used by a category. Choose a different name or handle.`, 409);
+  const collection = await prisma.collection.create({
+    data: {
+      name: data2.name,
+      slug,
+      description: data2.description || null,
+      bannerImageUrl: data2.bannerImageUrl || null,
+      mobileBannerUrl: data2.mobileBannerUrl || null,
+      isActive: data2.isActive,
+      sortOrder: data2.sortOrder,
+      homeLayout: data2.homeLayout,
+      showInGallery: data2.showInGallery,
+      showInMenu: data2.showInMenu
+    }
+  });
+  if (data2.productIds) await setCollectionProducts(collection.id, data2.productIds);
+  res.status(201).json({ collection });
+}
+async function updateCollection(req, res) {
+  const data2 = patchSchema(collectionSchema).parse(req.body);
+  const existing = await prisma.collection.findUnique({ where: { id: req.params.id } });
+  if (!existing) throw new AppError("Collection not found", 404);
+  const slug = data2.slug !== void 0 ? slugify(data2.slug || data2.name || existing.name) : existing.slug;
+  if (slug !== existing.slug && await prisma.category.findUnique({ where: { slug } })) {
+    throw new AppError(`"${slug}" is already used by a category.`, 409);
+  }
+  const collection = await prisma.collection.update({
+    where: { id: existing.id },
+    data: {
+      ...data2.name !== void 0 ? { name: data2.name } : {},
+      slug,
+      ...data2.description !== void 0 ? { description: data2.description || null } : {},
+      ...data2.bannerImageUrl !== void 0 ? { bannerImageUrl: data2.bannerImageUrl || null } : {},
+      ...data2.mobileBannerUrl !== void 0 ? { mobileBannerUrl: data2.mobileBannerUrl || null } : {},
+      ...data2.isActive !== void 0 ? { isActive: data2.isActive } : {},
+      ...data2.sortOrder !== void 0 ? { sortOrder: data2.sortOrder } : {},
+      ...data2.homeLayout !== void 0 ? { homeLayout: data2.homeLayout } : {},
+      ...data2.showInGallery !== void 0 ? { showInGallery: data2.showInGallery } : {},
+      ...data2.showInMenu !== void 0 ? { showInMenu: data2.showInMenu } : {}
+    }
+  });
+  if (data2.productIds) await setCollectionProducts(collection.id, data2.productIds);
+  res.json({ collection });
+}
+async function deleteCollection(req, res) {
+  await prisma.collection.delete({ where: { id: req.params.id } });
+  res.json({ success: true });
+}
+var pushSchema = import_zod10.z.object({
+  title: import_zod10.z.string().trim().min(2, "Add a title").max(80),
+  body: import_zod10.z.string().trim().min(2, "Add a message").max(240),
+  url: import_zod10.z.string().trim().max(500).refine((v) => !v || v.startsWith("/") || /^https:\/\//.test(v), "Link must start with / or https://").default("/"),
+  imageUrl: import_zod10.z.string().trim().max(2e3).optional().nullable()
+});
+async function getPushOverview(_req, res) {
+  const [total, android, ios, desktop, signedIn, campaigns] = await Promise.all([
+    prisma.pushSubscription.count(),
+    prisma.pushSubscription.count({ where: { platform: "android" } }),
+    prisma.pushSubscription.count({ where: { platform: "ios" } }),
+    prisma.pushSubscription.count({ where: { platform: "desktop" } }),
+    prisma.pushSubscription.count({ where: { userId: { not: null } } }),
+    prisma.pushCampaign.findMany({ orderBy: { createdAt: "desc" }, take: 30 })
+  ]);
+  res.set("Cache-Control", "no-store");
+  res.json({ subscribers: { total, android, ios, desktop, signedIn }, campaigns });
+}
+async function sendPushCampaign(req, res) {
+  const data2 = pushSchema.parse(req.body);
+  const result = await pushToAll({ title: data2.title, body: data2.body, url: data2.url || "/", image: data2.imageUrl || null, tag: "levix-drop" });
+  const campaign = await prisma.pushCampaign.create({
+    data: {
+      title: data2.title,
+      body: data2.body,
+      url: data2.url || "/",
+      imageUrl: data2.imageUrl || null,
+      targetCount: result.target,
+      sentCount: result.sent,
+      failedCount: result.failed
+    }
+  });
+  res.json({ success: true, campaign, removed: result.removed });
+}
+async function sendPushTest(req, res) {
+  const data2 = pushSchema.parse(req.body);
+  const result = await pushToUser(req.user.id, { title: data2.title, body: data2.body, url: data2.url || "/", image: data2.imageUrl || null, tag: "levix-test" });
+  if (!result.target) {
+    throw new AppError("This device is not subscribed yet. Turn on notifications on your phone (signed in as admin), then try again.", 400);
+  }
+  res.json({ success: true, ...result });
+}
+async function refundAdminOrder(req, res) {
+  const before = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+  if (!before) throw new AppError("Order not found", 404);
+  if (before.paymentMethod !== "COD" && before.paymentStatus === import_client10.PaymentStatus.PAID && before.status !== import_client10.OrderStatus.CANCELLED) {
+    await prisma.$transaction(async (tx) => {
+      if (before.stockDeducted) {
+        for (const item of before.items) {
+          if (item.variantId) await tx.productVariant.updateMany({ where: { id: item.variantId }, data: { stockQuantity: { increment: item.quantity } } });
+        }
+      }
+      await tx.order.update({ where: { id: before.id }, data: { status: import_client10.OrderStatus.CANCELLED, stockDeducted: false } });
+    });
+  }
+  const result = await refundOrder(req.params.id);
+  const full = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true, payment: { select: { razorpayPaymentId: true, status: true } } } });
+  const { accessKey, ...o } = full;
+  res.json({ success: true, alreadyRefunded: result.alreadyRefunded, order: { ...o, shippingAddress: formatAddress(o.shippingAddressSnapshot) } });
+}
+async function getInstagramCustomers(req, res) {
+  const take = Math.min(500, Math.max(1, parseInt(String(req.query.limit || "200"), 10) || 200));
+  const rows = await prisma.order.groupBy({
+    by: ["instagram"],
+    where: { instagram: { not: null }, ...COUNTED_ORDER },
+    _count: { _all: true },
+    _sum: { totalPaise: true },
+    _max: { createdAt: true },
+    orderBy: [{ _count: { instagram: "desc" } }],
+    take
+  });
+  const handles = rows.map((r) => r.instagram).filter(Boolean);
+  const latest = handles.length ? await prisma.order.findMany({
+    where: { instagram: { in: handles } },
+    orderBy: { createdAt: "desc" },
+    select: { instagram: true, customerName: true, customerEmail: true, customerPhone: true }
+  }) : [];
+  const who = /* @__PURE__ */ new Map();
+  latest.forEach((o) => o.instagram && !who.has(o.instagram) && who.set(o.instagram, o));
+  const totalWithIg = await prisma.order.count({ where: { instagram: { not: null }, ...COUNTED_ORDER } });
+  const totalAll = await prisma.order.count({ where: COUNTED_ORDER });
+  res.set("Cache-Control", "no-store");
+  res.json({
+    customers: rows.map((r) => ({
+      instagram: r.instagram,
+      orders: r._count._all,
+      spentPaise: r._sum.totalPaise || 0,
+      lastOrderAt: r._max.createdAt,
+      name: who.get(r.instagram)?.customerName || null,
+      email: who.get(r.instagram)?.customerEmail || null,
+      phone: who.get(r.instagram)?.customerPhone || null
+    })).sort((a, b) => b.orders - a.orders || b.spentPaise - a.spentPaise),
+    summary: { handles: rows.length, ordersWithInstagram: totalWithIg, allOrders: totalAll }
+  });
+}
+
+// src/controllers/homeController.ts
+init_bestsellers();
+init_db();
+init_store();
+var cache3 = null;
+function invalidateHomeCache() {
+  cache3 = null;
+}
+async function getHome(_req, res) {
+  if (cache3 && cache3.expires > Date.now()) {
+    res.set("Cache-Control", "no-cache");
+    res.json(cache3.body);
+    return;
+  }
+  const [settings, latest, collections, categories, colors, genderRows] = await Promise.all([
+    getSettings(),
+    prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
+      take: 12,
+      include: productListInclude
+    }),
+    prisma.collection.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      include: {
+        products: {
+          orderBy: [{ product: { position: "asc" } }, { sortOrder: "asc" }],
+          take: 16,
+          where: { product: { isActive: true } },
+          include: { product: { include: productListInclude } }
+        }
+      }
+    }),
+    prisma.category.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: { _count: { select: { products: { where: { isActive: true } } } } }
+    }),
+    prisma.product.findMany({
+      where: { isActive: true, colorGroup: { not: null } },
+      distinct: ["colorGroup"],
+      select: { colorGroup: true }
+    }),
+    prisma.product.findMany({
+      where: { isActive: true },
+      select: {
+        gender: true,
+        categoryId: true,
+        collections: { select: { collectionId: true } },
+        images: { orderBy: { sortOrder: "asc" }, take: 8, select: { url: true, gender: true } }
+      },
+      orderBy: [{ position: "asc" }, { isFeatured: "desc" }, { createdAt: "desc" }],
+      take: 2e3
+    })
+  ]);
+  const departments = ["men", "women"].map((key) => {
+    const want = key === "men" ? "MEN" : "WOMEN";
+    const rows = genderRows.filter((r) => r.gender === want || r.gender === "UNISEX");
+    const catCount = /* @__PURE__ */ new Map();
+    const colIds = /* @__PURE__ */ new Set();
+    rows.forEach((r) => {
+      if (r.categoryId) catCount.set(r.categoryId, (catCount.get(r.categoryId) || 0) + 1);
+      r.collections.forEach((c) => colIds.add(c.collectionId));
+    });
+    return {
+      key,
+      name: key === "men" ? "Men" : "Women",
+      count: rows.length,
+      coverImage: (key === "men" ? settings.menCoverImage : settings.womenCoverImage) || rows.find((r) => r.gender === want && r.images[0])?.images[0]?.url || // A tee sold to both: use a photo tagged for this department.
+      rows.flatMap((r) => r.images).find((im) => im.gender === want || im.gender === "BOTH")?.url || rows.find((r) => r.images[0])?.images[0]?.url || null,
+      categories: categories.filter((c) => catCount.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug, group: c.group || "TOP", count: catCount.get(c.id) || 0 })),
+      collections: collections.filter((c) => c.showInMenu && colIds.has(c.id)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }))
+    };
+  });
+  const toSection = (c) => ({
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    description: c.description,
+    bannerImageUrl: c.bannerImageUrl,
+    mobileBannerUrl: c.mobileBannerUrl,
+    layout: c.homeLayout,
+    products: c.products.map((cp) => serializeProduct(cp.product))
+  });
+  const catProducts = await prisma.product.findMany({
+    where: { isActive: true, categoryId: { in: categories.map((c) => c.id) } },
+    orderBy: [{ position: "asc" }, { createdAt: "desc" }],
+    take: 600,
+    include: productListInclude
+  });
+  const categorySections = categories.map((c) => {
+    const list = catProducts.filter((p) => p.categoryId === c.id);
+    const ordered = c.autoSort ? sortBestSellers(list) : list;
+    return {
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      description: c.description,
+      bannerImageUrl: c.imageUrl,
+      mobileBannerUrl: null,
+      layout: "CAROUSEL",
+      products: ordered.slice(0, 16).map(serializeProduct)
+    };
+  }).filter((s) => s.products.length > 0);
+  const body = {
+    settings,
+    categorySections,
+    latestDrop: latest.map(serializeProduct),
+    sections: collections.filter((c) => (c.homeLayout === "CAROUSEL" || c.homeLayout === "GRID") && c.products.length > 0).map(toSection),
+    gallery: collections.filter((c) => c.showInGallery && c.bannerImageUrl).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl, mobileBannerUrl: c.mobileBannerUrl })),
+    menu: {
+      collections: collections.filter((c) => c.showInMenu && c.products.length > 0).map((c) => ({ id: c.id, name: c.name, slug: c.slug, bannerImageUrl: c.bannerImageUrl })),
+      categories: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        group: c.group || "TOP",
+        imageUrl: c.imageUrl,
+        count: c._count.products
+      })),
+      colors: colors.map((c) => c.colorGroup).filter(Boolean),
+      departments
+    }
+  };
+  cache3 = { body, expires: Date.now() + 20 * 1e3 };
+  res.set("Cache-Control", "no-cache");
+  res.json(body);
+}
+
+// src/routes/adminRoutes.ts
+init_store();
+init_bestsellers();
 var router7 = (0, import_express7.Router)();
 router7.use(verifyFirebaseToken);
 router7.use(requireAdmin);
@@ -4092,6 +4367,8 @@ router7.use((req, res, next) => {
   next();
 });
 router7.get("/metrics", asyncHandler(getDashboardMetrics));
+router7.get("/returns", asyncHandler(listReturns));
+router7.patch("/returns/:id", asyncHandler(updateReturn));
 router7.get("/push", asyncHandler(getPushOverview));
 router7.post("/push/send", asyncHandler(sendPushCampaign));
 router7.post("/push/test", asyncHandler(sendPushTest));
@@ -4132,7 +4409,7 @@ var adminRoutes_default = router7;
 var import_express8 = require("express");
 init_errorHandler();
 init_store();
-var import_zod10 = require("zod");
+var import_zod11 = require("zod");
 init_db();
 var router8 = (0, import_express8.Router)();
 router8.get(
@@ -4148,7 +4425,7 @@ router8.post(
   "/subscribe",
   authRateLimiter,
   asyncHandler(async (req, res) => {
-    const { email } = import_zod10.z.object({ email: import_zod10.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
+    const { email } = import_zod11.z.object({ email: import_zod11.z.string().trim().toLowerCase().email("Enter a valid email address").max(190) }).parse(req.body);
     await prisma.subscriber.upsert({ where: { email }, update: {}, create: { email } });
     res.json({ success: true });
   })
@@ -4163,7 +4440,7 @@ var import_express9 = require("express");
 init_errorHandler();
 
 // src/controllers/wishlistController.ts
-var import_zod11 = require("zod");
+var import_zod12 = require("zod");
 init_db();
 init_errorHandler();
 async function getOrCreateWishlist(userId) {
@@ -4200,7 +4477,7 @@ async function toggleWishlist(req, res) {
 }
 async function mergeWishlist(req, res) {
   if (!req.user) throw new AppError("Please sign in", 401);
-  const { productIds } = import_zod11.z.object({ productIds: import_zod11.z.array(import_zod11.z.string().max(64)).max(200) }).parse(req.body);
+  const { productIds } = import_zod12.z.object({ productIds: import_zod12.z.array(import_zod12.z.string().max(64)).max(200) }).parse(req.body);
   const wl = await getOrCreateWishlist(req.user.id);
   if (productIds.length) {
     const valid = await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true } });
@@ -4235,7 +4512,7 @@ var wishlistRoutes_default = router9;
 
 // src/routes/pushRoutes.ts
 var import_express10 = require("express");
-var import_zod12 = require("zod");
+var import_zod13 = require("zod");
 init_errorHandler();
 init_db();
 init_push();
@@ -4248,12 +4525,12 @@ router10.get(
     res.json({ publicKey });
   })
 );
-var subSchema = import_zod12.z.object({
-  subscription: import_zod12.z.object({
-    endpoint: import_zod12.z.string().url().max(700).refine((u) => u.startsWith("https://"), "Invalid push endpoint"),
-    keys: import_zod12.z.object({ p256dh: import_zod12.z.string().min(40).max(255), auth: import_zod12.z.string().min(8).max(64) })
+var subSchema = import_zod13.z.object({
+  subscription: import_zod13.z.object({
+    endpoint: import_zod13.z.string().url().max(700).refine((u) => u.startsWith("https://"), "Invalid push endpoint"),
+    keys: import_zod13.z.object({ p256dh: import_zod13.z.string().min(40).max(255), auth: import_zod13.z.string().min(8).max(64) })
   }),
-  platform: import_zod12.z.enum(["android", "ios", "desktop"]).optional()
+  platform: import_zod13.z.enum(["android", "ios", "desktop"]).optional()
 });
 router10.post(
   "/subscribe",
@@ -4281,17 +4558,35 @@ router10.post(
   "/unsubscribe",
   authRateLimiter,
   asyncHandler(async (req, res) => {
-    const { endpoint } = import_zod12.z.object({ endpoint: import_zod12.z.string().url().max(700) }).parse(req.body);
+    const { endpoint } = import_zod13.z.object({ endpoint: import_zod13.z.string().url().max(700) }).parse(req.body);
     await prisma.pushSubscription.deleteMany({ where: { endpoint } });
     res.json({ success: true });
   })
 );
 var pushRoutes_default = router10;
 
-// src/controllers/geoController.ts
+// src/routes/returnRoutes.ts
+var import_express11 = __toESM(require("express"), 1);
 var import_express_rate_limit2 = __toESM(require("express-rate-limit"), 1);
 init_errorHandler();
-var geoRateLimiter = (0, import_express_rate_limit2.default)({
+var returnsLimiter = (0, import_express_rate_limit2.default)({
+  windowMs: 10 * 60 * 1e3,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait a few minutes and try again." }
+});
+var router11 = (0, import_express11.Router)();
+router11.use(returnsLimiter);
+router11.post("/:orderNumber/photo", optionalAuth, import_express11.default.raw({ type: ["image/*", "application/octet-stream"], limit: "12mb" }), asyncHandler(uploadReturnPhoto));
+router11.post("/:orderNumber/video", optionalAuth, import_express11.default.raw({ type: ["video/*", "application/octet-stream"], limit: "5mb" }), asyncHandler(uploadReturnVideo));
+router11.post("/:orderNumber", optionalAuth, asyncHandler(createReturn));
+var returnRoutes_default = router11;
+
+// src/controllers/geoController.ts
+var import_express_rate_limit3 = __toESM(require("express-rate-limit"), 1);
+init_errorHandler();
+var geoRateLimiter = (0, import_express_rate_limit3.default)({
   windowMs: 10 * 60 * 1e3,
   max: 20,
   standardHeaders: true,
@@ -4405,7 +4700,7 @@ async function reverseGeocode(req, res) {
 }
 
 // src/app.ts
-var app = (0, import_express11.default)();
+var app = (0, import_express12.default)();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 var FIREBASE_AUTH_HOST = `https://${env.FIREBASE_PROJECT_ID || "levix-8bb56"}.firebaseapp.com`;
@@ -4476,14 +4771,14 @@ app.use(
   })
 );
 app.use(
-  import_express11.default.json({
+  import_express12.default.json({
     limit: "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     }
   })
 );
-app.use(import_express11.default.urlencoded({ extended: false, limit: "1mb" }));
+app.use(import_express12.default.urlencoded({ extended: false, limit: "1mb" }));
 app.get("/api/health", async (_req, res) => {
   let database = "ok";
   let databaseProblem;
@@ -4538,6 +4833,7 @@ app.use("/api/orders", orderRoutes_default);
 app.use("/api/payments", paymentRoutes_default);
 app.use("/api/wishlist", wishlistRoutes_default);
 app.use("/api/push", pushRoutes_default);
+app.use("/api/returns", returnRoutes_default);
 app.get("/api/geo/reverse", geoRateLimiter, asyncHandler(reverseGeocode));
 app.use("/api/admin", adminRoutes_default);
 app.use("/api", notFoundApi);
@@ -4555,7 +4851,7 @@ app.get(
       prisma.collection.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } }),
       prisma.category.findMany({ select: { slug: true, updatedAt: true } })
     ]);
-    const esc4 = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const esc5 = (v) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const abs2 = (u) => {
       const c = u.split("#")[0];
       return /^https?:\/\//i.test(c) ? c : `${base}${c.startsWith("/") ? "" : "/"}${c}`;
@@ -4580,10 +4876,10 @@ app.get(
     const urls = [
       ...fixed.map(([u, f, p]) => `<url><loc>${base}${u}</loc><lastmod>${today}</lastmod><changefreq>${f}</changefreq><priority>${p}</priority></url>`),
       ...[...collections, ...categories].map(
-        (c) => `<url><loc>${base}/collections/${esc4(c.slug)}</loc><lastmod>${day(c.updatedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`
+        (c) => `<url><loc>${base}/collections/${esc5(c.slug)}</loc><lastmod>${day(c.updatedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`
       ),
       ...products.map(
-        (p) => `<url><loc>${base}/products/${esc4(p.slug)}</loc><lastmod>${day(p.updatedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority>${p.images.map((i) => `<image:image><image:loc>${esc4(abs2(i.url))}</image:loc><image:title>${esc4(p.name)}</image:title></image:image>`).join("")}</url>`
+        (p) => `<url><loc>${base}/products/${esc5(p.slug)}</loc><lastmod>${day(p.updatedAt)}</lastmod><changefreq>weekly</changefreq><priority>0.9</priority>${p.images.map((i) => `<image:image><image:loc>${esc5(abs2(i.url))}</image:loc><image:title>${esc5(p.name)}</image:title></image:image>`).join("")}</url>`
       )
     ];
     res.set("Content-Type", "application/xml; charset=utf-8");
@@ -4612,7 +4908,7 @@ var frontendDist = possiblePaths.find((p) => {
 if (frontendDist) {
   console.log(`\u2713 Serving storefront from: ${frontendDist}`);
   app.use(
-    import_express11.default.static(frontendDist, {
+    import_express12.default.static(frontendDist, {
       index: false,
       setHeaders: (res, filePath) => {
         if (filePath.includes(`${import_path2.default.sep}assets${import_path2.default.sep}`)) {
