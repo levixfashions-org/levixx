@@ -16,10 +16,39 @@ interface Campaign {
   failedCount: number;
   createdAt: string;
 }
+interface Device {
+  id: string;
+  platform?: string | null;
+  service: string;
+  user?: string | null;
+  failCount: number;
+  lastStatus?: number | null;
+  lastSentAt?: string | null;
+  createdAt: string;
+}
 interface Overview {
   subscribers: { total: number; android: number; ios: number; desktop: number; signedIn: number };
   campaigns: Campaign[];
+  devices?: Device[];
 }
+
+const ago = (d?: string | null) => {
+  if (!d) return 'never';
+  const m = Math.round((Date.now() - new Date(d).getTime()) / 60000);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+};
+/** Plain-language health of one subscribed device, from its last delivery attempt. */
+const health = (d: Device) => {
+  if (d.lastStatus === 201 || (d.lastStatus && d.lastStatus >= 200 && d.lastStatus < 300)) return { ok: true, text: 'Working' };
+  if (!d.lastStatus) return { ok: true, text: 'Not tried yet' };
+  if (d.lastStatus === 403) return { ok: false, text: 'Rejected (403) — key mismatch' };
+  if (d.lastStatus === 400 || d.lastStatus === 413) return { ok: false, text: `Rejected (${d.lastStatus})` };
+  if (d.lastStatus === 429) return { ok: false, text: 'Rate limited (429)' };
+  if (d.lastStatus === 0) return { ok: false, text: 'Network error' };
+  return { ok: false, text: `Failed (${d.lastStatus})` };
+};
 interface LinkOption {
   label: string;
   value: string;
@@ -152,6 +181,52 @@ export const AdminNotificationsPage: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/* Every subscribed device and whether the last notification reached it */}
+        {data?.devices && data.devices.length > 0 && (
+          <div className="bg-white border border-black/10">
+            <div className="px-4 py-3 border-b border-black/10 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-wider">Subscribed devices</p>
+              <p className="text-[11px] text-neutral-500">“Working” = Apple / Google accepted the last notification for that device.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-neutral-500">
+                    <th className="px-4 py-2 font-bold">Device</th>
+                    <th className="px-4 py-2 font-bold">Customer</th>
+                    <th className="px-4 py-2 font-bold">Turned on</th>
+                    <th className="px-4 py-2 font-bold">Last delivered</th>
+                    <th className="px-4 py-2 font-bold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.devices.map((d) => {
+                    const h = health(d);
+                    const Icon = d.platform === 'ios' ? Apple : d.platform === 'android' ? Smartphone : Monitor;
+                    return (
+                      <tr key={d.id} className="border-t border-black/5">
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 font-semibold"><Icon className="w-3.5 h-3.5" />{d.platform === 'ios' ? 'iPhone / iPad' : d.platform === 'android' ? 'Android' : 'Computer'}</span>
+                          <span className="block text-[10.5px] text-neutral-500">{d.service}</span>
+                        </td>
+                        <td className="px-4 py-2.5">{d.user || <span className="text-neutral-400">Guest</span>}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">{ago(d.createdAt)}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">{ago(d.lastSentAt)}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 font-semibold ${h.ok ? 'text-green-700' : 'text-red-700'}`}>
+                            {h.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />} {h.text}
+                          </span>
+                          {d.failCount > 0 && <span className="block text-[10.5px] text-neutral-500">{d.failCount} failed in a row (removed after 5)</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Compose */}

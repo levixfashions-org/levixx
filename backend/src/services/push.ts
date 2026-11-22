@@ -68,6 +68,7 @@ async function deliver(subs: Sub[], msg: PushMessage, urgency: 'normal' | 'high'
   const gone: string[] = [];
   const okIds: string[] = [];
   const failIds: string[] = [];
+  const failStatus = new Map<number, string[]>();
   // Small parallel batches: fast for a few thousand subscribers, gentle on the server.
   for (let i = 0; i < subs.length; i += 25) {
     const batch = subs.slice(i, i + 25);
@@ -79,14 +80,19 @@ async function deliver(subs: Sub[], msg: PushMessage, urgency: 'normal' | 'high'
       } else {
         failed++;
         if (r.gone) gone.push(batch[j].id);
-        else failIds.push(batch[j].id);
+        else {
+          failIds.push(batch[j].id);
+          failStatus.set(r.status, [...(failStatus.get(r.status) || []), batch[j].id]);
+        }
       }
     });
   }
   if (gone.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: gone } } });
-  if (okIds.length) await prisma.pushSubscription.updateMany({ where: { id: { in: okIds } }, data: { failCount: 0, lastSentAt: new Date() } });
+  if (okIds.length) await prisma.pushSubscription.updateMany({ where: { id: { in: okIds } }, data: { failCount: 0, lastStatus: 201, lastSentAt: new Date() } });
   if (failIds.length) {
-    await prisma.pushSubscription.updateMany({ where: { id: { in: failIds } }, data: { failCount: { increment: 1 } } });
+    for (const [status, ids] of failStatus) {
+      await prisma.pushSubscription.updateMany({ where: { id: { in: ids } }, data: { failCount: { increment: 1 }, lastStatus: status } });
+    }
     // Give up on subscriptions that keep failing.
     await prisma.pushSubscription.deleteMany({ where: { failCount: { gte: 5 } } });
   }
