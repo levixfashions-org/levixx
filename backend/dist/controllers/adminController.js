@@ -783,8 +783,27 @@ export async function getPushOverview(_req, res) {
         prisma.pushSubscription.count({ where: { userId: { not: null } } }),
         prisma.pushCampaign.findMany({ orderBy: { createdAt: 'desc' }, take: 30 })
     ]);
+    const devices = await prisma.pushSubscription.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: { id: true, endpoint: true, platform: true, failCount: true, lastStatus: true, lastSentAt: true, createdAt: true, user: { select: { email: true, name: true } } }
+    });
     res.set('Cache-Control', 'no-store');
-    res.json({ subscribers: { total, android, ios, desktop, signedIn }, campaigns });
+    res.json({
+        subscribers: { total, android, ios, desktop, signedIn },
+        campaigns,
+        devices: devices.map(({ endpoint, user, ...d }) => {
+            let service = 'other';
+            try {
+                const host = new URL(endpoint).host;
+                service = host.includes('apple') ? 'Apple' : host.includes('google') ? 'Google (Chrome)' : host.includes('mozilla') ? 'Mozilla (Firefox)' : host.includes('windows') || host.includes('microsoft') ? 'Microsoft (Edge)' : host;
+            }
+            catch {
+                /* keep 'other' */
+            }
+            return { ...d, service, user: user ? user.name || user.email : null };
+        })
+    });
 }
 export async function sendPushCampaign(req, res) {
     const data = pushSchema.parse(req.body);

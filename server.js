@@ -774,6 +774,7 @@ async function deliver(subs, msg, urgency = "normal") {
   const gone = [];
   const okIds = [];
   const failIds = [];
+  const failStatus = /* @__PURE__ */ new Map();
   for (let i = 0; i < subs.length; i += 25) {
     const batch = subs.slice(i, i + 25);
     const results = await Promise.all(batch.map((s) => sendPush(s, payload, keys, subject(), { urgency, topic: msg.tag })));
@@ -784,14 +785,19 @@ async function deliver(subs, msg, urgency = "normal") {
       } else {
         failed++;
         if (r.gone) gone.push(batch[j].id);
-        else failIds.push(batch[j].id);
+        else {
+          failIds.push(batch[j].id);
+          failStatus.set(r.status, [...failStatus.get(r.status) || [], batch[j].id]);
+        }
       }
     });
   }
   if (gone.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: gone } } });
-  if (okIds.length) await prisma.pushSubscription.updateMany({ where: { id: { in: okIds } }, data: { failCount: 0, lastSentAt: /* @__PURE__ */ new Date() } });
+  if (okIds.length) await prisma.pushSubscription.updateMany({ where: { id: { in: okIds } }, data: { failCount: 0, lastStatus: 201, lastSentAt: /* @__PURE__ */ new Date() } });
   if (failIds.length) {
-    await prisma.pushSubscription.updateMany({ where: { id: { in: failIds } }, data: { failCount: { increment: 1 } } });
+    for (const [status, ids] of failStatus) {
+      await prisma.pushSubscription.updateMany({ where: { id: { in: ids } }, data: { failCount: { increment: 1 }, lastStatus: status } });
+    }
     await prisma.pushSubscription.deleteMany({ where: { failCount: { gte: 5 } } });
   }
   return { sent, failed, removed: gone.length };
@@ -4136,8 +4142,25 @@ async function getPushOverview(_req, res) {
     prisma.pushSubscription.count({ where: { userId: { not: null } } }),
     prisma.pushCampaign.findMany({ orderBy: { createdAt: "desc" }, take: 30 })
   ]);
+  const devices = await prisma.pushSubscription.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: { id: true, endpoint: true, platform: true, failCount: true, lastStatus: true, lastSentAt: true, createdAt: true, user: { select: { email: true, name: true } } }
+  });
   res.set("Cache-Control", "no-store");
-  res.json({ subscribers: { total, android, ios, desktop, signedIn }, campaigns });
+  res.json({
+    subscribers: { total, android, ios, desktop, signedIn },
+    campaigns,
+    devices: devices.map(({ endpoint, user, ...d }) => {
+      let service = "other";
+      try {
+        const host = new URL(endpoint).host;
+        service = host.includes("apple") ? "Apple" : host.includes("google") ? "Google (Chrome)" : host.includes("mozilla") ? "Mozilla (Firefox)" : host.includes("windows") || host.includes("microsoft") ? "Microsoft (Edge)" : host;
+      } catch {
+      }
+      return { ...d, service, user: user ? user.name || user.email : null };
+    })
+  });
 }
 async function sendPushCampaign(req, res) {
   const data2 = pushSchema.parse(req.body);
