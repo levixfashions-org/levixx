@@ -129,7 +129,7 @@ export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, sing
                 <button
                   type="button"
                   onClick={() => setAdjusting(adjusting === i ? null : i)}
-                  className={`absolute bottom-1 left-1 h-6 px-1.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow ${adjusting === i ? 'bg-black text-white' : 'bg-white/95 text-black hover:bg-black hover:text-white'}`}
+                  className={`absolute ${!single && value.length > 1 ? 'bottom-8' : 'bottom-1'} left-1 z-10 h-6 px-1.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow ${adjusting === i ? 'bg-black text-white' : 'bg-white/95 text-black hover:bg-black hover:text-white'}`}
                   aria-label="Adjust photo"
                   title="Zoom and drag this photo to fit the frame"
                 >
@@ -141,9 +141,9 @@ export const ImageUploader: React.FC<Props> = ({ value, onChange, max = 12, sing
                 <X className="w-3.5 h-3.5" />
               </button>
               {!single && value.length > 1 && (
-                <div className="absolute bottom-1 inset-x-1 flex justify-between opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 transition-opacity">
-                  <button type="button" onClick={() => move(i, i - 1)} disabled={i === 0} className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center disabled:opacity-0" aria-label="Move left"><ArrowLeft className="w-3 h-3" /></button>
-                  <button type="button" onClick={() => move(i, i + 1)} disabled={i === value.length - 1} className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center disabled:opacity-0" aria-label="Move right"><ArrowRight className="w-3 h-3" /></button>
+                <div className="absolute bottom-1 inset-x-1 flex justify-between pointer-events-none opacity-0 group-hover:opacity-100 sm:opacity-0 max-sm:opacity-100 transition-opacity">
+                  <button type="button" onClick={() => move(i, i - 1)} disabled={i === 0} className="pointer-events-auto w-6 h-6 rounded-full bg-white/90 flex items-center justify-center disabled:opacity-0 disabled:pointer-events-none" aria-label="Move left"><ArrowLeft className="w-3 h-3" /></button>
+                  <button type="button" onClick={() => move(i, i + 1)} disabled={i === value.length - 1} className="pointer-events-auto w-6 h-6 rounded-full bg-white/90 flex items-center justify-center disabled:opacity-0 disabled:pointer-events-none" aria-label="Move right"><ArrowRight className="w-3 h-3" /></button>
                 </div>
               )}
             </div>
