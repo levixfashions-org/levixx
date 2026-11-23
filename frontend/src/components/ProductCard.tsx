@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Product } from '../types';
 import { useCartStore } from '../store/cartStore';
 import { useWishlistStore } from '../store/wishlistStore';
+import { ShareButton } from './ShareButton';
 import { BookmarkIcon, CloseIcon, PlusIcon } from './Icons';
 import { imagesForDept, productHref, type Dept } from '../utils/dept';
 import { FramedImg } from './FramedImg';
@@ -115,6 +116,16 @@ export const ProductCard: React.FC<Props> = ({ product, dept }) => {
         >
           <BookmarkIcon className="w-[14px] h-[17px]" filled />
         </button>
+
+        <div className="absolute top-[44px] right-2">
+          <ShareButton
+            name={product.name}
+            slug={product.slug}
+            pricePaise={product.basePrice}
+            iconClass="w-[14px] h-[14px]"
+            className="w-8 h-8 rounded-full flex items-center justify-center bg-white/60 backdrop-blur-md border border-white/70 shadow-[0_4px_12px_-6px_rgba(0,0,0,0.3)] text-black/40 hover:text-black transition-colors"
+          />
+        </div>
 
         {/* Quick add size picker */}
         {quickOpen && (

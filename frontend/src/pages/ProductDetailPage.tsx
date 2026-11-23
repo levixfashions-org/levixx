@@ -10,6 +10,7 @@ import { Product } from '../types';
 import { ProductRail } from '../components/ProductRail';
 import { BookmarkIcon } from '../components/Icons';
 import { formatRs } from '../components/ProductCard';
+import { ShareButton } from '../components/ShareButton';
 import { setSeo } from '../utils/seo';
 import { asDept, imagesForDept } from '../utils/dept';
 import { FramedImg } from '../components/FramedImg';
@@ -225,13 +226,21 @@ export const ProductDetailPage: React.FC = () => {
         />
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-[19px] sm:text-[21px] font-semibold tracking-[-0.025em] leading-tight text-[#0b0b0f]">{product.name}</h1>
-          <button
-            onClick={() => toggleSave(product.id)}
-            aria-label={isSaved ? 'Remove from saved' : 'Save'}
-            className={`w-10 h-10 -mt-1 -mr-1 rounded-full flex items-center justify-center flex-shrink-0 bg-white/70 border border-black/[0.06] transition-colors ${isSaved ? 'text-black' : 'text-black/35 hover:text-black'}`}
-          >
-            <BookmarkIcon className="w-[15px] h-[18px]" filled />
-          </button>
+          <div className="flex items-center gap-2 -mt-1 -mr-1 flex-shrink-0">
+            <ShareButton
+              name={product.name}
+              slug={product.slug}
+              pricePaise={product.basePrice}
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-white/70 border border-black/[0.06] text-black/50 hover:text-black transition-colors"
+            />
+            <button
+              onClick={() => toggleSave(product.id)}
+              aria-label={isSaved ? 'Remove from saved' : 'Save'}
+              className={`w-10 h-10 rounded-full flex items-center justify-center bg-white/70 border border-black/[0.06] transition-colors ${isSaved ? 'text-black' : 'text-black/35 hover:text-black'}`}
+            >
+              <BookmarkIcon className="w-[15px] h-[18px]" filled />
+            </button>
+          </div>
         </div>
         <div className="flex items-center justify-between gap-3 mt-2">
           <p className="text-[13px] text-[#6e6e73] flex flex-wrap items-baseline gap-x-2">
