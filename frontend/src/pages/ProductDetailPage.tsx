@@ -226,20 +226,24 @@ export const ProductDetailPage: React.FC = () => {
         />
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-[19px] sm:text-[21px] font-semibold tracking-[-0.025em] leading-tight text-[#0b0b0f]">{product.name}</h1>
-          <div className="flex items-center gap-2 -mt-1 -mr-1 flex-shrink-0">
+          <div className="flex items-start gap-2 -mt-1 -mr-1 flex-shrink-0">
             <ShareButton
               name={product.name}
               slug={product.slug}
               pricePaise={product.basePrice}
+              label="Share"
               className="w-10 h-10 rounded-full flex items-center justify-center bg-white/70 border border-black/[0.06] text-black/50 hover:text-black transition-colors"
             />
-            <button
-              onClick={() => toggleSave(product.id)}
-              aria-label={isSaved ? 'Remove from saved' : 'Save'}
-              className={`w-10 h-10 rounded-full flex items-center justify-center bg-white/70 border border-black/[0.06] transition-colors ${isSaved ? 'text-black' : 'text-black/35 hover:text-black'}`}
-            >
-              <BookmarkIcon className="w-[15px] h-[18px]" filled />
-            </button>
+            <div className="flex flex-col items-center gap-1">
+              <button
+                onClick={() => toggleSave(product.id)}
+                aria-label={isSaved ? 'Remove from saved' : 'Save'}
+                className={`w-10 h-10 rounded-full flex items-center justify-center bg-white/70 border border-black/[0.06] transition-colors ${isSaved ? 'text-black' : 'text-black/35 hover:text-black'}`}
+              >
+                <BookmarkIcon className="w-[15px] h-[18px]" filled />
+              </button>
+              <span aria-hidden="true" className="text-[10.5px] font-medium leading-none text-[#6e6e73]">{isSaved ? 'Saved' : 'Save'}</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center justify-between gap-3 mt-2">

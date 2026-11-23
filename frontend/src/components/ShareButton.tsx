@@ -7,6 +7,8 @@ interface Props {
   pricePaise?: number;
   className?: string;
   iconClass?: string;
+  /** Small caption shown under the icon. */
+  label?: string;
 }
 
 const ShareIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -54,7 +56,7 @@ async function copyText(text: string): Promise<boolean> {
  * on desktop it copies the link. The link shows the product photo and price in chats because the
  * server adds the product's preview tags to /products/:slug.
  */
-export const ShareButton: React.FC<Props> = ({ name, slug, pricePaise, className = '', iconClass = 'w-[16px] h-[16px]' }) => {
+export const ShareButton: React.FC<Props> = ({ name, slug, pricePaise, className = '', iconClass = 'w-[16px] h-[16px]', label }) => {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -84,7 +86,7 @@ export const ShareButton: React.FC<Props> = ({ name, slug, pricePaise, className
   };
 
   return (
-    <span className="relative inline-flex">
+    <span className="relative inline-flex flex-col items-center gap-1">
       <button
         type="button"
         onClick={onShare}
@@ -94,6 +96,7 @@ export const ShareButton: React.FC<Props> = ({ name, slug, pricePaise, className
       >
         {state === 'copied' ? <CheckIcon className={iconClass} /> : <ShareIcon className={iconClass} />}
       </button>
+      {label && <span aria-hidden="true" className="text-[10.5px] font-medium leading-none text-[#6e6e73]">{label}</span>}
       <span role="status" aria-live="polite" className="sr-only">
         {state === 'copied' ? 'Link copied' : state === 'failed' ? 'Could not copy the link' : ''}
       </span>
